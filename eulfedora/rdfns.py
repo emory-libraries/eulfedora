@@ -14,6 +14,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from rdflib import URIRef
 from rdflib.namespace import ClosedNamespace
 
 # ids copied from http://www.fedora.info/definitions/1/0/fedora-relsext-ontology.rdfs
@@ -47,3 +48,13 @@ relsext = ClosedNamespace('info:fedora/fedora-system:def/relations-external#', [
 model = ClosedNamespace('info:fedora/fedora-system:def/model#', [
     'hasModel',
 ])
+
+
+# these are the OAI terms used with the PROAI OAI provider commonly used with Fedora
+# (terms not actually defined at the namespace specified...)
+oai = ClosedNamespace(
+    uri = URIRef("http://www.openarchives.org/OAI/2.0/"),
+    terms = [
+        "itemID", "setSpec", "setName"
+        ]
+    )

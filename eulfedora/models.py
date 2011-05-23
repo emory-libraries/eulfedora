@@ -459,7 +459,8 @@ class RdfDatastreamObject(DatastreamObject):
     # prefixes for namespaces expected to be used in RELS-EXT
     default_namespaces = {
         'fedora-model': 'info:fedora/fedora-system:def/model#',
-        'fedora-rels-ext': 'info:fedora/fedora-system:def/relations-external#'
+        'fedora-rels-ext': 'info:fedora/fedora-system:def/relations-external#',
+        'oai': 'http://www.openarchives.org/OAI/2.0/',
         }
 
     # FIXME: override _set_content to handle setting content?
