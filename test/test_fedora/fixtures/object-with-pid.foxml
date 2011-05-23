@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<foxml:digitalObject VERSION='1.1' PID='changeme:42'
+    xmlns:foxml='info:fedora/fedora-system:def/foxml#'>
+  <foxml:objectProperties>
+    <foxml:property NAME='info:fedora/fedora-system:def/model#state' VALUE='Active'/>
+    <foxml:property NAME='info:fedora/fedora-system:def/model#label' VALUE='A partially-prepared test object'/>
+    <foxml:property NAME='info:fedora/fedora-system:def/model#ownerId' VALUE='tester'/>
+  </foxml:objectProperties>
+
+  <foxml:datastream ID='DC' CONTROL_GROUP='X' STATE='A' VERSIONABLE='true'>
+    <foxml:datastreamVersion ID='DC.0' LABEL='Dublin Core' MIMETYPE='text/xml'>
+      <foxml:xmlContent>
+        <oai_dc:dc
+            xmlns:dc='http://purl.org/dc/elements/1.1/'
+            xmlns:oai_dc='http://www.openarchives.org/OAI/2.0/oai_dc/'>
+          <dc:title>A partially-prepared test object</dc:title>
+          <dc:description>This object has more data in it than a basic-object.</dc:description>
+        </oai_dc:dc>
+      </foxml:xmlContent>
+    </foxml:datastreamVersion>
+  </foxml:datastream>
+
+</foxml:digitalObject>

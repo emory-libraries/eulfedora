@@ -1,0 +1,13 @@
+Change & Version Information
+============================
+
+The following is a summary of changes and improvements to
+:mod:`eulfedora`.  New features in each version should be listed, with
+any necessary information about installation or upgrade notes.
+
+
+Initial Release
+---------------
+
+* Split out fedora-specific components from :mod:`eulcore`; now
+  depends on :mod:`eulxml`.
