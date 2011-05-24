@@ -29,18 +29,16 @@ Create a new Django project and setup :mod:`eulfedora`
 Use ``pip`` to install the :mod:`eulfedora` library and its
 dependencies.  For this tutorial, we'll use the latest version::
 
-    pip install svn+https://svn.library.emory.edu/svn/python-eulcore/branches/eulfedora#egg=eulfedora
+    pip install git://github.com/emory-libraries/eulfedora.git#egg=eulfedora
 
 This command should install EULfedora and its Python dependencies.
 
 We're going to make use of a few items in :mod:`eulcommon`, so let's
 install that now too::
 
-    pip install svn+https://svn.library.emory.edu/svn/python-eulcore/branches/eulcommon#egg=eulcommon
+    pip install git://github.com/emory-libraries/eulcommon.git#egg=eulcommon
 
 .. TODO: tag an initial release and use here?
-.. TODO: update for github location when possible
-
 
 
 Now, let's go ahead and create a new Django project.  We'll call it
