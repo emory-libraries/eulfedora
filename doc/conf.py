@@ -28,7 +28,7 @@ latex_documents = [
 
 # configuration for intersphinx: refer to the Python standard library, eulxml, django
 intersphinx_mapping = {
-    'http://docs.python.org/': None,
-    'http://waterhouse.library.emory.edu:8080/hudson/job/eulxml/javadoc/': None,
-    'http://docs.djangoproject.com/en/1.3/': 'http://docs.djangoproject.com/en/dev/_objects/',
+    'python': ('http://docs.python.org/', None),
+    'django': ('http://django.readthedocs.org/en/latest/', None),
+    'eulxml': ('http://eulxml.readthedocs.org/en/latest/', None),
 }
