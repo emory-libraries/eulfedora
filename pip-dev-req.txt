@@ -1,7 +1,5 @@
 unittest-xml-reporting>1.0.3
 sphinx
 coverage
-# include eulxml dependency here for now
--e git://github.com/emory-libraries/eulxml.git#egg=eulxml
 django
 mock
