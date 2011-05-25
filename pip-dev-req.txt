@@ -3,3 +3,4 @@ sphinx
 coverage
 django
 mock
+unittest2
