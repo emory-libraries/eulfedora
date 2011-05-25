@@ -1,5 +1,6 @@
 build
 dist
 *.egg-info
-/*.pyc
+*.pyc
 test-results
+test/localsettings.py
