@@ -27,20 +27,19 @@ Create a new Django project and setup :mod:`eulfedora`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use ``pip`` to install the :mod:`eulfedora` library and its
-dependencies.  For this tutorial, we'll use the latest version::
+dependencies.  For this tutorial, we'll use the latest released
+version::
 
-    pip install git://github.com/emory-libraries/eulfedora.git#egg=eulfedora
+    pip install eulfedora
 
 This command should install EULfedora and its Python dependencies.
 
 We're going to make use of a few items in :mod:`eulcommon`, so let's
 install that now too::
 
-    pip install git://github.com/emory-libraries/eulcommon.git#egg=eulcommon
+    pip install eulcommon
 
-.. TODO: tag an initial release and use here?
-
-
+    
 Now, let's go ahead and create a new Django project.  We'll call it
 *simplerepo*::
 
