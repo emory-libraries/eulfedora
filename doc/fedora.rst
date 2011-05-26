@@ -25,7 +25,7 @@ Repository & Resource Index
     :members:
 
 
-Django-integration
+Django integration
 ------------------
 
 :mod:`~eulfedora.views` Fedora views

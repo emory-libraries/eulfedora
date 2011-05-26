@@ -440,9 +440,11 @@ class XmlDatastream(Datastream):
         from eulxml.xmlmap.dc import DublinCore
         
         class MyDigitalObject(DigitalObject):
-            dc = XmlDatastream("DC", "Dublin Core", DublinCore)
+            extra_dc = XmlDatastream("EXTRA_DC", "Dublin Core", DublinCore)
 
-
+        my_obj = repo.get_object("example:1234", type=MyDigitalObject)
+        my_obj.extra_dc.content.title = "Example object"
+        my_obj.save(logMessage="automatically setting dc title")
     """
     _datastreamClass = XmlDatastreamObject
     
@@ -453,7 +455,7 @@ class XmlDatastream(Datastream):
 
 class RdfDatastreamObject(DatastreamObject):
     """Extends :class:`DatastreamObject` in order to initialize datastream content
-    as an RDF graph.
+    as an `rdflib <http://pypi.python.org/pypi/rdflib/>`_ RDF graph.
     """
     default_mimetype = "application/rdf+xml"
     # prefixes for namespaces expected to be used in RELS-EXT
@@ -530,13 +532,22 @@ class RdfDatastreamObject(DatastreamObject):
 
 
 class RdfDatastream(Datastream):
-    """RDF-specific version of :class:`Datastream`.  Datastreams are initialized
-    as instances of :class:`RdfDatastreamObject`.
+    """RDF-specific version of :class:`Datastream` for accessing datastream
+    content as an `rdflib <http://pypi.python.org/pypi/rdflib/>`_ RDF graph.
+    Datastreams are initialized as instances of
+    :class:`RdfDatastreamObject`.
 
     Example usage::
 
+        from rdflib import RDFS, Literal
+
         class MyDigitalObject(DigitalObject):
-            rels_ext = RdfDatastream("RELS-EXT", "External Relations")
+            extra_rdf = RdfDatastream("EXTRA_RDF", "an RDF graph of stuff")
+
+        my_obj = repo.get_object("example:4321", type=MyDigitalObject)
+        my_obj.extra_rdf.content.add((my_obj.uriref, RDFS.comment,
+                                      Literal("This is an example object.")))
+        my_obj.save(logMessage="automatically setting rdf comment")
     """
     _datastreamClass = RdfDatastreamObject
 
