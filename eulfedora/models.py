@@ -460,7 +460,7 @@ class RdfDatastreamObject(DatastreamObject):
     default_namespaces = {
         'fedora-model': 'info:fedora/fedora-system:def/model#',
         'fedora-rels-ext': 'info:fedora/fedora-system:def/relations-external#',
-        'oai': 'http://www.openarchives.org/OAI/2.0/',
+        'oai': 'http://www.openarchives.org/OAI/2.0/'
         }
 
     # FIXME: override _set_content to handle setting content?
@@ -559,8 +559,13 @@ class FileDatastreamObject(DatastreamObject):
 
     _content_modified = False
 
-    def _raw_content(self):  
-        return self.content     # return the file itself (handled by upload/save API calls)
+    def _raw_content(self):
+        # return the content in the format needed to save to Fedora
+        # if content has not been loaded, return None (no changes)
+        if self._content is None:
+            return None
+        else:
+            return self.content     # return the file itself (handled by upload/save API calls)
 
     def _convert_content(self, data, url):
         # for now, using stringio to return a file-like object
@@ -933,11 +938,11 @@ class DigitalObject(object):
         # - list of datastreams that should be saved
         to_save = [ds for ds, dsobj in self.dscache.iteritems() if dsobj.isModified()]
         # - track successfully saved datastreams, in case roll-back is necessary
-        saved = []        
+        saved = []
         # save modified datastreams
         for ds in to_save:
             if self.dscache[ds].save(logMessage):
-                    saved.append(ds)
+                saved.append(ds)
             else:
                 # save datastream failed - back out any changes that have been made
                 cleaned = self._undo_save(saved, 

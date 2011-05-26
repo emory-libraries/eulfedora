@@ -401,6 +401,26 @@ class TestNewObject(FedoraTestCase):
         self.assertEqual(fetched.text.format, 'http://example.com/')
         self.assertEqual(fetched.text.content, 'We are controlling transmission.')
 
+    def test_modify_multiple(self):
+        obj = self.repo.get_object(type=MyDigitalObject)
+        obj.label = 'test label'
+        obj.dc.content.title = 'test dc title'
+        obj.image.content = open(os.path.join(FIXTURE_ROOT, 'test.png'))
+        obj.save()
+        self.append_test_pid(obj.pid)
+
+        # update and save multiple pieces, including filedatastream metadata
+        obj.label = 'new label'
+        obj.dc.content.title = 'new dc title'
+        obj.image.label = 'testimage.png'
+        saved = obj.save()
+        self.assertTrue(saved)
+        updated_obj = self.repo.get_object(obj.pid, type=MyDigitalObject)
+        self.assertEqual(obj.label, updated_obj.label)
+        self.assertEqual(obj.dc.content.title, updated_obj.dc.content.title)
+        self.assertEqual(obj.image.label, updated_obj.image.label)
+ 
+        
     def test_new_file_datastream(self):
         obj = self.repo.get_object(type=MyDigitalObject)
         obj.image.content = open(os.path.join(FIXTURE_ROOT, 'test.png'))
