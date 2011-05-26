@@ -1,5 +1,5 @@
-EULfedora |release|
-===================
+EULfedora
+=========
 
 EULfedora is an extensible library for creating and managing digital objects
 in a `Fedora Commons <http://fedora-commons.org/>`_ repository. It eases
