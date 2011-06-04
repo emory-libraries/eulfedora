@@ -68,7 +68,6 @@ from eulfedora.models import DigitalObject
 from eulfedora.util import AuthorizingServerConnection, \
      RelativeServerConnection, parse_rdf, parse_xml_object, RequestFailed
 from eulfedora.xml import SearchResults, NewPids
-from eulfedora import cryptutil
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +151,7 @@ class Repository(object):
             if username is None and password is None:
                 try:
                     from django.conf import settings
+                    from eulfedora import cryptutil
                     
                     if request is not None and request.user.is_authenticated() and \
                        FEDORA_PASSWORD_SESSION_KEY in request.session:
