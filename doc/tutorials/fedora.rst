@@ -60,7 +60,7 @@ to your configured Fedora repository::
     # Fedora Repository settings
     FEDORA_ROOT = 'https://localhost:8543/fedora/'
     FEDORA_USER = 'fedoraAdmin'
-    FEDORA_PASS = 'fedoraAdmin'
+    FEDORA_PASSWORD = 'fedoraAdmin'
     FEDORA_PIDSPACE = 'simplerepo'
 
 Since we're planning to upload content into Fedora, make sure you are
