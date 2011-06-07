@@ -87,8 +87,10 @@ def init_pooled_connection(fedora_root=None):
         except ImportError:
             raise Exception('Cannot initialize a Fedora connection without specifying ' +
                             'Fedora root url directly or in Django settings as FEDORA_ROOT')
-    _connection = RelativeServerConnection(fedora_root)
 
+    if not fedora_root.endswith('/'):
+        fedora_root = fedora_root + '/'
+    _connection = RelativeServerConnection(fedora_root)
 
 
 # a repository object, basically a handy facade for easy api access
