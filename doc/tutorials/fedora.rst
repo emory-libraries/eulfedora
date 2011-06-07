@@ -1,20 +1,18 @@
 Creating a simple Django app for Fedora Commons repository content
 ==================================================================
 
-This is a tutorial to walk you through using EULfedor with Django to build
+This is a tutorial to walk you through using EULfedora with Django to build
 a simple interface to the Fedora-Commons repository for uploading files,
 viewing uploaded files in the repository, editing Dublin Core metadata,
 and searching content in the repository.
 
-This tutorial assumes that you have `Django`_ installed and an
-installation of the `Fedora Commons repository`_ available to interact
-with.  You should have some familiarity with Python and Django (at the
-very least, you should have worked through the `Django
-Tutorial`_). You should also have some familiarity with the Fedora
-Commons Repository and a basic understanding of objects and content
-models in Fedora.
+This tutorial assumes that you have an installation of the `Fedora Commons
+repository`_ available to interact with.  You should have some familiarity with
+Python and Django (at the very least, you should have worked through the
+`Django Tutorial`_). You should also have some familiarity with the Fedora
+Commons Repository and a basic understanding of objects and content models in
+Fedora.
 
-.. _Django: http://www.djangoproject.com/
 .. _Django Tutorial: http://docs.djangoproject.com/en/1.2/intro/tutorial01/
 .. _Fedora Commons repository: http://www.fedora-commons.org/
 
@@ -39,6 +37,10 @@ install that now too::
 
     $ pip install eulcommon
 
+We'll use `Django <http://www.djangoproject.org/>`_, a popular web framework,
+for the web components of this tutorial::
+
+    $ pip install django
     
 Now, let's go ahead and create a new Django project.  We'll call it
 *simplerepo*::
@@ -79,7 +81,7 @@ In ``repo/models.py``, create a class that extends :class:`~eulfedora.models.Dig
     from eulfedora.models import DigitalObject, FileDatastream
 
     class FileObject(DigitalObject):
-        FILE_CONTENT_MODEL = 'info:fedora/eulctl:File-1.0'
+        FILE_CONTENT_MODEL = 'info:fedora/genrepo:File-1.0'
         CONTENT_MODELS = [ FILE_CONTENT_MODEL ]
         file = FileDatastream("FILE", "Binary datastream", defaults={
                 'versionable': True,
@@ -140,7 +142,7 @@ connection configuration that the Repository object picks up from your django ``
        xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
     >
       <rdf:Description rdf:about="info:fedora/TEMP:DUMMY_PID">
-        <fedora-model:hasModel rdf:resource="info:fedora/eulctl:File-1.0"/>
+        <fedora-model:hasModel rdf:resource="info:fedora/genrepo:File-1.0"/>
       </rdf:Description>
     </rdf:RDF>
 
