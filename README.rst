@@ -14,9 +14,11 @@ low-level interface is wrapped by **eulfedora.server.Repository** and
 **eulfedora.models.DigitalObject**, which provide a more abstract,
 object-oriented, and Pythonic way of interacting with a Fedora
 Repository or with individual objects and datastreams.
-**eulfedora.indexdata.views**, which provides an optional
+
+**eulfedora.indexdata.views** provides an optional
 generic webservice that returns data on fedora objects in
-JSON form. Useful for updating an index.
+JSON form. This is useful in conjunction with a service
+that updates an index (such as eulindexer).
 
 When used with `Django <https://www.djangoproject.com/>`_,
 **eulfedora** can pull the Repository connection configuration from
