@@ -54,7 +54,7 @@ from django.utils import simplejson
 from django.conf import settings
 from django.http import HttpResponse, Http404, HttpResponseForbidden, \
     HttpResponseBadRequest
-from eulcore.fedora import DigitalObject
+from eulfedora.models import DigitalObject
 
 
 logger = logging.getLogger(__name__)
