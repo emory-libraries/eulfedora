@@ -605,6 +605,13 @@ class TestDigitalObject(FedoraTestCase):
         self.assertTrue(self.obj.has_model(cmodel_uri))
         self.assertFalse(self.obj.has_model(self.obj.uri))
 
+    def test_get_models(self):
+        cmodel_uri = "info:fedora/control:ContentType"
+        # FIXME: checking when rels-ext datastream does not exist causes an error
+        self.assertEqual(self.obj.get_models(), [])
+        self.obj.add_relationship(modelns.hasModel, cmodel_uri)
+        self.assertEquals(self.obj.get_models(), [URIRef(cmodel_uri)])
+
     def test_has_requisite_content_models(self):
         # fixture has no content models
         # init fixture as generic object
