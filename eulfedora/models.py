@@ -1,4 +1,4 @@
-# file fedora/models.py
+# file eulfedora/models.py
 # 
 #   Copyright 2010,2011 Emory University Libraries
 #
