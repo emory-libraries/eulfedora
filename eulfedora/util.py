@@ -197,7 +197,6 @@ class HttpServerConnection(object):
         except:
             self._reset_connection()
             raise
-        logger.debug('HttpServerConnection._connect_and_request:exiting')
 
     def _get_connection(self):
         connection = self.connection_class(self.urlparts.hostname, self.urlparts.port)
@@ -213,10 +212,8 @@ class HttpServerConnection(object):
         start = time.time()
         self.thread_local.connection.request(method, url, body, headers)
         response = self.thread_local.connection.getresponse()
-        logger.debug('%s %s (%db body, %d hdrs): %f sec' % (method, url,
-            len(body) if body else 0,
-            len(headers) if headers else 0,
-            time.time() - start))
+        logger.debug('%s %s=>%d: %f sec' % (method, url,
+            response.status, time.time() - start))
         return response
 
     @contextmanager
