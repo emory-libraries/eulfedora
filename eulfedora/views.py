@@ -1,4 +1,4 @@
-# file eufedora/views.py
+# file eulfedora/views.py
 #
 #   Copyright 2010,2011 Emory University Libraries
 #
@@ -21,7 +21,7 @@ Intended to be analogous to `Django's generic views
 Using these views (in the simpler cases) should be as easy as::
 
     from django.conf.urls.defaults import *
-    from eulcore.django.fedora.views import raw_datastream
+    from eulfedora.views import raw_datastream
 
     urlpatterns = patterns('',
         url(r'^(?P<pid>[^/]+)/(?P<dsid>(MODS|RELS-EXT|DC))/$', raw_datastream),

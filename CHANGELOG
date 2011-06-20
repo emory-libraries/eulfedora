@@ -5,6 +5,13 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+IndexData (Likely 0.16.0) - Indexing Support
+--------------------------------------------
+
+* Addition of eulfedora.indexdata to act as a generic webservice
+projects can use for the creation and updating of indexes such
+as SOLR.
+
 
 0.15.0 - Initial Release
 ------------------------
