@@ -39,29 +39,10 @@ class HTTP_API_Base(object):
         self.opener = opener
 
     def open(self, method, rel_url, body=None, headers={}, throw_errors=True):
-        start = time.time()
-        val = self.opener.open(method, rel_url, body, headers, throw_errors)
-        # get number of bytes written for logging
-        # - if available in header, use that value instead of recalculating
-        if 'Content-Length' in headers:
-            bytes = int(headers['Content-Length'])
-        # - if this is a file object, get file size
-        elif hasattr(body, 'read') and hasattr(body, 'name'):
-            bytes = path.getsize(body.name)
-        # - otherwise, treat like a string
-        else:
-            bytes = len(body or '')
-        logger.debug('open: %s %s %s (%d body bytes; %f secs)' % 
-                (method, rel_url, repr(headers), bytes,
-                 time.time() - start))
-        return val
+        return self.opener.open(method, rel_url, body, headers, throw_errors)
 
     def read(self, rel_url, data=None):
-        start = time.time()
-        val = self.opener.read(rel_url, data)
-        logger.debug('read: %s (%d data bytes; %f secs)' %
-                (rel_url, len(data or ''), time.time() - start))
-        return val
+        return self.opener.read(rel_url, data)
 
 
 class REST_API(HTTP_API_Base):

@@ -18,11 +18,13 @@ from contextlib import contextmanager
 from datetime import datetime
 from dateutil.tz import tzutc
 import httplib
+import logging
 import mimetypes
 import random
 import re
 import string
 import threading
+import time
 from cStringIO import StringIO
 
 from base64 import b64encode
@@ -33,6 +35,8 @@ from rdflib import URIRef, Graph
 from eulxml import xmlmap
 
 from poster import streaminghttp
+
+logger = logging.getLogger(__name__)
 
 # NOTE: the multipart encoding below should be superceded by use of poster
 # functions for posting multipart form data
@@ -193,6 +197,7 @@ class HttpServerConnection(object):
         except:
             self._reset_connection()
             raise
+        logger.debug('HttpServerConnection._connect_and_request:exiting')
 
     def _get_connection(self):
         connection = self.connection_class(self.urlparts.hostname, self.urlparts.port)
@@ -205,8 +210,14 @@ class HttpServerConnection(object):
         self.thread_local.connection = None
         
     def _make_request(self, method, url, body, headers):
+        start = time.time()
         self.thread_local.connection.request(method, url, body, headers)
-        return self.thread_local.connection.getresponse()
+        response = self.thread_local.connection.getresponse()
+        logger.debug('%s %s (%db body, %d hdrs): %f sec' % (method, url,
+            len(body) if body else 0,
+            len(headers) if headers else 0,
+            time.time() - start))
+        return response
 
     @contextmanager
     def open(self, method, url, body=None, headers=None, throw_errors=True):
