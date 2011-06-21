@@ -23,9 +23,9 @@ Projects that use this module should include the following settings in their
 ``settings.py``::
 
     # Index server url. In this example case, we are wish to push data to a Solr instance.
-    INDEX_SERVER_URL = "http://localhost:8983/solr/"
+    EUL_SOLR_SERVER_URL = "http://localhost:8983/solr/"
     # IPs that will be allowed to access this webservice.
-    INDEXER_ALLOWED_IPS = "ANY" #Or put in a list such as ("127.0.0.1", "127.0.0.2")
+    EUL_INDEXER_ALLOWED_IPS = "ANY" #Or put in a list such as ("127.0.0.1", "127.0.0.2")
 
 Using these views (in the simpler cases) should be as easy as the following:
 
@@ -41,7 +41,7 @@ Using these views (in the simpler cases) should be as easy as the following:
     In settings.py of your application:
 
         INSTALLED_APPS = (
-            'eulfedora.indexdata'
+            'eulfedora'
             # Additional installed applications here,
         )
 
@@ -59,7 +59,7 @@ from eulfedora.models import DigitalObject
 
 logger = logging.getLogger(__name__)
 
-def index_details(request):
+def index_config(request):
     '''View to return the CMODELS and INDEXES this project uses. This is the default (no parameter)
     view of this application.
 
@@ -69,7 +69,7 @@ def index_details(request):
     #Ensure permission to this resource is allowed. Currently based on IP only.
     if _permission_denied_check(request):
         return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
-
+ 
     response_list = []
     #Get all of the CMODELS and add them to the response
     for cls in DigitalObject.defined_types.itervalues():
@@ -77,12 +77,12 @@ def index_details(request):
             response_list.append({'CONTENT_MODEL': str(cls.CONTENT_MODELS[0])})
     
     #Add the SOLR url to the response.
-    indexer_url = settings.INDEX_SERVER_URL
-    response_list.append({'INDEXER_URL': indexer_url})
+    solr_url = settings.EUL_SOLR_SERVER_URL
+    response_list.append({'SOLR_URL': solr_url})
 
     json_response = simplejson.dumps(response_list)
     
-    return HttpResponse(json_response, content_type='application/javascript')
+    return HttpResponse(json_response, content_type='application/json')
 
 def index_data(request, id):
     return HttpResponse('Implement me', content_type='text/html')
@@ -94,7 +94,7 @@ def _permission_denied_check(request):
     :param request: HttpRequest
 
     '''
-    allowed_ips = settings.INDEXER_ALLOWED_IPS
+    allowed_ips = settings.EUL_INDEXER_ALLOWED_IPS
     if(allowed_ips != "ANY" and not request.META['REMOTE_ADDR'] in allowed_ips):
         return True
 

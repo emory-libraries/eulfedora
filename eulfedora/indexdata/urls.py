@@ -26,6 +26,6 @@ In your projects urls.py, this is to be included in a form similar to:
 from django.conf.urls.defaults import *
 
 urlpatterns = patterns('eulfedora.indexdata.views',
-    url(r'^$', 'index_details', name='index_details'),
+    url(r'^$', 'index_config', name='index_config'),
     url(r'^(?P<id>[^/]+)/$', 'index_data', name='index_data'),
 )
