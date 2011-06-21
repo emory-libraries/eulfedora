@@ -70,19 +70,17 @@ def index_details(request):
     if _permission_denied_check(request):
         return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
 
-    #Create the content models list.
-    content_models = []
+    response_list = []
+    #Get all of the CMODELS and add them to the response
     for cls in DigitalObject.defined_types.itervalues():
         if hasattr(cls, 'index') and hasattr(cls, 'CONTENT_MODELS') and len(cls.CONTENT_MODELS) == 1:
-            content_models.append({'CONTENT_MODEL': str(cls.CONTENT_MODELS[0])})
+            response_list.append({'CONTENT_MODEL': str(cls.CONTENT_MODELS[0])})
     
-    #Get the indexer url specified in the settings.
-    indexer_url = settings.INDEX_SERVER_URL
+    #Add the SOLR url to the response.
+    solr_url = settings.SOLR_SERVER_URL
+    response_list.append({'SOLR_URL': solr_url})
 
-    #Create a combined result of the content models and the indexer url.
-    combined_response = []
-    combined_response.append({'CONTENT_MODELS': content_models, 'INDEXER_URL': indexer_url})
-    json_response = simplejson.dumps(combined_response)
+    json_response = simplejson.dumps(response_list)
     
     return HttpResponse(json_response, content_type='application/javascript')
 
