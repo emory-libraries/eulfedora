@@ -54,7 +54,9 @@ from django.utils import simplejson
 from django.conf import settings
 from django.http import HttpResponse, Http404, HttpResponseForbidden, \
     HttpResponseBadRequest
+
 from eulfedora.models import DigitalObject
+from eulfedora.server import Repository
 
 
 logger = logging.getLogger(__name__)
@@ -85,7 +87,12 @@ def index_details(request):
     return HttpResponse(json_response, content_type='application/javascript')
 
 def index_data(request, id):
-    return HttpResponse('Implement me', content_type='text/html')
+    'Return the fields and values to be indexed for a single object as JSON'
+    repo = Repository()
+    # TODO: need a generic method to init by cmodel using DigitalObject defined_types
+    obj = repo.get_object(id)
+    return HttpResponse(simplejson.dumps(obj.index_data()),
+                                         content_type='application/json')
 
 def _permission_denied_check(request):
     '''Internal function to verify that access to this webservice is allowed.
