@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# file test_indexdata/test_webservice.py
+# file test_indexdata/test_views.py
 # 
 #   Copyright 2011 Emory University Libraries
 #
