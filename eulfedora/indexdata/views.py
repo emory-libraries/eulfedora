@@ -77,7 +77,7 @@ def index_details(request):
             response_list.append({'CONTENT_MODEL': str(cls.CONTENT_MODELS[0])})
     
     #Add the SOLR url to the response.
-    solr_url = settings.SOLR_SERVER_URL
+    solr_url = settings.INDEX_SERVER_URL
     response_list.append({'SOLR_URL': solr_url})
 
     json_response = simplejson.dumps(response_list)
