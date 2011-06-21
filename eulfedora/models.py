@@ -1256,10 +1256,26 @@ class DigitalObject(object):
             if "RELS-EXT" not in self.ds_list.keys():
                 return False
             else:
-                raise Exception(e)            
+                raise
             
         st = (self.uriref, modelns.hasModel, URIRef(model))
         return st in rels
+
+    def get_models(self):
+        """
+        Get a list of content models the object subscribes to.
+        """
+        try:
+            rels = self.rels_ext.content
+        except RequestFailed, e:
+            # if rels-ext can't be retrieved, confirm this object does not have a RELS-EXT
+            # (in which case, it does not have any content models)
+            if "RELS-EXT" not in self.ds_list.keys():
+                return []
+            else:
+                raise
+            
+        return list(rels.objects(self.uriref, modelns.hasModel))
 
 
 class ContentModel(DigitalObject):
