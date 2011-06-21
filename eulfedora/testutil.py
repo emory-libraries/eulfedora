@@ -164,7 +164,7 @@ try:
 
     import xmlrunner
     
-    class FedoraXmlTestResult(xmlrunner._XMLTestResult, FedoraTestResult):
+    class FedoraXmlTestResult(FedoraTestResult, xmlrunner._XMLTestResult):
         # xml test result logic with our custom startTestRun/stopTestRun
         def __init__(self, **kwargs):
             # sort out kwargs for the respective init methods;
