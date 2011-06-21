@@ -670,6 +670,24 @@ class TestDigitalObject(FedoraTestCase):
         self.assert_('test_fedora.test_models.MyDigitalObject' in
                      models.DigitalObject.defined_types)
 
+    def test_index_data(self):
+        indexdata = self.obj.index_data()
+        # check that top-level object properties are included in index data
+        # (implicitly checking types)
+        self.assertEqual(self.obj.pid, indexdata['PID'])
+        self.assertEqual(self.obj.owner, indexdata['ownerId'])
+        self.assertEqual(self.obj.label, indexdata['label'])
+        self.assertEqual(str(self.obj.modified), indexdata['lastModifiedDate'])
+        self.assertEqual(str(self.obj.created), indexdata['createdDate'])
+        self.assertEqual(self.obj.state, indexdata['state'])
+        for cm in self.obj.get_models():
+            self.assert_(str(cm) in indexdata['contentModel'])
+            
+        # descriptive data included in index data
+        self.assert_(self.obj.dc.content.title in indexdata['title'])
+        self.assert_(self.obj.dc.content.description in indexdata['description'])
+        
+
 
 class TestContentModel(FedoraTestCase):
 
