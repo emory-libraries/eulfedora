@@ -88,8 +88,7 @@ class WebserviceViewsTest(unittest.TestCase):
             'Expected %s but returned %s for mimetype on indexdata/index_details view' \
                 % (expected, got)) 
         self.assert_('SOLR_URL' in response.content)
-        self.assert_('http://localhost:5555' in response.content)
-        self.assert_('CONTENT_MODEL' in response.content)
+        self.assert_('CONTENT_MODELS' in response.content)
 
         #Test with the "ANY" setting for allowed IPs
         settings.INDEXER_ALLOWED_IPS = 'ANY'

@@ -71,18 +71,21 @@ def index_config(request):
     #Ensure permission to this resource is allowed. Currently based on IP only.
     if _permission_denied_check(request):
         return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
- 
-    response_list = []
+
+    response_dict = {}
     #Get all of the CMODELS and add them to the response
+    content_list = []
     for cls in DigitalObject.defined_types.itervalues():
-        if hasattr(cls, 'index') and hasattr(cls, 'CONTENT_MODELS') and len(cls.CONTENT_MODELS) == 1:
-            response_list.append({'CONTENT_MODEL': str(cls.CONTENT_MODELS[0])})
-    
+        if hasattr(cls, 'index') and hasattr(cls, 'CONTENT_MODELS'):
+            for model in cls.CONTENT_MODELS:
+                content_list.append(model)
+    response_dict['CONTENT_MODELS'] = content_list
+
     #Add the SOLR url to the response.
     solr_url = settings.EUL_SOLR_SERVER_URL
-    response_list.append({'SOLR_URL': solr_url})
+    response_dict['SOLR_URL'] = solr_url
 
-    json_response = simplejson.dumps(response_list)
+    json_response = simplejson.dumps(response_dict)
     
     return HttpResponse(json_response, content_type='application/json')
 
