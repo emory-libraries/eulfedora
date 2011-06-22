@@ -1277,7 +1277,50 @@ class DigitalObject(object):
             
         return list(rels.objects(self.uriref, modelns.hasModel))
 
+    def index_data(self):
+        '''Generate and return a dictionary of default fields to be
+        indexed for searching (e.g., in Solr).  Includes top-level
+        object properties, Content Model URIs, and Dublin Core
+        fields.
 
+        This method is intended to be customized and extended in order
+        to easily modify the fields that should be indexed for any
+        particular type of object in any project; data returned from
+        this method should be serializable using :mod:`simplejson`.'''
+        index_data = {
+            # TODO: select and standardize solr index field names for object properties
+            'PID': self.pid,		# following gsearch convention here (do we need to?)
+            'label': self.label,
+            'ownerId': self.owner,
+            # FIXME: the types needed here depends on solr configuration; need to set reasonable defaults...
+            'lastModifiedDate': str(self.modified),	
+            'createdDate': str(self.created),
+            'state': self.state,
+            'contentModel': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
+            }
+        index_data.update(self.index_data_descriptive())
+        # TODO: perhaps add something similar for rels-ext and common/all fedora rels? (membership/collection/etc)
+        
+        return index_data
+
+    def index_data_descriptive(self):
+        '''Descriptive data to be included in :meth:`index_data`
+        output.  This implementation includes all Dublin Core fields,
+        but should be extended or overridden as appropriate for custom
+        DigitalObject classes.'''
+
+        dc_fields = ['title', 'contributor', 'coverage', 'creator', 'date', 'description',
+                     'format', 'identifier', 'language', 'publisher', 'relation',
+                     'rights', 'source', 'subject', 'type']
+        dc_data = {}
+        for field in dc_fields:
+            list_field = getattr(self.dc.content, '%s_list' % field)
+            if list_field:
+                # convert xmlmap lists to straight lists so simplejson can handle them
+                dc_data[field] = list(list_field)
+        return dc_data
+
+        
 class ContentModel(DigitalObject):
     """Fedora CModel object"""
 
