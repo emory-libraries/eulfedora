@@ -15,16 +15,15 @@
 #   limitations under the License.
 
 """
-:mod:`eulfedora.testutil` provides custom test suite runners with
+:mod:`eulfedora.testutil` provides custom Django test suite runners with
 Fedora environment setup / teardown for all tests.
 
 To use, configure as test runner in your Django settings::
 
-   TEST_RUNNER = 'eulfedora.testutil.FedoraTestSuiteRunner'
+   TEST_RUNNER = 'eulfedora.testutil.FedoraTextTestSuiteRunner'
 
-When :mod:`xmlrunner` is available, xmlrunner variants are also
-available.  To use this test runner, configure your test runner as
-follows::
+When :mod:`xmlrunner` is available, xmlrunner variants are also available.
+To use this test runner, configure your Django test runner as follows::
 
     TEST_RUNNER = 'eulfedora.testutil.FedoraXmlTestSuiteRunner'
 
@@ -62,33 +61,27 @@ from eulfedora.server import Repository, init_pooled_connection
 
 logger = logging.getLogger(__name__)
 
-
-class FedoraTestResult(unittest.TextTestResult):
-    '''Extend :class:`unittest2.TextTestResult` to take advantage of
-    :meth:`startTestRun` and :meth:`stopTestRun` to do environmental
-    test setup and teardown before and after all tests run.
+class FedoraTestWrapper(object):
+    '''A `context manager <http://docs.python.org/library/stdtypes.html#context-manager-types>`_
+    that replaces the Django fedora configuration with a test configuration
+    inside the block, replacing the original configuration when the block
+    exits. All objects are purged from the defined test pidspace before and
+    after running tests.
     '''
-    _stored_default_fedora_root = None
-    _stored_default_fedora_pidspace = None
 
-    def startTestRun(self):
-        '''Switch Django settings for FEDORA access to test
-        configuration, and load any repository fixtures (such as
-        content models or initial objects).'''
-        super(FedoraTestResult, self).startTestRun()
-        self._use_test_fedora()
+    def __init__(self):
+        self.stored_default_fedora_root = None
+        self.stored_default_fedora_pidspace = None
+        
+    def __enter__(self):
+        self.use_test_fedora()
 
-    def stopTestRun(self):
-        '''Switch Django settings for FEDORA access out of test
-        configuration and back into normal settings, and remove any
-        leftover objects in with the test pidspace and in the test
-        repository.'''
-        self._restore_fedora_root()
-        super(FedoraTestResult, self).stopTestRun()
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.restore_fedora_root()
 
-    def _use_test_fedora(self):
-        self._stored_default_fedora_root = getattr(settings, "FEDORA_ROOT", None)
-        self._stored_default_fedora_pidspace = getattr(settings, "FEDORA_PIDSPACE", None)
+    def use_test_fedora(self):
+        self.stored_default_fedora_root = getattr(settings, "FEDORA_ROOT", None)
+        self.stored_default_fedora_pidspace = getattr(settings, "FEDORA_PIDSPACE", None)
 
         if getattr(settings, "FEDORA_TEST_ROOT", None):
             settings.FEDORA_ROOT = settings.FEDORA_TEST_ROOT
@@ -114,16 +107,16 @@ class FedoraTestResult(unittest.TextTestResult):
         test_pwd = getattr(settings, 'FEDORA_TEST_PASSWORD', None)
         call_command('syncrepo', username=test_user, password=test_pwd)
 
-    def _restore_fedora_root(self):
+    def restore_fedora_root(self):
         # if there was a pidspace configured, clean up any test objects
         msgs = []
-        if self._stored_default_fedora_pidspace is not None:
+        if self.stored_default_fedora_pidspace is not None:
             self.remove_test_objects()
-            msgs.append("Restoring Fedora pidspace: %s" % self._stored_default_fedora_pidspace)
-            settings.FEDORA_PIDSPACE = self._stored_default_fedora_pidspace        
-        if self._stored_default_fedora_root is not None:
-            msgs.append("Restoring Fedora root: %s" % self._stored_default_fedora_root)
-            settings.FEDORA_ROOT = self._stored_default_fedora_root
+            msgs.append("Restoring Fedora pidspace: %s" % self.stored_default_fedora_pidspace)
+            settings.FEDORA_PIDSPACE = self.stored_default_fedora_pidspace        
+        if self.stored_default_fedora_root is not None:
+            msgs.append("Restoring Fedora root: %s" % self.stored_default_fedora_root)
+            settings.FEDORA_ROOT = self.stored_default_fedora_root
             # re-initialize pooled connection with restored fedora root
             init_pooled_connection()
         if msgs:
@@ -149,59 +142,61 @@ class FedoraTestResult(unittest.TextTestResult):
         if count:
             print "Removed %s test object(s) with pidspace %s" % (count, settings.FEDORA_PIDSPACE)
 
+    @classmethod
+    def wrap_test(cls, test):
+        def wrapped_test(result):
+            with cls():
+                return test(result)
+        return wrapped_test
 
-class FedoraTestSuiteRunner(DjangoTestSuiteRunner):
-    '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to use
-    :class:`FedoraTestResult` as the result class.'''
-    
+alternate_test_fedora = FedoraTestWrapper
+
+
+class FedoraTextTestRunner(unittest.TextTestRunner):
+    '''A :class:`unittest.TextTestRunner` that wraps test execution in a
+    :class:`FedoraTestWrapper`.
+    '''
+    def run(self, test):
+        wrapped_test = alternate_test_fedora.wrap_test(test)
+        return super(FedoraTextTestRunner, self).run(wrapped_test)
+
+class FedoraTextTestSuiteRunner(DjangoTestSuiteRunner):
+    '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup and
+    teardown the Fedora test environment.'''
     def run_suite(self, suite, **kwargs):
-        # call the exact same way that django does, with the addition of our resultclass
-        return unittest.TextTestRunner(resultclass=FedoraTestResult,
-                                       verbosity=self.verbosity, failfast=self.failfast).run(suite)
+        return FedoraTextTestRunner(verbosity=self.verbosity,
+                                    failfast=self.failfast).run(suite)
 
 try:
     # when xmlrunner is available, define xmltest variants
 
     import xmlrunner
-    
-    class FedoraXmlTestResult(FedoraTestResult, xmlrunner._XMLTestResult):
-        # xml test result logic with our custom startTestRun/stopTestRun
-        def __init__(self, **kwargs):
-            # sort out kwargs for the respective init methods;
-            # need to call both so everything is set up properly
-            testrunner_args = dict((key, val) for key, val in kwargs.iteritems()
-                                   if key in ['stream', 'descriptions', 'verbosity'])
-            FedoraTestResult.__init__(self, **testrunner_args)
 
-            xmlargs = dict((key, val) for key, val in kwargs.iteritems() if
-                           key in ['stream', 'descriptions', 'verbosity', 'elapsed_times'])
-            xmlrunner._XMLTestResult.__init__(self, **xmlargs)
-            
     class FedoraXmlTestRunner(xmlrunner.XMLTestRunner):
-        # XMLTestRunner doesn't currently take a resultclass init option;
-        # extend make_result to override test result class that will be used
-        def _make_result(self):
-            """Create the TestResult object which will be used to store
-            information about the executed tests.
-            """
-            return FedoraXmlTestResult(stream=self.stream, descriptions=self.descriptions, \
-                                       verbosity=self.verbosity, elapsed_times=self.elapsed_times)
-    
-    class FedoraXmlTestSuiteRunner(DjangoTestSuiteRunner):
-        '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to use
-        :class:`FedoraTestResult` as the result class.'''
-        # combination of DjangoTestSuiteRunner with xmlrunner django test runner variant
-        
-        def run_suite(self, suite, **kwargs):
+        '''A :class:`xmlrunner.XMLTestRunner` that wraps test execution in a
+        :class:`FedoraTestWrapper`.
+        '''
+        def __init__(self):
             # pick up settings as expected by django xml test runner
-            settings.DEBUG = False
             verbose = getattr(settings, 'TEST_OUTPUT_VERBOSE', False)
             descriptions = getattr(settings, 'TEST_OUTPUT_DESCRIPTIONS', False)
-            output = getattr(settings, 'TEST_OUTPUT_DIR', '.')
+            output = getattr(settings, 'TEST_OUTPUT_DIR', 'test-results')
 
-            # call roughly the way that xmlrunner does, with our customized test runner
-            return FedoraXmlTestRunner(verbose=verbose, descriptions=descriptions,
-                                       output=output).run(suite)
+            super_init = super(FedoraXmlTestRunner, self).__init__
+            super_init(verbose=verbose, descriptions=descriptions, output=output)
+
+        def run(self, test):
+            wrapped_test = alternate_test_fedora.wrap_test(test)
+            return super(FedoraXmlTestRunner, self).run(wrapped_test)
+    
+    class FedoraXmlTestSuiteRunner(FedoraTextTestSuiteRunner):
+        '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup
+        and teardown the Fedora test environment and export test results in
+        XML.'''
+        def run_suite(self, suite, **kwargs):
+            return FedoraXmlTestRunner().run(suite)
+
 
 except ImportError:
+    # xmlrunner not available. simply don't define those classes
     pass
