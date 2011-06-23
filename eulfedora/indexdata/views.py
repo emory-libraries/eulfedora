@@ -76,10 +76,13 @@ def index_config(request):
     #Get all of the CMODELS and add them to the response
     content_list = []
     for cls in DigitalObject.defined_types.itervalues():
+        content_group = []
         if hasattr(cls, 'index') and hasattr(cls, 'CONTENT_MODELS'):
             for model in cls.CONTENT_MODELS:
-                content_list.append(model)
+                content_group.append(model)
+            content_list.append(content_group)
     response_dict['CONTENT_MODELS'] = content_list
+
 
     #Add the SOLR url to the response.
     solr_url = settings.EUL_SOLR_SERVER_URL
