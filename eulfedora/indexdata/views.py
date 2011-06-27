@@ -23,7 +23,7 @@ Projects that use this module should include the following settings in their
 ``settings.py``::
 
     # Index server url. In this example case, we are wish to push data to a Solr instance.
-    EUL_SOLR_SERVER_URL = "http://localhost:8983/solr/"
+    SOLR_SERVER_URL = "http://localhost:8983/solr/"
     # IPs that will be allowed to access this webservice.
     EUL_INDEXER_ALLOWED_IPS = "ANY" #Or put in a list such as ("127.0.0.1", "127.0.0.2")
 
@@ -86,7 +86,7 @@ def index_config(request):
 
 
     #Add the SOLR url to the response.
-    solr_url = settings.EUL_SOLR_SERVER_URL
+    solr_url = settings.SOLR_SERVER_URL
     response_dict['SOLR_URL'] = solr_url
 
     json_response = simplejson.dumps(response_dict)
@@ -103,7 +103,7 @@ def index_data(request, id):
 
 def _permission_denied_check(request):
     '''Internal function to verify that access to this webservice is allowed.
-    Currently, based on the value of INDEXER_ALLOWED_IPS in settings.py.
+    Currently, based on the value of EUL_INDEXER_ALLOWED_IPS in settings.py.
 
     :param request: HttpRequest
 
