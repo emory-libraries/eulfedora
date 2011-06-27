@@ -57,6 +57,7 @@ from django.http import HttpResponse, Http404, HttpResponseForbidden, \
 
 from eulfedora.models import DigitalObject
 from eulfedora.server import Repository
+from eulfedora.util import RequestFailed
 
 
 logger = logging.getLogger(__name__)
@@ -95,11 +96,16 @@ def index_config(request):
 
 def index_data(request, id):
     'Return the fields and values to be indexed for a single object as JSON'
-    repo = Repository()
-    # TODO: need a generic method to init by cmodel using DigitalObject defined_types
-    obj = repo.get_object(id)
-    return HttpResponse(simplejson.dumps(obj.index_data()),
-                                         content_type='application/json')
+    try:
+        repo = Repository()
+        # TODO: need a generic method to init by cmodel using DigitalObject defined_types
+        obj = repo.get_object(id)
+        return HttpResponse(simplejson.dumps(obj.index_data()),
+                            content_type='application/json')
+    except RequestFailed:
+        # for now, treat any failure getting the object from Fedora as a 404
+        # (could also potentially be a permission error)
+        raise Http404
 
 def _permission_denied_check(request):
     '''Internal function to verify that access to this webservice is allowed.

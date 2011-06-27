@@ -25,8 +25,11 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'testsettings'
 
 from django.conf import settings
 from django.http import Http404, HttpRequest
-from eulfedora.indexdata.views import index_config
+from django.utils import simplejson
+
+from eulfedora.indexdata.views import index_config, index_data
 from eulfedora.models import DigitalObject, Datastream
+from eulfedora.server import Repository
 
 TEST_PIDSPACE = getattr(settings, 'FEDORA_PIDSPACE', 'testme')
 
@@ -52,8 +55,12 @@ class WebserviceViewsTest(unittest.TestCase):
         #Creation of a HTTP request object for tests.
         self.request = HttpRequest
         self.request.META = { 'REMOTE_ADDR': '127.0.0.1' }
+        self.pids = []
 
     def test_index_details(self):
+        repo = Repository()
+        for pid in self.pids:
+            repo.purge_object(pid)
 
         #Test with no settings set.
         self.assertRaises(AttributeError, index_config, self.request)
@@ -98,3 +105,27 @@ class WebserviceViewsTest(unittest.TestCase):
             'Expected %s but returned %s for indexdata/index_details view' \
                 % (expected, got))
 
+    def test_index_data(self):
+        # create a test object for testing index data view
+        repo = Repository()
+        testobj = repo.get_object(type=SimpleDigitalObject)
+        testobj.label = 'test object'
+        testobj.owner = 'tester'
+        testobj.save()
+        self.pids.append(testobj.pid)
+
+        response = index_data(self.request, testobj.pid)
+        expected, got = 200, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for index_data view' \
+                % (expected, got))
+        expected, got = 'application/json', response['Content-Type']
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for mimetype on index_data view' \
+                % (expected, got)) 
+        response_data = simplejson.loads(response.content)
+        self.assertEqual(testobj.index_data(), response_data,
+             'Response content loaded from JSON should be equal to object indexdata')
+        
+        # non-existent pid should generate a 404
+        self.assertRaises(Http404, index_data, self.request, 'bogus:testpid')
