@@ -1292,7 +1292,8 @@ class DigitalObject(object):
             'pid': self.pid,	
             'label': self.label,
             'owner': self.owner,
-            # FIXME: the types needed here depends on solr configuration; need to set reasonable defaults...
+            # last_modified and created are configured as date type in sample solr Schema
+            # using isoformat here so they can be serialized via JSON
             'last_modified': self.modified.isoformat(),	
             'created': self.created.isoformat(),
             'state': self.state,
