@@ -66,7 +66,7 @@ class WebserviceViewsTest(unittest.TestCase):
         self.assertRaises(AttributeError, index_config, self.request)
 
         #Test with only the allowed SOLR url set.
-        settings.EUL_SOLR_SERVER_URL = 'http://localhost:5555'
+        settings.SOLR_SERVER_URL = 'http://localhost:5555'
         self.assertRaises(AttributeError, index_config, self.request)
 
 
