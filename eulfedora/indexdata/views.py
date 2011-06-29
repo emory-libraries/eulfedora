@@ -56,7 +56,7 @@ from django.http import HttpResponse, Http404, HttpResponseForbidden, \
     HttpResponseBadRequest
 
 from eulfedora.models import DigitalObject
-from eulfedora.server import Repository
+from eulfedora.server import TypeInferringRepository
 from eulfedora.util import RequestFailed
 
 
@@ -94,10 +94,11 @@ def index_config(request):
     
     return HttpResponse(json_response, content_type='application/json')
 
-def index_data(request, id):
+def index_data(request, id, repo=None):
     'Return the fields and values to be indexed for a single object as JSON'
+    if repo is None:
+        repo = TypeInferringRepository()
     try:
-        repo = Repository()
         # TODO: need a generic method to init by cmodel using DigitalObject defined_types
         obj = repo.get_object(id)
         return HttpResponse(simplejson.dumps(obj.index_data()),
