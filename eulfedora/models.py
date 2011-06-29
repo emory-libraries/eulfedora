@@ -1289,14 +1289,14 @@ class DigitalObject(object):
         this method should be serializable using :mod:`simplejson`.'''
         index_data = {
             # TODO: select and standardize solr index field names for object properties
-            'PID': self.pid,		# following gsearch convention here (do we need to?)
+            'pid': self.pid,	
             'label': self.label,
-            'ownerId': self.owner,
+            'owner': self.owner,
             # FIXME: the types needed here depends on solr configuration; need to set reasonable defaults...
-            'lastModifiedDate': str(self.modified),	
-            'createdDate': str(self.created),
+            'last_modified': self.modified.isoformat(),	
+            'created': self.created.isoformat(),
             'state': self.state,
-            'contentModel': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
+            'content_model': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
             }
         index_data.update(self.index_data_descriptive())
         # TODO: perhaps add something similar for rels-ext and common/all fedora rels? (membership/collection/etc)
