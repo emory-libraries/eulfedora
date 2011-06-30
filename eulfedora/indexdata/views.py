@@ -14,9 +14,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-""":
+"""
 Generic, re-usable views for use with Fedora-based Django projects. These views
-expose data via a webservice to eulindexer (if running). These views currently
+expose data to via intended for use with :mod:`eulindexer`. These views currently
 return data in JSON form. 
 
 Projects that use this module should include the following settings in their
@@ -24,26 +24,35 @@ Projects that use this module should include the following settings in their
 
     # Index server url. In this example case, we are wish to push data to a Solr instance.
     SOLR_SERVER_URL = "http://localhost:8983/solr/"
-    # IPs that will be allowed to access this webservice.
+    # IPs that will be allowed to access the indexdata views
     EUL_INDEXER_ALLOWED_IPS = "ANY" #Or put in a list such as ("127.0.0.1", "127.0.0.2")
 
-Using these views (in the simpler cases) should be as easy as the following:
+To use these views in your :mod:`eulfedora` -based application, make
+sure that ``eulfedora`` is included in INSTALLED_APPS in your ``settings.py``::
 
-    In urls.py of your application:
+    INSTALLED_APPS = (
+        'eulfedora'
+        # Additional installed applications here,
+    )
+
+And then bind the indexdata views to a url in your application
+``urls.py``::
         
-        from django.conf.urls.defaults import *
-    
-        urlpatterns = patterns('',
-            url(r'^indexdata/', include('eulfedora.indexdata.urls', namespace='indexdata')),
-            # Additional url patterns here,
-        )
+    from django.conf.urls.defaults import *
 
-    In settings.py of your application:
+    urlpatterns = patterns('',
+        url(r'^indexdata/', include('eulfedora.indexdata.urls', namespace='indexdata')),
+        # Additional url patterns here,
+    )
 
-        INSTALLED_APPS = (
-            'eulfedora'
-            # Additional installed applications here,
-        )
+
+An example Solr schema with fields defined for all the index values
+exposed in the default
+:meth:`~eulfedora.models.DigitalObject.index_data` method is included
+with :mod:`eulfedora.indexdata` to be used as a starting point for
+applications.
+
+----
 
 """
 
@@ -63,11 +72,9 @@ from eulfedora.util import RequestFailed
 logger = logging.getLogger(__name__)
 
 def index_config(request):
-    '''View to return the CMODELS and INDEXES this project uses. This is the default (no parameter)
-    view of this application.
-
-    :param request: HttpRequest
-
+    '''This view returns the index configuration of the current
+    application as JSON.  Currently, this consists of a Solr index url
+    and the Fedora content models that this application expects to index.
     '''
     #Ensure permission to this resource is allowed. Currently based on IP only.
     if _permission_denied_check(request):
@@ -95,7 +102,12 @@ def index_config(request):
     return HttpResponse(json_response, content_type='application/json')
 
 def index_data(request, id, repo=None):
-    'Return the fields and values to be indexed for a single object as JSON'
+    '''Return the fields and values to be indexed for a single object
+    as JSON.  Index content is generated via
+    :meth:`eulfedora.models.DigitalObject.index_data`.
+
+    :param id: id of the object to be indexed; in this case a Fedora pid
+    '''
     if repo is None:
         repo = TypeInferringRepository()
     try:

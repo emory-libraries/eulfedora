@@ -1286,7 +1286,11 @@ class DigitalObject(object):
         This method is intended to be customized and extended in order
         to easily modify the fields that should be indexed for any
         particular type of object in any project; data returned from
-        this method should be serializable using :mod:`simplejson`.'''
+        this method should be serializable as JSON (the current
+        implementation uses :mod:`django.utils.simplejson`).
+        
+        This method was designed for use with :mod:`eulfedora.indexdata`.
+        '''
         index_data = {
             # TODO: select and standardize solr index field names for object properties
             'pid': self.pid,	
@@ -1308,7 +1312,7 @@ class DigitalObject(object):
         '''Descriptive data to be included in :meth:`index_data`
         output.  This implementation includes all Dublin Core fields,
         but should be extended or overridden as appropriate for custom
-        DigitalObject classes.'''
+        :class:`~eulfedora.models.DigitalObject` classes.'''
 
         dc_fields = ['title', 'contributor', 'coverage', 'creator', 'date', 'description',
                      'format', 'identifier', 'language', 'publisher', 'relation',
