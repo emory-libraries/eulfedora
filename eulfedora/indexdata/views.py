@@ -75,30 +75,34 @@ def index_config(request):
     '''This view returns the index configuration of the current
     application as JSON.  Currently, this consists of a Solr index url
     and the Fedora content models that this application expects to index.
+
+    .. Note::
+    
+       By default, Fedora system content models (such as
+       ``fedora-system:ContentModel-3.0``) are excluded.  Any
+       application that actually wants to index such objects will need
+       to customize this view to include them.
     '''
     #Ensure permission to this resource is allowed. Currently based on IP only.
     if _permission_denied_check(request):
         return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
 
-    response_dict = {}
-    #Get all of the CMODELS and add them to the response
+    # Generate a list of lists of content models (one list for each defined type)
     content_list = []
     for cls in DigitalObject.defined_types.itervalues():
-        content_group = []
-        if hasattr(cls, 'CONTENT_MODELS'):
-            for model in cls.CONTENT_MODELS:
-                content_group.append(model)
+        # by default, Fedora system content models are excluded
+        content_group = [model for model in getattr(cls, 'CONTENT_MODELS', [])
+                         if not model.startswith('info:fedora/fedora-system:')]
+        # if the group of content models is not empty, add it to the list
+        if content_group:
             content_list.append(content_group)
-    response_dict['CONTENT_MODELS'] = content_list
 
+    response = {
+        'CONTENT_MODELS': content_list,
+        'SOLR_URL': settings.SOLR_SERVER_URL
+    }
 
-    #Add the SOLR url to the response.
-    solr_url = settings.SOLR_SERVER_URL
-    response_dict['SOLR_URL'] = solr_url
-
-    json_response = simplejson.dumps(response_dict)
-    
-    return HttpResponse(json_response, content_type='application/json')
+    return HttpResponse(simplejson.dumps(response), content_type='application/json')
 
 def index_data(request, id, repo=None):
     '''Return the fields and values to be indexed for a single object

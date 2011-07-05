@@ -28,7 +28,7 @@ from django.http import Http404, HttpRequest
 from django.utils import simplejson
 
 from eulfedora.indexdata.views import index_config, index_data
-from eulfedora.models import DigitalObject, Datastream
+from eulfedora.models import DigitalObject, Datastream, ContentModel
 from eulfedora.server import Repository
 
 TEST_PIDSPACE = getattr(settings, 'FEDORA_PIDSPACE', 'testme')
@@ -94,6 +94,8 @@ class IndexDataViewsTest(unittest.TestCase):
         self.assertEqual(solr_url, content['SOLR_URL'])
         self.assert_(SimpleDigitalObject.CONTENT_MODELS in content['CONTENT_MODELS'])
         self.assert_(LessSimpleDigitalObject.CONTENT_MODELS in content['CONTENT_MODELS'])
+        self.assert_(ContentModel.CONTENT_MODELS not in content['CONTENT_MODELS'],
+                     'Fedora system content models should not be included in indexed cmodels by default')
 
         #Test with the "ANY" setting for allowed IPs
         settings.INDEXER_ALLOWED_IPS = 'ANY'
