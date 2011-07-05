@@ -34,22 +34,16 @@ from eulfedora.server import Repository
 TEST_PIDSPACE = getattr(settings, 'FEDORA_PIDSPACE', 'testme')
 
 class SimpleDigitalObject(DigitalObject):
-    CONTENT_MODELS = ['info:fedora/%s:SimpleDjangoCModel' % TEST_PIDSPACE]
-    # NOTE: distinguish from SimpleCModel in non-django fedora unit tests
-    # and use configured pidspace for automatic clean-up
+    CONTENT_MODELS = ['info:fedora/%s:SimpleCModel' % TEST_PIDSPACE]
 
-    # extend digital object with datastreams for testing
-    text = Datastream("TEXT", "Text datastream", defaults={
-            'mimetype': 'text/plain',
-        })
 
-    def _index_data(self):
-        pid = 'DoesNotExist'
+class LessSimpleDigitalObject(DigitalObject):
+    CONTENT_MODELS = ['info:fedora/%s:SimpleDjangoCModel' % TEST_PIDSPACE,
+                      'info:fedora/%s:OtherCModel' % TEST_PIDSPACE]
 
-    def index(self):
-        _index_data(self)
 
-class WebserviceViewsTest(unittest.TestCase):
+
+class IndexDataViewsTest(unittest.TestCase):
 
     def setUp(self):
         #Creation of a HTTP request object for tests.
@@ -66,7 +60,8 @@ class WebserviceViewsTest(unittest.TestCase):
         self.assertRaises(AttributeError, index_config, self.request)
 
         #Test with only the allowed SOLR url set.
-        settings.SOLR_SERVER_URL = 'http://localhost:5555'
+        solr_url = 'http://localhost:5555'
+        settings.SOLR_SERVER_URL = solr_url
         self.assertRaises(AttributeError, index_config, self.request)
 
 
@@ -93,9 +88,12 @@ class WebserviceViewsTest(unittest.TestCase):
         expected, got = 'application/json', response['Content-Type']
         self.assertEqual(expected, got,
             'Expected %s but returned %s for mimetype on indexdata/index_details view' \
-                % (expected, got)) 
-        self.assert_('SOLR_URL' in response.content)
-        self.assert_('CONTENT_MODELS' in response.content)
+                % (expected, got))
+        # load json content so we can inspect the result
+        content = simplejson.loads(response.content)
+        self.assertEqual(solr_url, content['SOLR_URL'])
+        self.assert_(SimpleDigitalObject.CONTENT_MODELS in content['CONTENT_MODELS'])
+        self.assert_(LessSimpleDigitalObject.CONTENT_MODELS in content['CONTENT_MODELS'])
 
         #Test with the "ANY" setting for allowed IPs
         settings.INDEXER_ALLOWED_IPS = 'ANY'

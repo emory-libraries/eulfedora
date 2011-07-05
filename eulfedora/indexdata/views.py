@@ -85,7 +85,6 @@ def index_config(request):
     content_list = []
     for cls in DigitalObject.defined_types.itervalues():
         content_group = []
-        #hasattr(cls, 'index') and
         if hasattr(cls, 'CONTENT_MODELS'):
             for model in cls.CONTENT_MODELS:
                 content_group.append(model)
