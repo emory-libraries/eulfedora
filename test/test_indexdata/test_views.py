@@ -25,41 +25,43 @@ os.environ['DJANGO_SETTINGS_MODULE'] = 'testsettings'
 
 from django.conf import settings
 from django.http import Http404, HttpRequest
-from eulfedora.indexdata.views import index_config
-from eulfedora.models import DigitalObject, Datastream
+from django.utils import simplejson
+
+from eulfedora.indexdata.views import index_config, index_data
+from eulfedora.models import DigitalObject, Datastream, ContentModel
+from eulfedora.server import Repository
 
 TEST_PIDSPACE = getattr(settings, 'FEDORA_PIDSPACE', 'testme')
 
 class SimpleDigitalObject(DigitalObject):
-    CONTENT_MODELS = ['info:fedora/%s:SimpleDjangoCModel' % TEST_PIDSPACE]
-    # NOTE: distinguish from SimpleCModel in non-django fedora unit tests
-    # and use configured pidspace for automatic clean-up
+    CONTENT_MODELS = ['info:fedora/%s:SimpleCModel' % TEST_PIDSPACE]
 
-    # extend digital object with datastreams for testing
-    text = Datastream("TEXT", "Text datastream", defaults={
-            'mimetype': 'text/plain',
-        })
 
-    def _index_data(self):
-        pid = 'DoesNotExist'
+class LessSimpleDigitalObject(DigitalObject):
+    CONTENT_MODELS = ['info:fedora/%s:SimpleDjangoCModel' % TEST_PIDSPACE,
+                      'info:fedora/%s:OtherCModel' % TEST_PIDSPACE]
 
-    def index(self):
-        _index_data(self)
 
-class WebserviceViewsTest(unittest.TestCase):
+
+class IndexDataViewsTest(unittest.TestCase):
 
     def setUp(self):
         #Creation of a HTTP request object for tests.
         self.request = HttpRequest
         self.request.META = { 'REMOTE_ADDR': '127.0.0.1' }
+        self.pids = []
 
     def test_index_details(self):
+        repo = Repository()
+        for pid in self.pids:
+            repo.purge_object(pid)
 
         #Test with no settings set.
         self.assertRaises(AttributeError, index_config, self.request)
 
         #Test with only the allowed SOLR url set.
-        settings.EUL_SOLR_SERVER_URL = 'http://localhost:5555'
+        solr_url = 'http://localhost:5555'
+        settings.SOLR_SERVER_URL = solr_url
         self.assertRaises(AttributeError, index_config, self.request)
 
 
@@ -86,9 +88,14 @@ class WebserviceViewsTest(unittest.TestCase):
         expected, got = 'application/json', response['Content-Type']
         self.assertEqual(expected, got,
             'Expected %s but returned %s for mimetype on indexdata/index_details view' \
-                % (expected, got)) 
-        self.assert_('SOLR_URL' in response.content)
-        self.assert_('CONTENT_MODELS' in response.content)
+                % (expected, got))
+        # load json content so we can inspect the result
+        content = simplejson.loads(response.content)
+        self.assertEqual(solr_url, content['SOLR_URL'])
+        self.assert_(SimpleDigitalObject.CONTENT_MODELS in content['CONTENT_MODELS'])
+        self.assert_(LessSimpleDigitalObject.CONTENT_MODELS in content['CONTENT_MODELS'])
+        self.assert_(ContentModel.CONTENT_MODELS not in content['CONTENT_MODELS'],
+                     'Fedora system content models should not be included in indexed cmodels by default')
 
         #Test with the "ANY" setting for allowed IPs
         settings.INDEXER_ALLOWED_IPS = 'ANY'
@@ -98,3 +105,27 @@ class WebserviceViewsTest(unittest.TestCase):
             'Expected %s but returned %s for indexdata/index_details view' \
                 % (expected, got))
 
+    def test_index_data(self):
+        # create a test object for testing index data view
+        repo = Repository()
+        testobj = repo.get_object(type=SimpleDigitalObject)
+        testobj.label = 'test object'
+        testobj.owner = 'tester'
+        testobj.save()
+        self.pids.append(testobj.pid)
+
+        response = index_data(self.request, testobj.pid)
+        expected, got = 200, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for index_data view' \
+                % (expected, got))
+        expected, got = 'application/json', response['Content-Type']
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for mimetype on index_data view' \
+                % (expected, got)) 
+        response_data = simplejson.loads(response.content)
+        self.assertEqual(testobj.index_data(), response_data,
+             'Response content loaded from JSON should be equal to object indexdata')
+        
+        # non-existent pid should generate a 404
+        self.assertRaises(Http404, index_data, self.request, 'bogus:testpid')

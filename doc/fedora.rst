@@ -35,6 +35,16 @@ Django integration
 
    .. automethod:: eulfedora.views.raw_datastream
 
+
+:mod:`~eulfedora.indexdata` Fedora Indexing
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. automodule:: eulfedora.indexdata
+
+  .. automodule:: eulfedora.indexdata.views
+    :members:
+  
+
 Management commands
 ^^^^^^^^^^^^^^^^^^^
 

@@ -14,9 +14,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-""":
+"""
 Generic, re-usable views for use with Fedora-based Django projects. These views
-expose data via a webservice to eulindexer (if running). These views currently
+expose data to via intended for use with :mod:`eulindexer`. These views currently
 return data in JSON form. 
 
 Projects that use this module should include the following settings in their
@@ -24,26 +24,35 @@ Projects that use this module should include the following settings in their
 
     # Index server url. In this example case, we are wish to push data to a Solr instance.
     SOLR_SERVER_URL = "http://localhost:8983/solr/"
-    # IPs that will be allowed to access this webservice.
+    # IPs that will be allowed to access the indexdata views
     EUL_INDEXER_ALLOWED_IPS = "ANY" #Or put in a list such as ("127.0.0.1", "127.0.0.2")
 
-Using these views (in the simpler cases) should be as easy as the following:
+To use these views in your :mod:`eulfedora` -based application, make
+sure that ``eulfedora`` is included in INSTALLED_APPS in your ``settings.py``::
 
-    In urls.py of your application:
+    INSTALLED_APPS = (
+        'eulfedora'
+        # Additional installed applications here,
+    )
+
+And then bind the indexdata views to a url in your application
+``urls.py``::
         
-        from django.conf.urls.defaults import *
-    
-        urlpatterns = patterns('',
-            url(r'^indexdata/', include('eulfedora.indexdata.urls', namespace='indexdata')),
-            # Additional url patterns here,
-        )
+    from django.conf.urls.defaults import *
 
-    In settings.py of your application:
+    urlpatterns = patterns('',
+        url(r'^indexdata/', include('eulfedora.indexdata.urls', namespace='indexdata')),
+        # Additional url patterns here,
+    )
 
-        INSTALLED_APPS = (
-            'eulfedora'
-            # Additional installed applications here,
-        )
+
+An example Solr schema with fields defined for all the index values
+exposed in the default
+:meth:`~eulfedora.models.DigitalObject.index_data` method is included
+with :mod:`eulfedora.indexdata` to be used as a starting point for
+applications.
+
+----
 
 """
 
@@ -56,50 +65,63 @@ from django.http import HttpResponse, Http404, HttpResponseForbidden, \
     HttpResponseBadRequest
 
 from eulfedora.models import DigitalObject
-from eulfedora.server import Repository
+from eulfedora.server import TypeInferringRepository
+from eulfedora.util import RequestFailed
 
 
 logger = logging.getLogger(__name__)
 
 def index_config(request):
-    '''View to return the CMODELS and INDEXES this project uses. This is the default (no parameter)
-    view of this application.
+    '''This view returns the index configuration of the current
+    application as JSON.  Currently, this consists of a Solr index url
+    and the Fedora content models that this application expects to index.
 
-    :param request: HttpRequest
-
+    .. Note::
+    
+       By default, Fedora system content models (such as
+       ``fedora-system:ContentModel-3.0``) are excluded.  Any
+       application that actually wants to index such objects will need
+       to customize this view to include them.
     '''
     #Ensure permission to this resource is allowed. Currently based on IP only.
     if _permission_denied_check(request):
         return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
 
-    response_dict = {}
-    #Get all of the CMODELS and add them to the response
+    # Generate a list of lists of content models (one list for each defined type)
     content_list = []
     for cls in DigitalObject.defined_types.itervalues():
-        content_group = []
-        #hasattr(cls, 'index') and
-        if hasattr(cls, 'CONTENT_MODELS'):
-            for model in cls.CONTENT_MODELS:
-                content_group.append(model)
+        # by default, Fedora system content models are excluded
+        content_group = [model for model in getattr(cls, 'CONTENT_MODELS', [])
+                         if not model.startswith('info:fedora/fedora-system:')]
+        # if the group of content models is not empty, add it to the list
+        if content_group:
             content_list.append(content_group)
-    response_dict['CONTENT_MODELS'] = content_list
 
+    response = {
+        'CONTENT_MODELS': content_list,
+        'SOLR_URL': settings.SOLR_SERVER_URL
+    }
 
-    #Add the SOLR url to the response.
-    solr_url = settings.SOLR_SERVER_URL
-    response_dict['SOLR_URL'] = solr_url
+    return HttpResponse(simplejson.dumps(response), content_type='application/json')
 
-    json_response = simplejson.dumps(response_dict)
-    
-    return HttpResponse(json_response, content_type='application/json')
+def index_data(request, id, repo=None):
+    '''Return the fields and values to be indexed for a single object
+    as JSON.  Index content is generated via
+    :meth:`eulfedora.models.DigitalObject.index_data`.
 
-def index_data(request, id):
-    'Return the fields and values to be indexed for a single object as JSON'
-    repo = Repository()
-    # TODO: need a generic method to init by cmodel using DigitalObject defined_types
-    obj = repo.get_object(id)
-    return HttpResponse(simplejson.dumps(obj.index_data()),
-                                         content_type='application/json')
+    :param id: id of the object to be indexed; in this case a Fedora pid
+    '''
+    if repo is None:
+        repo = TypeInferringRepository()
+    try:
+        # TODO: need a generic method to init by cmodel using DigitalObject defined_types
+        obj = repo.get_object(id)
+        return HttpResponse(simplejson.dumps(obj.index_data()),
+                            content_type='application/json')
+    except RequestFailed:
+        # for now, treat any failure getting the object from Fedora as a 404
+        # (could also potentially be a permission error)
+        raise Http404
 
 def _permission_denied_check(request):
     '''Internal function to verify that access to this webservice is allowed.

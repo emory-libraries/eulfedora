@@ -1286,17 +1286,22 @@ class DigitalObject(object):
         This method is intended to be customized and extended in order
         to easily modify the fields that should be indexed for any
         particular type of object in any project; data returned from
-        this method should be serializable using :mod:`simplejson`.'''
+        this method should be serializable as JSON (the current
+        implementation uses :mod:`django.utils.simplejson`).
+        
+        This method was designed for use with :mod:`eulfedora.indexdata`.
+        '''
         index_data = {
             # TODO: select and standardize solr index field names for object properties
-            'PID': self.pid,		# following gsearch convention here (do we need to?)
+            'pid': self.pid,	
             'label': self.label,
-            'ownerId': self.owner,
-            # FIXME: the types needed here depends on solr configuration; need to set reasonable defaults...
-            'lastModifiedDate': str(self.modified),	
-            'createdDate': str(self.created),
+            'owner': self.owner,
+            # last_modified and created are configured as date type in sample solr Schema
+            # using isoformat here so they can be serialized via JSON
+            'last_modified': self.modified.isoformat(),	
+            'created': self.created.isoformat(),
             'state': self.state,
-            'contentModel': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
+            'content_model': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
             }
         index_data.update(self.index_data_descriptive())
         # TODO: perhaps add something similar for rels-ext and common/all fedora rels? (membership/collection/etc)
@@ -1307,7 +1312,7 @@ class DigitalObject(object):
         '''Descriptive data to be included in :meth:`index_data`
         output.  This implementation includes all Dublin Core fields,
         but should be extended or overridden as appropriate for custom
-        DigitalObject classes.'''
+        :class:`~eulfedora.models.DigitalObject` classes.'''
 
         dc_fields = ['title', 'contributor', 'coverage', 'creator', 'date', 'description',
                      'format', 'identifier', 'language', 'publisher', 'relation',
