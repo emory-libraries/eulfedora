@@ -14,26 +14,25 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+import sys
 import unittest
 
 import os
 # must be set before importing anything from django
 os.environ['DJANGO_SETTINGS_MODULE'] = 'testsettings'
 
+from eulfedora import testutil
 
 def tests_from_modules(modnames):
     return [ unittest.findTestCases(__import__(modname, fromlist=['*']))
              for modname in modnames ]
 
-def get_test_runner(runner=unittest.TextTestRunner()):
-    # use xmlrunner if available; otherwise, fall back to text runner
-    try:
-        import xmlrunner
-        runner = xmlrunner.XMLTestRunner(output='test-results')
-    except ImportError:
-        pass
-    return runner
-    
+def get_test_runner():
+    if hasattr(testutil, 'FedoraXmlTestRunner'):
+        return testutil.FedoraXmlTestRunner()
+    else:
+        return testutil.FedoraTextTestRunner(sys.stdout, None, 1)
+
 
 def main(testRunner=None, *args, **kwargs):
     if testRunner is None:
