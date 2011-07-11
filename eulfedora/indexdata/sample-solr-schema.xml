@@ -263,6 +263,9 @@ Solr Schema for projects using eulfedora and indexdata.
    <field name="last_modified" type="date" indexed="true" stored="true" /> 
    <field name="owner" type="string" indexed="true" stored="true" /> 
    <field name="state" type="string" indexed="true" stored="false"/> 
+   <!-- explicitly define string-variants of date fields for wildcard searching -->
+   <field name="created_s" type="string" indexed="true" stored="true"/> 
+   <field name="last_modified_s" type="string" indexed="true" stored="false" /> 
 
    <!-- Dublin Core fields -->
    <field name="title" type="text" indexed="true" stored="true"/>
@@ -343,6 +346,9 @@ Solr Schema for projects using eulfedora and indexdata.
    <copyField source="pid" dest="text"/>
    <copyField source="label" dest="text"/>
    <copyField source="owner" dest="text"/>
+   <!-- copy datetime fields to string variants for wildcard searching -->
+   <copyField source="created" dest="created_s"/>
+   <copyField source="last_modified" dest="last_modified_s"/>
    <!--   all DC fields -->
    <copyField source="title" dest="text"/>
    <copyField source="contributor" dest="text"/>
