@@ -107,6 +107,20 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         obj = self.repo.get_object(testpid, type=self.repo.infer_object_subtype)
         self.assertTrue(isinstance(obj, AnotherDigitalObject))
 
+        #Test that subclass does resolve correctly.
+        class SubclassedAnotherDigitalObject(AnotherDigitalObject):
+            NO_CHANGES_EXCEPT_SUBCLASSED = True
+
+        obj = self.repo.get_object(type=SubclassedAnotherDigitalObject)
+        obj.save()
+        testpid = obj.pid
+        self.append_test_pid(testpid)
+        
+        obj = self.repo.get_object(testpid, type=self.repo.infer_object_subtype)
+        self.assertTrue(isinstance(obj, SubclassedAnotherDigitalObject))
+
+        #TODO: Test for errors? Test for multiple possible matches?
+
 
     def test_find_objects(self):
         self.ingestFixture("object-with-pid.foxml")

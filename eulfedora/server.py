@@ -351,7 +351,16 @@ class Repository(object):
             return DigitalObject
 
         if len(matches) > 1:
-            logger.warn('%s has %d potential classes. using the first: %s' % 
+            # Check to see if there happens to be an end subclass to the list of matches.
+            for obj_type in matches:
+                is_root_subclass = True
+                for possible_parent_type in matches:
+                    if not issubclass(obj_type,possible_parent_type):
+                        is_root_subclass = False
+                if is_root_subclass:
+                    return obj_type
+                
+            logger.warn('%s has %d potential classes with no root subclass for the list. using the first: %s' % 
                 (obj.pid, len(matches), repr(matches)))
         return matches[0]
 
@@ -387,6 +396,7 @@ class Repository(object):
             'gt': '>',
             'gte': '>=',
             'lt': '<',
+
             'lte': '<=',
             'contains': '~'
         }
