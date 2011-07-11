@@ -58,6 +58,7 @@ from django.core.management import call_command
 from django.test.simple import DjangoTestSuiteRunner
 
 from eulfedora.server import Repository, init_pooled_connection
+from eulfedora.util import RequestFailed
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +137,13 @@ class FedoraTestWrapper(object):
         for obj in test_objects:
             # if objects are unexpectedly not being cleaned up, pid/label may help
             # to isolate which test is creating the leftover objects
-            logger.info('Purging test object %s - %s' % (obj.pid, obj.label))
-            repo.purge_object(obj.pid, "removing test object")
-            count += 1
+            try:
+                repo.purge_object(obj.pid, "removing test object")
+                # NOTE: not displaying label because we may not have permission to access it
+                logger.info('Purged test object %s' % obj.pid)
+                count += 1
+            except RequestFailed:
+                logger.warn('Error purging test object %s' % obj.pid)
         if count:
             print "Removed %s test object(s) with pidspace %s" % (count, settings.FEDORA_PIDSPACE)
 
