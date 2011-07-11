@@ -698,6 +698,9 @@ class DigitalObject(object):
             # in this class. Barring clever hanky-panky, it should be
             # reliably callable.
             pid = self.get_default_pid
+        elif isinstance(pid, basestring) and \
+                 pid.startswith('info:fedora/'): # passed a uri
+            pid = pid[len('info:fedora/'):]
 
         # callable(pid) signals a function to call to obtain a pid if and
         # when one is needed
@@ -1296,13 +1299,20 @@ class DigitalObject(object):
             'pid': self.pid,	
             'label': self.label,
             'owner': self.owner,
-            # last_modified and created are configured as date type in sample solr Schema
-            # using isoformat here so they can be serialized via JSON
-            'last_modified': self.modified.isoformat(),	
-            'created': self.created.isoformat(),
             'state': self.state,
             'content_model': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
             }
+
+        # date created/modified won't be set unless the object actually exists in Fedora
+        # (probably the case for anything being indexed, except in tests)
+        if self.exists:
+            index_data.update({
+                # last_modified and created are configured as date type in sample solr Schema
+                # using isoformat here so they can be serialized via JSON
+                'last_modified': self.modified.isoformat(),	
+                'created': self.created.isoformat()
+            })
+            
         index_data.update(self.index_data_descriptive())
         # TODO: perhaps add something similar for rels-ext and common/all fedora rels? (membership/collection/etc)
         

@@ -280,10 +280,6 @@ class Repository(object):
             if create is None:
                 create = True
         else:
-            if isinstance(pid, basestring) and \
-                    pid.startswith('info:fedora/'): # passed a uri
-                pid = pid[len('info:fedora/'):]
-
             if create is None:
                 create = False
 
