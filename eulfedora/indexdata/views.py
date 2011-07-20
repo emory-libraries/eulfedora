@@ -111,6 +111,11 @@ def index_data(request, id, repo=None):
 
     :param id: id of the object to be indexed; in this case a Fedora pid
     '''
+
+    #Ensure permission to this resource is allowed. Currently based on IP only.
+    if _permission_denied_check(request):
+        return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
+
     if repo is None:
         repo = TypeInferringRepository()
     try:
