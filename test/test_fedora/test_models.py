@@ -48,7 +48,7 @@ class MyDigitalObject(models.DigitalObject):
         })
 
 class SimpleDigitalObject(models.DigitalObject):
-    CONTENT_MODELS = ['info:fedora/%s:SimpleCModel' % FEDORA_PIDSPACE]
+    CONTENT_MODELS = ['info:fedora/%s:SimpleObject' % FEDORA_PIDSPACE]
 
     # extend digital object with datastreams for testing
     text = models.Datastream("TEXT", "Text datastream", defaults={
@@ -704,6 +704,9 @@ class TestContentModel(FedoraTestCase):
     def test_for_class(self):
         CMODEL_URI = models.ContentModel.CONTENT_MODELS[0]
 
+        # NOTE: these tests can fail if a content model with the same
+        # URI (but not the same datastreams) actually exists in Fedora
+        
         # first: create a cmodel for SimpleDigitalObject, the simple case
         cmodel = models.ContentModel.for_class(SimpleDigitalObject, self.repo)
         self.append_test_pid(cmodel.pid)
