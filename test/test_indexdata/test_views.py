@@ -48,8 +48,15 @@ class IndexDataViewsTest(unittest.TestCase):
     def setUp(self):
         #Creation of a HTTP request object for tests.
         self.request = HttpRequest
-        self.request.META = { 'REMOTE_ADDR': '127.0.0.1' }
+        self.request_ip = '127.0.0.1'
+        self.request.META = {'REMOTE_ADDR': self.request_ip}
         self.pids = []
+
+    def tearDown(self):
+        # remove any test settings added by test methods
+        for cfg in ['SOLR_SERVER_URL', 'EUL_INDEXER_ALLOWED_IPS']:
+            if hasattr(settings, cfg):
+                delattr(settings, cfg)
 
     def test_index_details(self):
         repo = Repository()
@@ -79,7 +86,7 @@ class IndexDataViewsTest(unittest.TestCase):
         
 
         #Test with this IP allowed to hit the view.
-        settings.EUL_INDEXER_ALLOWED_IPS = ['0.13.23.134', '127.0.0.1']
+        settings.EUL_INDEXER_ALLOWED_IPS = ['0.13.23.134', self.request_ip]
         response = index_config(self.request)
         expected, got = 200, response.status_code
         self.assertEqual(expected, got,
@@ -114,6 +121,16 @@ class IndexDataViewsTest(unittest.TestCase):
         testobj.save()
         self.pids.append(testobj.pid)
 
+        # test with request IP not allowed to access the service
+        settings.EUL_INDEXER_ALLOWED_IPS = ['0.13.23.134']
+        response = index_data(self.request, testobj.pid)
+        expected, got = 403, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for index_data view with request IP not in configured list' \
+                % (expected, got))
+
+        # test with request IP allowed to hit the service
+        settings.EUL_INDEXER_ALLOWED_IPS = [self.request_ip]
         response = index_data(self.request, testobj.pid)
         expected, got = 200, response.status_code
         self.assertEqual(expected, got,
