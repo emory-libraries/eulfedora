@@ -15,9 +15,9 @@
 #   limitations under the License.
 
 """
-Generic, re-usable views for use with Fedora-based Django projects. These views
-expose data to via intended for use with :mod:`eulindexer`. These views currently
-return data in JSON form. 
+Generic, re-usable views for use with Fedora-based Django
+projects. These views expose data intended for use with
+:mod:`eulindexer`. These views currently return data in JSON form.
 
 Projects that use this module should include the following settings in their
 ``settings.py``::
