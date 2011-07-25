@@ -170,23 +170,28 @@ class TestDatastreams(FedoraTestCase):
                      self.obj.rels_ext.content)
 
     def test_file_datastream(self):
+        # confirm the image datastream does not exist, so we can test adding it
+        self.assertFalse(self.obj.image.exists)
+
         # add file datastream to test object
         filename = os.path.join(FIXTURE_ROOT, 'test.png')
-        defaults = self.obj.image.defaults
-        return_status = self.obj.api.addDatastream(self.obj.pid, self.obj.image.id, defaults['label'],
-            defaults['mimetype'], controlGroup=defaults['control_group'],
-            versionable=defaults['versionable'], filename=filename, checksum='d745e8a99847777dabf0d8c6e11fca84', checksumType='MD5')
-        #Have to set the datastream as existing for the object now.
-        self.obj.image.exists = True
-        #Verify the insertion succeeded
-        self.assertEqual(return_status[0], True)
+        with open(filename) as imgfile:
+            self.obj.image.content = imgfile
+            imgsaved = self.obj.save()
+
+        self.assertTrue(imgsaved)
+        # datastream should exist now
+        self.assertTrue(self.obj.image.exists)
+        # file content should be reset
+        self.assertEqual(None, self.obj.image._raw_content())
+        self.assertFalse(self.obj.image.isModified(),
+                         "isModified should return False for image datastream after it has been saved")
         
         # access via file datastream descriptor
         self.assert_(isinstance(self.obj.image, models.FileDatastreamObject))
         self.assertEqual(self.obj.image.content.read(), open(filename).read())
 
         # update via descriptor
-        self.assertFalse(self.obj.image.isModified())
         new_file = os.path.join(FIXTURE_ROOT, 'test.jpeg')
         self.obj.image.content = open(new_file)
         self.obj.image.checksum='aaa'

@@ -286,17 +286,30 @@ class DatastreamObject(object):
             else:
                 modify_opts['mimeType'] = self.defaults['mimetype']
 
-        if not self.versionable:
-            self._backup()
-        
-        if(self.exists):    
+        if self.exists:
+            # if not versionable, make a backup to back out changes if object save fails
+            if not self.versionable:
+                self._backup()
+                
+            # if this datastream already exists, use modifyDatastream API call
             success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id, content=data,
                     logMessage=logmessage, **modify_opts)
         else:
-            success, msg = self.obj.api.addDatastream(self.obj.pid, self.id, controlGroup='M', content=data, logMessage=logmessage, **modify_opts)
-            #If added successfully, set the exists flag to true.
+            # if this datastream does not yet exist, add it
+            success, msg = self.obj.api.addDatastream(self.obj.pid, self.id,
+                    controlGroup=self.defaults['control_group'], content=data,
+                    logMessage=logmessage, **modify_opts)
+
+            # clean-up required for object info after adding a new datastream
             if success:
+                # update exists flag - if add succeeded, the datastrea exists now
                 self.exists = True
+                # if the datastream content is a file-like object, clear it out
+                # (we don't want to attempt to save the current file contents again,
+                # particularly since the file is not guaranteed to still be open)
+                if hasattr(data, 'read'):
+                    self._content = None
+                    self._content_modified = False      
  
         if success:
             # update modification indicators
@@ -336,7 +349,8 @@ class DatastreamObject(object):
             # and purge the most recent version 
             history = self.obj.api.getDatastreamHistory(self.obj.pid, self.id)
             last_save = history.datastreams[0].createDate   # fedora returns with most recent first
-            success, timestamps = self.obj.api.purgeDatastream(self.obj.pid, self.id, datetime_to_fedoratime(last_save),
+            success, timestamps = self.obj.api.purgeDatastream(self.obj.pid, self.id,
+                                                datetime_to_fedoratime(last_save),
                                                 logMessage=logMessage)
             return success
         else:
