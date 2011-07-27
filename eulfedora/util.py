@@ -121,12 +121,18 @@ class RequestFailed(IOError):
     Fedora object or datastream.
     '''
     error_regex = re.compile('<pre>.*\n(.*)\n', re.MULTILINE)
-    def __init__(self, response):
+    def __init__(self, response, content=None):
+        # init params:
+        #  response = HttpResponse with the error information
+        #  content = optional content of the response body, if it needed to be read
+        #            to determine what kind of exception to raise
         super(RequestFailed, self).__init__('%d %s' % (response.status, response.reason))
         self.code = response.status
         self.reason = response.reason
-        if response.status == 500:            
-            content = response.read()
+        if response.status == 500:
+            # grab the response content if not passed in
+            if content is None:
+                content = response.read()
             # when Fedora gives a 500 error, it includes a stack-trace - pulling first line as detail
             # NOTE: this is likely to break if and when Fedora error responses change
             if response.msg.gettype() == 'text/plain':
@@ -138,11 +144,31 @@ class RequestFailed(IOError):
                 if len(match):
                     self.detail = match[0]
 
+                    
 
 class PermissionDenied(RequestFailed):
     '''An exception representing a permission error while trying to access a
     Fedora object or datastream.
     '''
+
+class ChecksumMismatch(RequestFailed):
+    '''Custom exception for a Checksum Mismatch error while trying to
+    add or upade a datastream on a Fedora object.
+    '''
+    error_label = 'Checksum Mismatch'
+    def __init__(self, response, content):
+        super(ChecksumMismatch, self).__init__(response, content)
+        # the detail pulled out by  RequestFailed.__init__ includes extraneous
+        # Fedora output; when possible, pull out just the checksum error details.
+        # The error message will look something like this:
+        #    javax.ws.rs.WebApplicationException: org.fcrepo.server.errors.ValidationException: Checksum Mismatch: f123b33254a1979638c23859aa364fa7
+        # Use find/substring to pull out the checksum mismatch information
+        if self.error_label in self.detail:
+            self.detail = self.detail[self.detail.find(self.error_label):]
+ 
+    def __str__(self):
+        return self.detail
+
 
 # custom exceptions?  fedora errors:
 # fedora.server.errors.ObjectValidityException
@@ -171,6 +197,14 @@ class HttpServerConnection(object):
             # special handling in client code.
             if response.status in (401, 403):
                 raise PermissionDenied(response)
+            elif response.status == 500:
+                # check response content to determine if this is a
+                # ChecksumMismatch or a more generic error
+                response_body = response.read()
+                if 'ValidationException: Checksum Mismatch' in response_body:
+                    raise ChecksumMismatch(response, response_body)
+                else:
+                    raise RequestFailed(response, response_body)
             else:
                 raise RequestFailed(response)
 

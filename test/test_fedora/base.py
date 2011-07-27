@@ -16,12 +16,16 @@
 
 import os
 import unittest
+import logging
 from eulxml import xmlmap
 from eulfedora.api import ApiFacade
 from eulfedora.server import Repository
+from eulfedora.util import RequestFailed
 
 from localsettings import FEDORA_ROOT, FEDORA_ROOT_NONSSL, \
      FEDORA_USER, FEDORA_PASSWORD, FEDORA_PIDSPACE
+
+logger = logging.getLogger(__name__)
 
 FIXTURE_ROOT = os.path.join(os.path.dirname(__file__), 'fixtures')
 def fixture_path(fname):
@@ -52,7 +56,11 @@ class FedoraTestCase(unittest.TestCase):
 
     def tearDown(self):
         for pid in self.fedora_fixtures_ingested:
-            self.repo.purge_object(pid)
+            try: 
+                self.repo.purge_object(pid)
+            except RequestFailed as rf:
+                logger.warn('Error purging test object %s in tear down: %s' % \
+                            (pid, rf))
 
     def getNextPid(self):
         pidspace = getattr(self, 'pidspace', None)

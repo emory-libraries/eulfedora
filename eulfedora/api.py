@@ -19,6 +19,7 @@ from os import path
 from urllib import urlencode
 from urlparse import urlsplit
 import time
+import warnings
 
 from soaplib.serializers import primitive as soap_types
 from soaplib.serializers.clazz import ClassSerializer
@@ -172,7 +173,13 @@ class REST_API(HTTP_API_Base):
         # objects/{pid}/datastreams/NEWDS? [opts]
         # content via multipart file in request content, or dsLocation=URI
         # one of dsLocation or filename must be specified
-        
+
+        # if checksum is sent without checksum type, Fedora seems to
+        # ignore it (does not error on invalid checksum with no checksum type)
+        if checksum is not None and checksumType is None:
+            warnings.warn('Fedora will ignore the checksum (%s) because no checksum type is specified' \
+                          % checksum)
+            
         http_args = {'dsLabel': dsLabel, 'mimeType': mimeType}
         if logMessage:
             http_args['logMessage'] = logMessage
@@ -219,7 +226,7 @@ class REST_API(HTTP_API_Base):
             body = None
 
         url = 'objects/%s/datastreams/%s?' % (pid, dsID) + urlencode(http_args)
-        with self.open('POST', url, body, headers, throw_errors=False) as response:
+        with self.open('POST', url, body, headers, throw_errors=True) as response:
             # if a file object was opened to post data, close it now
             if fp is not None:
                 fp.close()
@@ -227,7 +234,7 @@ class REST_API(HTTP_API_Base):
             # expected response: 201 Created (on success)
             # when pid is invalid, response body contains error message
             #  e.g., no path in db registry for [bogus:pid]
-            # return success/failure and any additional information          
+            # return success/failure and any additional information
             return (response.status == 201, response.read())
 
 
@@ -344,6 +351,12 @@ class REST_API(HTTP_API_Base):
         # if dsLocation or content is not specified, datastream content will not be updated
         # content can be string or a file-like object
 
+        # Unlike addDatastream, if checksum is sent without checksum
+        # type, Fedora honors it (*does* error on invalid checksum
+        # with no checksum type) - it seems to use the existing
+        # checksum type if a new type is not specified.
+
+
         http_args = {}
         if dsLabel:
             http_args['dsLabel'] = dsLabel
@@ -367,7 +380,7 @@ class REST_API(HTTP_API_Base):
             http_args['checksum'] = checksum
         if force:
             http_args['force'] = force
-            
+
         headers = {}
         body = None
         if content:
@@ -384,7 +397,7 @@ class REST_API(HTTP_API_Base):
 
 
         url = 'objects/%s/datastreams/%s?' % (pid, dsID) + urlencode(http_args)
-        with self.open('PUT', url, body, headers, throw_errors=False) as response:
+        with self.open('PUT', url, body, headers, throw_errors=True) as response:
             # expected response: 200 (success)
             # response body contains error message, if any
             # return success/failure and any additional information
@@ -398,7 +411,7 @@ class REST_API(HTTP_API_Base):
         if logMessage is not None:
             http_args['logMessage'] = logMessage
         url = 'objects/%s' % (pid,) + '?' + urlencode(http_args)
-        with self.open('PUT', url, '', {}, throw_errors=False) as response:
+        with self.open('PUT', url, '', {}, throw_errors=True) as response:
             # returns response code 200 on success
             return response.status == 200
 
@@ -428,7 +441,7 @@ class REST_API(HTTP_API_Base):
             http_args['force'] = force
 
         url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + urlencode(http_args)
-        with self.open('DELETE', url, '', {}, throw_errors=False) as response:
+        with self.open('DELETE', url, '', {}, throw_errors=True) as response:
             # as of Fedora 3.4, returns 200 on success with a list of the
             # timestamps for the versions deleted as response content
             # NOTE: response content may be useful on error, e.g.
@@ -455,7 +468,7 @@ class REST_API(HTTP_API_Base):
             http_args['logMessage'] = logMessage
 
         url = 'objects/' + pid  + '?' + urlencode(http_args)
-        with self.open('DELETE', url, '', {}, throw_errors=False) as response:
+        with self.open('DELETE', url, '', {}, throw_errors=True) as response:
             # as of Fedora 3.4, returns 200 on success; response content is timestamp
             return response.status == 200, response.read()
 
@@ -465,7 +478,7 @@ class REST_API(HTTP_API_Base):
         # /objects/{pid}/datastreams/{dsID} ? [dsState]
         http_args = { 'dsState' : dsState }
         url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + urlencode(http_args)
-        with self.open('PUT', url, '', {}, throw_errors=False) as response:
+        with self.open('PUT', url, '', {}, throw_errors=True) as response:
             # returns response code 200 on success
             return response.status == 200
 
@@ -473,7 +486,7 @@ class REST_API(HTTP_API_Base):
         # /objects/{pid}/datastreams/{dsID} ? [versionable]
         http_args = { 'versionable' : versionable }
         url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + urlencode(http_args)
-        with self.open('PUT', url, '', {}, throw_errors=False) as response:
+        with self.open('PUT', url, '', {}, throw_errors=True) as response:
             # returns response code 200 on success
             return response.status == 200
 

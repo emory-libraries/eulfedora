@@ -16,21 +16,24 @@
 
 #!/usr/bin/env python
 
+from datetime import date, datetime, timedelta
+from dateutil.tz import tzutc
+from lxml import etree
+import re
+from time import sleep
+import tempfile
+import warnings
+
 from test_fedora.base import FedoraTestCase, load_fixture_data, FEDORA_ROOT_NONSSL,\
                 FEDORA_USER, FEDORA_PASSWORD, FEDORA_PIDSPACE
 from eulfedora.api import REST_API, API_A_LITE, API_M_LITE, API_M
 from eulfedora.rdfns import model as modelns
-from eulfedora.util import AuthorizingServerConnection, fedoratime_to_datetime, datetime_to_fedoratime
+from eulfedora.util import AuthorizingServerConnection, fedoratime_to_datetime, \
+     datetime_to_fedoratime, RequestFailed, ChecksumMismatch
 from eulfedora.xml import FEDORA_MANAGE_NS, FEDORA_ACCESS_NS
 from testcore import main
 
-from datetime import date, datetime, timedelta
-from dateutil.tz import tzutc
-from time import sleep
-import tempfile
-import re
 
-from lxml import etree
 
 # TODO: test for errors - bad pid, dsid, etc
 
@@ -71,8 +74,8 @@ Hey, nonny-nonny."""
     # API-A calls
 
     def test_findObjects(self):
-        # search for current test object
-        found, url = self.rest_api.findObjects("ownerId~tester")
+        # search for current test object  (restrict to current pidspace to avoid bogus failures)
+        found, url = self.rest_api.findObjects("ownerId~tester pid~%s:*" % FEDORA_PIDSPACE)
         self.assert_('<result ' in found)
         self.assert_('<resultList>' in found)
         self.assert_('<pid>%s</pid>' % self.pid in found)
@@ -210,17 +213,31 @@ Hey, nonny-nonny."""
         # content returned from fedora should be exactly what we started with
         ds_content, url = self.rest_api.getDatastreamDissemination(self.pid, ds['id'])
         self.assertEqual(self.TEXT_CONTENT, ds_content)
+
+        # invalid checksum
+        self.assertRaises(ChecksumMismatch, self.rest_api.addDatastream, self.pid,
+            "TEXT2", "text datastream",  mimeType="text/plain", logMessage="creating TEXT2",
+            content='<some> text content</some>', checksum='totally-bogus-not-even-an-MD5',
+            checksumType='MD5')
+        
+        # invalid checksum without a checksum type - warning, but no checksum mismatch
+        with warnings.catch_warnings(record=True) as w:
+            self.rest_api.addDatastream(self.pid,
+                "TEXT2", "text datastream",  mimeType="text/plain", logMessage="creating TEXT2",
+                content='<some> text content</some>', checksum='totally-bogus-not-even-an-MD5',
+                checksumType=None)
+            self.assertEqual(1, len(w),
+                'calling addDatastream with checksum but no checksum type should generate a warning')
+            self.assert_('Fedora will ignore the checksum' in str(w[0].message))
         
         # attempt to add to a non-existent object
         FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
         FILE.write("bogus")
         FILE.flush()
-        (added, msg) = self.rest_api.addDatastream("bogus:pid", 'TEXT', "text datastream",
-            mimeType="text/plain", logMessage="creating new datastream",
-            controlGroup="M", filename=FILE.name)
-        self.assertFalse(added)
-        self.assertEqual("no path in db registry for [bogus:pid]", msg)
-
+        self.assertRaises(RequestFailed, self.rest_api.addDatastream, 'bogus:pid',
+                          'TEXT', 'text datastream',
+                          mimeType='text/plain', logMessage='creating new datastream',
+                          controlGroup='M', filename=FILE.name)
         FILE.close()
 
     def test_compareDatastreamChecksum(self):
@@ -361,18 +378,20 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<dc:title>Test-Object</dc:title>' in dc)
         self.assert_('<dc:description>modified!</dc:description>' in dc)
 
+        # invalid checksum
+        self.assertRaises(ChecksumMismatch, self.rest_api.modifyDatastream, self.pid,
+            "DC", "Dublin Core",  mimeType="text/xml", logMessage="updating DC",
+            content=new_dc, checksum='totally-bogus-not-even-an-MD5', checksumType='MD5')
+
         # bogus datastream on valid pid
-        updated, msg = self.rest_api.modifyDatastream(self.pid, "BOGUS", "Text DS",
-            mimeType="text/plain", logMessage="modifiying non-existent DS", content=open(FILE.name))
-        self.assertFalse(updated)
-        # NOTE: error message is useless in this case (java null pointer)  - fedora bug
+        self.assertRaises(RequestFailed, self.rest_api.modifyDatastream, self.pid,
+            "BOGUS", "Text DS",  mimeType="text/plain", logMessage="modifiying non-existent DS",
+             content=open(FILE.name))
 
         # bogus pid
-        updated, msg = self.rest_api.modifyDatastream("bogus:pid", "TEXT", "Text DS",
-            mimeType="text/plain", logMessage="modifiying non-existent DS", content=open(FILE.name))
-        self.assertFalse(updated)
-        self.assertEqual("no path in db registry for [bogus:pid]", msg)
-
+        self.assertRaises(RequestFailed, self.rest_api.modifyDatastream, "bogus:pid",
+             "TEXT", "Text DS", mimeType="text/plain", logMessage="modifiying non-existent DS",
+              content=open(FILE.name))
         FILE.close()
 
     def test_modifyObject(self):
@@ -389,9 +408,8 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<objState>I</objState>' in profile)
 
         # bogus id
-        modified = self.rest_api.modifyObject("bogus:pid", "modified test object", "testuser",
-            "I", "testing modify object")
-        self.assertFalse(modified)
+        self.assertRaises(RequestFailed, self.rest_api.modifyObject, "bogus:pid",
+            "modified test object", "testuser",  "I", "testing modify object")
 
     def test_purgeDatastream(self):
         # add a datastream that can be purged
@@ -424,15 +442,12 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<datastream dsid="%s"' % ds['id'] not in dslist)
 
         # NOTE: Fedora bug - attempting to purge a non-existent datastream returns 204?
-        #purged = self.rest_api.purgeDatastream(self.pid, "BOGUS",
-        #    logMessage="test purging non-existent datastream")
-        #self.assertFalse(purged)
+        # purged = self.rest_api.purgeDatastream(self.pid, "BOGUS",
+        #     logMessage="test purging non-existent datastream")
+        # self.assertFalse(purged)
 
-        purged, message = self.rest_api.purgeDatastream("bogus:pid", "BOGUS",
-            logMessage="test purging non-existent datastream from non-existent object")
-        self.assertFalse(purged)
-        self.assert_('no path in db' in message)
-        
+        self.assertRaises(RequestFailed, self.rest_api.purgeDatastream, "bogus:pid",
+            "BOGUS", logMessage="test purging non-existent datastream from non-existent object")
         # also test purging specific versions of a datastream ?
 
         # attempt to purge a version that doesn't exist
@@ -456,9 +471,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assertRaises(Exception, self.rest_api.getObjectProfile, pid)
 
         # bad pid
-        purged, message = self.rest_api.purgeObject("bogus:pid")
-        self.assertFalse(purged)
-        self.assert_('no path in db' in message)
+        self.assertRaises(RequestFailed, self.rest_api.purgeObject, "bogus:pid")
 
     def test_setDatastreamState(self):
         set_state = self.rest_api.setDatastreamState(self.pid, "DC", "I")
@@ -469,12 +482,12 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<dsState>I</dsState>' in ds_profile)
 
         # bad datastream id
-        set_state = self.rest_api.setDatastreamState(self.pid, "BOGUS", "I")
-        self.assertFalse(set_state)
+        self.assertRaises(RequestFailed, self.rest_api.setDatastreamState,
+                          self.pid, "BOGUS", "I")
 
         # non-existent pid
-        set_state = self.rest_api.setDatastreamState("bogus:pid", "DC", "D")
-        self.assertFalse(set_state)
+        self.assertRaises(RequestFailed, self.rest_api.setDatastreamState,
+                          "bogus:pid", "DC", "D")
 
     def test_setDatastreamVersionable(self):
         set_versioned = self.rest_api.setDatastreamVersionable(self.pid, "DC", False)
@@ -485,12 +498,12 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<dsVersionable>false</dsVersionable>' in ds_profile)
 
         # bad datastream id
-        set_versioned = self.rest_api.setDatastreamVersionable(self.pid, "BOGUS", False)
-        self.assertFalse(set_versioned)
+        self.assertRaises(RequestFailed, self.rest_api.setDatastreamVersionable,
+                          self.pid, "BOGUS", False)
 
         # non-existent pid
-        set_versioned = self.rest_api.setDatastreamVersionable("bogus:pid", "DC", True)
-        self.assertFalse(set_versioned)
+        self.assertRaises(RequestFailed, self.rest_api.setDatastreamVersionable,
+                          "bogus:pid", "DC", True)
 
 
 class TestAPI_A_LITE(FedoraTestCase):

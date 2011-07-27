@@ -969,7 +969,15 @@ class DigitalObject(object):
         saved = []
         # save modified datastreams
         for ds in to_save:
-            if self.dscache[ds].save(logMessage):
+            # in eulfedora 0.16 and before, add/modify datastream returned True/False
+            # in later versions, it throws an exception 
+            try:
+                ds_saved = self.dscache[ds].save(logMessage)
+            except RequestFailed:
+                logger.error('Failed to save %s/%s' % (self.pid, ds))
+                ds_saved = False
+                
+            if ds_saved:
                 saved.append(ds)
             else:
                 # save datastream failed - back out any changes that have been made
@@ -983,7 +991,13 @@ class DigitalObject(object):
 
         # save object profile (if needed) after all modified datastreams have been successfully saved
         if self.info_modified:
-            if not self._saveProfile(logMessage):
+            try:
+                profile_saved = self._saveProfile(logMessage)
+            except RequestFailed:
+                logger.error('Failed to save object profile for %s' % self.pid)
+                profile_saved = False
+
+            if not profile_saved:
                 cleaned = self._undo_save(saved, "failed to save object profile, rolling back changes")
                 raise DigitalObjectSaveFailure(self.pid, "object profile", to_save, saved, cleaned)
             

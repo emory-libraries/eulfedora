@@ -16,19 +16,22 @@
 
 #!/usr/bin/env python
 from datetime import datetime
-import os
-import tempfile
-
 from dateutil.tz import tzutc
+import logging
+import os
 from rdflib import URIRef, Graph as RdfGraph
+import tempfile
 
 from eulfedora import models
 from eulfedora.rdfns import relsext, model as modelns
+from eulfedora.util import RequestFailed
 from eulfedora.xml import ObjectDatastream
 from eulxml.xmlmap.dc import DublinCore
 
 from test_fedora.base import FedoraTestCase, FEDORA_PIDSPACE, FIXTURE_ROOT
 from testcore import main
+
+logger = logging.getLogger(__name__)
 
 class MyDigitalObject(models.DigitalObject):
     CONTENT_MODELS = ['info:fedora/%s:ExampleCModel' % FEDORA_PIDSPACE,
@@ -703,8 +706,8 @@ class TestContentModel(FedoraTestCase):
         for pid in cmodels:
             try:
                 self.repo.purge_object(pid)
-            except Exception:
-                print 'exception purging ', pid
+            except RequestFailed as rf:
+                logger.warn('Error purging %s: %s' % (pid, rf))
 
     def test_for_class(self):
         CMODEL_URI = models.ContentModel.CONTENT_MODELS[0]

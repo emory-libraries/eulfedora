@@ -5,6 +5,44 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+0.17 (preliminary)
+------------------
+
+* Previously, several of the REST API calls in
+  :class:`eulfedora.api.REST_API` suppressed errors and only returned
+  True or False for success or failure; this made it difficult to
+  determine what went wrong when an API call fails.  This version of
+  :mod:`eulfedora` revises that logic so that all methods in
+  :class:`eulfedora.api.REST_API` will raise exceptions when an
+  exception-worthy error occurs (e.g., permission denied, object not
+  found, etc. - anything that returns a 40x or 500 HTTP error response
+  from Fedora).  The affected REST methods are:
+
+    * :meth:`~eulfedora.api.REST_API.addDatastream`
+    * :meth:`~eulfedora.api.REST_API.modifyDatastream`
+    * :meth:`~eulfedora.api.REST_API.purgeDatastream` 
+    * :meth:`~eulfedora.api.REST_API.modifyObject`
+    * :meth:`~eulfedora.api.REST_API.purgeObject`
+    * :meth:`~eulfedora.api.REST_API.setDatastreamState`
+    * :meth:`~eulfedora.api.REST_API.setDatastreamVersionable` 
+    
+* New custom Exception :class:`eulfedora.util.ChecksumMismatch`, which
+  is a subclass of :class:`eulfedora.util.RequestFailed`.  This
+  exception will be raised if
+  :meth:`~eulfedora.api.REST_API.addDatastream` or
+  :meth:`~eulfedora.api.REST_API.modifyDatastream` is called with a
+  checksum value that Fedora determines to be invalid.
+
+  .. note::
+
+    If :meth:`~eulfedora.api.REST_API.addDatastream` is called with a
+    checksum value but no checksum type, current versions of Fedora
+    ignore the checksum value entirely; in particular, an invalid
+    checksum with no type does not result in a
+    :class:`~eulfedora.util.ChecksumMismatch` exception being raised.
+    You should see a warning if your code attempts to do this.
+
+
 0.16.0 - Indexing Support
 -------------------------
 
