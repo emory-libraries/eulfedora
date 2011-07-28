@@ -25,6 +25,7 @@ Contents
    :maxdepth: 2
    
    tutorials/fedora
+   tutorials/examples
    fedora
    changelog
 

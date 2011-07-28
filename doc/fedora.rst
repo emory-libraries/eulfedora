@@ -16,8 +16,8 @@ Server objects
 Repository & Resource Index
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. module:: eulfedora.server
-
+.. automodule:: eulfedora.server
+   
 .. autoclass:: Repository
     :members:
 

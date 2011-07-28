@@ -14,8 +14,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-""":
-
+"""
 :class:`eulfedora.server.Repository` has the capability to
 automatically use connection configuration parameters pulled from
 Django settings, when available, but it can also be used without Django.
@@ -54,6 +53,7 @@ the configured Fedora credentials should use the following settings::
     FEDORA_TEST_USER = 'testuser'
     FEDORA_TEST_PASSWORD = 'testpassword'
 
+----
 """
 
 
