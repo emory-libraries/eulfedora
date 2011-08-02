@@ -18,6 +18,7 @@
 
 from datetime import date, datetime, timedelta
 from dateutil.tz import tzutc
+import httplib
 from lxml import etree
 import re
 from time import sleep
@@ -121,6 +122,13 @@ Hey, nonny-nonny."""
         # bogus pid
         self.assertRaises(Exception, self.rest_api.getDatastreamDissemination,
             "bogus:pid", "BOGUS")
+
+        # return_http_response
+        response = self.rest_api.getDatastreamDissemination(self.pid, 'DC', return_http_response=True)
+        self.assert_(isinstance(response, httplib.HTTPResponse),
+                     'getDatastreamDissemination should return an HTTPResponse when return_http_response is True')
+        # datastream content should still be accessible
+        self.assertEqual(dc, response.read())
 
     # NOTE: getDissemination not available in REST API until Fedora 3.3
     def test_getDissemination(self):

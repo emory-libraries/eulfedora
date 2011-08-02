@@ -70,9 +70,12 @@ class FedoraViewsTest(unittest.TestCase):
     def tearDown(self):
         self.obj.api.purgeObject(self.obj.pid)
 
-    def test_raw_datastream(self):        
+    def test_raw_datastream(self):
+        rqst = Mock()
+        rqst.method = 'GET'
+
         # DC
-        response = raw_datastream('rqst', self.obj.pid, 'DC')
+        response = raw_datastream(rqst, self.obj.pid, 'DC')
         expected, got = 200, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream view of DC' \
@@ -83,11 +86,11 @@ class FedoraViewsTest(unittest.TestCase):
                 % (expected, got))
         self.assertEqual(self.obj.dc.checksum, response['ETag'],
             'datastream checksum should be set as ETag header in the response')
-        self.assertFalse(response.has_header('Content-MD5'))
+        self.assertEqual(self.obj.dc.checksum, response['Content-MD5'])
         self.assert_('<dc:title>%s</dc:title>' % self.obj.dc.content.title in response.content)
 
         # RELS-EXT
-        response = raw_datastream('rqst', self.obj.pid, 'RELS-EXT')
+        response = raw_datastream(rqst, self.obj.pid, 'RELS-EXT')
         expected, got = 200, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream view of RELS-EXT' \
@@ -98,7 +101,7 @@ class FedoraViewsTest(unittest.TestCase):
                 % (expected, got))
 
         # TEXT  (non-xml content)
-        response = raw_datastream('rqst', self.obj.pid, 'TEXT')
+        response = raw_datastream(rqst, self.obj.pid, 'TEXT')
         expected, got = 200, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream view of TEXT' \
@@ -113,7 +116,7 @@ class FedoraViewsTest(unittest.TestCase):
         self.assertEqual(len(self.obj.text.content), int(response['Content-Length']))
 
         # IMAGE (binary content)
-        response = raw_datastream('rqst', self.obj.pid, 'IMAGE')
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
         expected, got = 200, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream view of IMAGE' \
@@ -129,19 +132,38 @@ class FedoraViewsTest(unittest.TestCase):
             'content-length header should be set in the response for binary datastreams')
 
         # non-existent datastream should 404
-        self.assertRaises(Http404, raw_datastream, 'rqst', self.obj.pid, 'BOGUS-DSID')        
+        self.assertRaises(Http404, raw_datastream, rqst, self.obj.pid, 'BOGUS-DSID')        
 
         # non-existent record should 404
-        self.assertRaises(Http404, raw_datastream, 'rqst', 'bogus-pid:1', 'DC')
+        self.assertRaises(Http404, raw_datastream, rqst, 'bogus-pid:1', 'DC')
 
         # check type handling?
 
         # set extra headers in the response
         extra_headers = {'Content-Disposition': 'attachment; filename=foo.txt'}
-        response = raw_datastream('rqst', self.obj.pid, 'TEXT',
+        response = raw_datastream(rqst, self.obj.pid, 'TEXT',
             headers=extra_headers)
         self.assertTrue(response.has_header('Content-Disposition'))
         self.assertEqual(response['Content-Disposition'], extra_headers['Content-Disposition'])
+
+
+        # explicitly support GET and HEAD requests only
+        rqst.method = 'POST'
+        response = raw_datastream(rqst, self.obj.pid, 'DC')
+        expected, got = 405, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s (Method not Allowed) but returned %s for POST to raw_datastream view' \
+                % (expected, got))
+
+        # HEAD request is handled internally, for efficiency
+        rqst.method = 'HEAD'
+        response = raw_datastream(rqst, self.obj.pid, 'DC')
+        expected, got = 200, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for HEAD request on raw_datastream view' \
+                % (expected, got))
+        self.assertEqual('', response.content)
+        
 
     def test_login_and_store_credentials_in_session(self):
         # only testing custom logic, which happens on POST

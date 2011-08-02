@@ -363,7 +363,22 @@ class DatastreamObject(object):
                 args.update(self._info_backup)
             success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id,
                             logMessage=logMessage, **args)
-            return success                   
+            return success
+
+    def get_chunked_content(self, chunksize=4096):
+        '''Generator that returns the datastream content in chunks, so
+        larger datastreams can be used without reading the entire
+        contents into memory.'''
+        # get the datastream dissemination, but return the actual http response 
+        response = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
+                                                           return_http_response=True)
+        # read and yield the response in chunks
+        while True:
+            chunk = response.read(chunksize)
+            if not chunk:
+                return
+            yield chunk
+
 
 class Datastream(object):
     """Datastream descriptor to simplify configuration and access to datastreams

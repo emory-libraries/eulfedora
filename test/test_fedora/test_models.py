@@ -254,7 +254,16 @@ class TestDatastreams(FedoraTestCase):
         history = self.obj.api.getDatastreamHistory(self.obj.pid, self.obj.text.id)
         self.assertEqual("text datastream", history.datastreams[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
-        self.assertEqual(TEXT_CONTENT, data)     
+        self.assertEqual(TEXT_CONTENT, data)
+
+    def test_get_chunked_content(self):
+        # get chunks - chunksize larger than entire text content
+        chunks = list(self.obj.text.get_chunked_content(1024))
+        self.assertEqual(self.obj.text.content, chunks[0])
+        # smaller chunksize
+        chunks = list(self.obj.text.get_chunked_content(10))
+        self.assertEqual(self.obj.text.content[:10], chunks[0])
+        self.assertEqual(self.obj.text.content[10:20], chunks[1])
         
 class TestNewObject(FedoraTestCase):
     pidspace = FEDORA_PIDSPACE

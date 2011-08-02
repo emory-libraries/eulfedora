@@ -33,11 +33,14 @@ Using these views (in the simpler cases) should be as easy as::
 from django.conf import settings
 from django.contrib.auth import views as authviews
 from django.http import HttpResponse, Http404
+from django.views.decorators.http import require_http_methods
 
 from eulfedora.util import RequestFailed
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.cryptutil import encrypt
 
+
+@require_http_methods(['GET', 'HEAD'])
 def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
     '''View to display a raw datastream that belongs to a Fedora Object.
     Returns an :class:`~django.http.HttpResponse` with the response content
@@ -47,9 +50,8 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
     - Content-Type: mimetype of the datastream in Fedora
     - ETag: datastream checksum, as long as the checksum type is not 'DISABLED'
 
-    The following HTTP headers may be included `only` for non-xml and non-RDF
-    datastreams (excluded there since they may be inaccurate depending on the
-    serialization of the content):
+    The following HTTP headers may be set if the appropriate content is included
+    in the datastream metadata:
 
     - Content-MD5: MD5 checksum of the datastream in Fedora, if available
     - Content-Length: size of the datastream in Fedora
@@ -84,28 +86,30 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
         ds = obj.getDatastreamObject(dsid)
         
         if ds and ds.exists:
-            # if the datastream content has a serialize option, use that
-            if hasattr(ds.content, 'serialize'):
-                content = ds.content.serialize(pretty=True)
-            # otherwise, use content directly
+            # because retrieving the content is expensive and checking
+            # headers can be useful, explicitly support HEAD requests
+            if request.method == 'HEAD':
+                content = ''
             else:
-                content = ds.content
-            # NOTE: this will probably need some work to be able to handle large datastreams
+                # get the datastream content in chunks, to handle larger datastreams
+                content = ds.get_chunked_content()
+                # not using serialize(pretty=True) for XML/RDF datastreams, since
+                # we actually want the raw datstream content.
+
             response = HttpResponse(content, mimetype=ds.mimetype)
             # if we have a checksum, use it as an ETag
             if ds.checksum_type != 'DISABLED':
                 response['ETag'] = ds.checksum
-            # TODO: set last-modified header also ? may require an extra API call
+            # TODO: set last-modified header also, if it is not too costly
+            # ds.created *may* be the creation date of this *version* of the datastream
+            # so this might be what we want, at least in some cases - (needs to be confirmed)
+            #response['Last-Modified'] = ds.created
             
-            # Where available & appropriate, pass along content length & MD5
-            # checksum in response headers.
-            # MD5 and size may not be accurate for XML & RDF depending on
-            # serialization, so leaving off in those cases.            
-            if ds.mimetype not in ['text/xml', 'application/rdf+xml']:
-                if ds.checksum_type == 'MD5':
-                    response['Content-MD5'] = ds.checksum
-                if ds.info.size:
-                    response['Content-Length'] = ds.info.size
+            # Where available, set content length & MD5 checksum in response headers.
+            if ds.checksum_type == 'MD5':
+                response['Content-MD5'] = ds.checksum
+            if ds.info.size:
+                response['Content-Length'] = ds.info.size
 
             # set any user-specified headers that were passed in
             for header, val in headers.iteritems():

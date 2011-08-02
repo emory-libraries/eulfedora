@@ -273,13 +273,17 @@ class RelativeServerConnection(HttpServerConnection):
         super_open = super(RelativeServerConnection, self).open
         return super_open(method, abs_url, body, headers, throw_errors)
 
-    def read(self, rel_url, data=None, headers={}):
+    def read(self, rel_url, data=None, headers={}, return_http_response=False):
         method = 'GET'
         if data is not None:
             method = 'POST'
 
         abs_url = self.absurl(rel_url)
         response = self.request(method, abs_url, data, headers)
+        # if return_http_response is requested, return the response object
+        if return_http_response:
+            return response
+        # otherwise, default behavior: return response contents and the requested url
         return response.read(), abs_url
 
     def __repr__(self):
@@ -306,8 +310,8 @@ class AuthorizingServerConnection(object):
         headers.update(self._auth_headers())
         return self.base.open(method, rel_url, body, headers, throw_errors)
 
-    def read(self, rel_url, data=None):
-        return self.base.read(rel_url, data, self._auth_headers())
+    def read(self, rel_url, data=None, **kwargs):
+        return self.base.read(rel_url, data, self._auth_headers(), **kwargs)
 
 
 def parse_rdf(data, url, format=None):
