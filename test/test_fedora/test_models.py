@@ -487,7 +487,7 @@ class TestDigitalObject(FedoraTestCase):
         self.append_test_pid(self.obj.pid)
 
         # modify object profile, datastream content, datastream info
-        self.obj.label = "new label"        
+        self.obj.label = "new label"
         self.obj.dc.content.title = "new dublin core title"
         self.obj.text.label = "text content"
         self.obj.text.checksum_type = "MD5"
@@ -504,7 +504,7 @@ class TestDigitalObject(FedoraTestCase):
         
         
         # modify object profile, datastream content, datastream info
-        self.obj.label = "new label"        
+        self.obj.label = u"new label\u2014with unicode"
         self.obj.dc.content.title = "new dublin core title"
         self.obj.text.label = "text content"
         self.obj.text.checksum_type = "MD5"
@@ -516,7 +516,7 @@ class TestDigitalObject(FedoraTestCase):
 
         # confirm all changes were saved to fedora
         profile = self.obj.getProfile() 
-        self.assertEqual(profile.label, "new label")
+        self.assertEqual(profile.label, u"new label\u2014with unicode")
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
         self.assert_('<dc:title>new dublin core title</dc:title>' in data)
         text_info = self.obj.getDatastreamProfile(self.obj.text.id)

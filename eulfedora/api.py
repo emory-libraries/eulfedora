@@ -32,7 +32,39 @@ from eulfedora.util import auth_headers, datetime_to_fedoratime
 
 logger = logging.getLogger(__name__)
 
-# low-level wrappers for Fedora APIs
+# low-level wrappers
+
+def _safe_urlencode(query, doseq=0):
+    # utf-8 encode unicode values before passing them to urlencode.
+    # urllib.urlencode just passes its keys and values directly to str(),
+    # which raises exceptions on non-ascii values. this function exposes the
+    # same interface as urllib.urlencode, encoding unicode values in utf-8
+    # before passing them to urlencode
+    wrapped = [(_safe_str(k), _safe_str(v))
+               for k, v in _get_items(query, doseq)]
+    return urlencode(wrapped, doseq)
+
+def _safe_str(s):
+    # helper for _safe_urlencode: utf-8 encode unicode strings, convert
+    # non-strings to strings, and leave plain strings untouched.
+    if isinstance(s, unicode):
+        return s.encode('utf-8')
+    else:
+        return str(s)
+
+def _get_items(query, doseq):
+    # helper for _safe_urlencode: emulate urllib.urlencode "doseq" logic
+    if hasattr(query, 'items'):
+        query = query.items()
+    for k, v in query:
+        if isinstance(v, basestring):
+            yield k, v
+        elif doseq and iter(v): # if it's iterable
+            for e in v:
+                yield k, e
+        else:
+            yield k, str(v)
+
 
 class HTTP_API_Base(object):
     def __init__(self, opener):
@@ -87,7 +119,7 @@ class REST_API(HTTP_API_Base):
             http_args['sessionToken'] = session_token
         if chunksize:
             http_args['maxResults'] = chunksize
-        return self.read('objects?' + urlencode(http_args))
+        return self.read('objects?' + _safe_urlencode(http_args))
 
     def getDatastreamDissemination(self, pid, dsID, asOfDateTime=None):
         """Get a single datastream on a Fedora object; optionally, get the version
@@ -108,7 +140,7 @@ class REST_API(HTTP_API_Base):
         http_args = {}
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
-        url = 'objects/%s/datastreams/%s/content?%s' % (pid, dsID, urlencode(http_args))
+        url = 'objects/%s/datastreams/%s/content?%s' % (pid, dsID, _safe_urlencode(http_args))
         return self.read(url)
 
     # NOTE: getDissemination was not available in REST API until Fedora 3.3
@@ -116,12 +148,12 @@ class REST_API(HTTP_API_Base):
         # /objects/{pid}/methods/{sdefPid}/{method} ? [method parameters]        
         uri = 'objects/%s/methods/%s/%s' % (pid, sdefPid, method)
         if method_params:
-            uri += '?' + urlencode(method_params)
+            uri += '?' + _safe_urlencode(method_params)
         return self.read(uri)
 
     def getObjectHistory(self, pid):
         # /objects/{pid}/versions ? [format]
-        return self.read('objects/%s/versions?%s' % (pid, urlencode(self.format_xml)))
+        return self.read('objects/%s/versions?%s' % (pid, _safe_urlencode(self.format_xml)))
 
     def getObjectProfile(self, pid, asOfDateTime=None):
         """Get top-level information aboug a single Fedora object; optionally,
@@ -136,7 +168,7 @@ class REST_API(HTTP_API_Base):
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
         http_args.update(self.format_xml)
-        url = 'objects/%s?%s' % (pid, urlencode(http_args))
+        url = 'objects/%s?%s' % (pid, _safe_urlencode(http_args))
         return self.read(url)
 
     def listDatastreams(self, pid):
@@ -151,7 +183,7 @@ class REST_API(HTTP_API_Base):
         :rtype: string xml data
         """
         # /objects/{pid}/datastreams ? [format, datetime]        
-        return self.read('objects/%s/datastreams?%s' % (pid, urlencode(self.format_xml)))
+        return self.read('objects/%s/datastreams?%s' % (pid, _safe_urlencode(self.format_xml)))
 
     def listMethods(self, pid, sdefpid=None):
         # /objects/{pid}/methods ? [format, datetime]
@@ -162,7 +194,7 @@ class REST_API(HTTP_API_Base):
         uri = 'objects/%s/methods' % pid
         if sdefpid:
             uri += '/' + sdefpid
-        return self.read(uri + '?' + urlencode(self.format_xml))
+        return self.read(uri + '?' + _safe_urlencode(self.format_xml))
 
     ### API-M methods (management) ####
 
@@ -218,7 +250,7 @@ class REST_API(HTTP_API_Base):
             headers = {}
             body = None
 
-        url = 'objects/%s/datastreams/%s?' % (pid, dsID) + urlencode(http_args)
+        url = 'objects/%s/datastreams/%s?' % (pid, dsID) + _safe_urlencode(http_args)
         with self.open('POST', url, body, headers, throw_errors=False) as response:
             # if a file object was opened to post data, close it now
             if fp is not None:
@@ -252,7 +284,7 @@ class REST_API(HTTP_API_Base):
             http_args['encoding'] = encoding
         uri = 'objects/%s/export' % pid
         if http_args:
-            uri += '?' + urlencode(http_args)
+            uri += '?' + _safe_urlencode(http_args)
         return self.read(uri)
 
     def getDatastream(self, pid, dsID, asOfDateTime=None, validateChecksum=False):
@@ -271,7 +303,7 @@ class REST_API(HTTP_API_Base):
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
         http_args.update(self.format_xml)        
-        uri = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + urlencode(http_args)
+        uri = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
         return self.read(uri)
 
     # getDatastreamHistory not implemented in REST API
@@ -293,7 +325,7 @@ class REST_API(HTTP_API_Base):
         if namespace:
             http_args['namespace'] = namespace
 
-        rel_url = 'objects/nextPID?' + urlencode(http_args)
+        rel_url = 'objects/nextPID?' + _safe_urlencode(http_args)
         return self.read(rel_url, data='')
 
     def getObjectXML(self, pid):
@@ -328,7 +360,7 @@ class REST_API(HTTP_API_Base):
 
         headers = { 'Content-Type': 'text/xml' }
 
-        url = 'objects/new?' + urlencode(http_args)
+        url = 'objects/new?' + _safe_urlencode(http_args)
         with self.open('POST', url, text, headers) as response:
             pid = response.read()
 
@@ -383,7 +415,7 @@ class REST_API(HTTP_API_Base):
                         }
 
 
-        url = 'objects/%s/datastreams/%s?' % (pid, dsID) + urlencode(http_args)
+        url = 'objects/%s/datastreams/%s?' % (pid, dsID) + _safe_urlencode(http_args)
         with self.open('PUT', url, body, headers, throw_errors=False) as response:
             # expected response: 200 (success)
             # response body contains error message, if any
@@ -397,7 +429,7 @@ class REST_API(HTTP_API_Base):
                     'state' : state}
         if logMessage is not None:
             http_args['logMessage'] = logMessage
-        url = 'objects/%s' % (pid,) + '?' + urlencode(http_args)
+        url = 'objects/%s' % (pid,) + '?' + _safe_urlencode(http_args)
         with self.open('PUT', url, '', {}, throw_errors=False) as response:
             # returns response code 200 on success
             return response.status == 200
@@ -427,7 +459,7 @@ class REST_API(HTTP_API_Base):
         if force:
             http_args['force'] = force
 
-        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + urlencode(http_args)
+        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
         with self.open('DELETE', url, '', {}, throw_errors=False) as response:
             # as of Fedora 3.4, returns 200 on success with a list of the
             # timestamps for the versions deleted as response content
@@ -454,7 +486,7 @@ class REST_API(HTTP_API_Base):
         if logMessage:
             http_args['logMessage'] = logMessage
 
-        url = 'objects/' + pid  + '?' + urlencode(http_args)
+        url = 'objects/' + pid  + '?' + _safe_urlencode(http_args)
         with self.open('DELETE', url, '', {}, throw_errors=False) as response:
             # as of Fedora 3.4, returns 200 on success; response content is timestamp
             return response.status == 200, response.read()
@@ -464,7 +496,7 @@ class REST_API(HTTP_API_Base):
     def setDatastreamState(self, pid, dsID, dsState):
         # /objects/{pid}/datastreams/{dsID} ? [dsState]
         http_args = { 'dsState' : dsState }
-        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + urlencode(http_args)
+        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
         with self.open('PUT', url, '', {}, throw_errors=False) as response:
             # returns response code 200 on success
             return response.status == 200
@@ -472,7 +504,7 @@ class REST_API(HTTP_API_Base):
     def setDatastreamVersionable(self, pid, dsID, versionable):
         # /objects/{pid}/datastreams/{dsID} ? [versionable]
         http_args = { 'versionable' : versionable }
-        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + urlencode(http_args)
+        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
         with self.open('PUT', url, '', {}, throw_errors=False) as response:
             # returns response code 200 on success
             return response.status == 200
@@ -492,7 +524,7 @@ class API_A_LITE(HTTP_API_Base):
         :rtype: string
         """
         http_args = { 'xml': 'true' }
-        return self.read('describe?' + urlencode(http_args))
+        return self.read('describe?' + _safe_urlencode(http_args))
 
 
 class _NamedMultipartParam(MultipartParam):
