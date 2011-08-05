@@ -25,6 +25,7 @@ import re
 import string
 import threading
 import time
+import urllib
 from cStringIO import StringIO
 
 from base64 import b64encode
@@ -210,11 +211,24 @@ class HttpServerConnection(object):
         
     def _make_request(self, method, url, body, headers):
         start = time.time()
+        url = self._sanitize_url(url)
         self.thread_local.connection.request(method, url, body, headers)
         response = self.thread_local.connection.getresponse()
         logger.debug('%s %s=>%d: %f sec' % (method, url,
             response.status, time.time() - start))
         return response
+
+    def _sanitize_url(self, url):
+        # a unicode url will surprisingly make httplib.Connection raise an
+        # exception later if it tries to send a body that includes non-ascii
+        # characters. coerce the url into ascii so that doesn't happen
+        if isinstance(url, unicode):
+            url = url.encode('utf-8')
+        if not isinstance(url, basestring):
+            url = str(url)
+        # list derived from rfc 3987 "reserved" ebnf, plus "%" because we
+        # fail without that.
+        return urllib.quote(url, safe=":/?[]@!$&'()*+,;=%")
 
     @contextmanager
     def open(self, method, url, body=None, headers=None, throw_errors=True):
