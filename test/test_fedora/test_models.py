@@ -504,7 +504,7 @@ class TestDigitalObject(FedoraTestCase):
         self.append_test_pid(self.obj.pid)
 
         # modify object profile, datastream content, datastream info
-        self.obj.label = "new label"        
+        self.obj.label = "new label"
         self.obj.dc.content.title = "new dublin core title"
         self.obj.text.label = "text content"
         self.obj.text.checksum_type = "MD5"
@@ -519,10 +519,13 @@ class TestDigitalObject(FedoraTestCase):
             expected_error = e
         self.assert_(str(expected_error).endswith('successfully backed out '), 'Incorrect checksum should back out successfully.') 
         
-        
+
+        # re-initialize the object. do it with a unicode pid to test a regression.
+        self.obj = MyDigitalObject(self.api, unicode(self.pid))
+
         # modify object profile, datastream content, datastream info
-        self.obj.label = "new label"        
-        self.obj.dc.content.title = "new dublin core title"
+        self.obj.label = u"new label\u2014with unicode"
+        self.obj.dc.content.title = u"new dublin core title\u2014also with unicode"
         self.obj.text.label = "text content"
         self.obj.text.checksum_type = "MD5"
         self.obj.text.checksum = "1c83260ff729265470c0d349e939c755"
@@ -533,9 +536,9 @@ class TestDigitalObject(FedoraTestCase):
 
         # confirm all changes were saved to fedora
         profile = self.obj.getProfile() 
-        self.assertEqual(profile.label, "new label")
+        self.assertEqual(profile.label, u"new label\u2014with unicode")
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
-        self.assert_('<dc:title>new dublin core title</dc:title>' in data)
+        self.assert_(u'<dc:title>new dublin core title\u2014also with unicode</dc:title>' in unicode(data, 'utf-8'))
         text_info = self.obj.getDatastreamProfile(self.obj.text.id)
         self.assertEqual(text_info.label, "text content")
         self.assertEqual(text_info.checksum_type, "MD5")
