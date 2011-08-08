@@ -154,7 +154,7 @@ class PermissionDenied(RequestFailed):
 
 class ChecksumMismatch(RequestFailed):
     '''Custom exception for a Checksum Mismatch error while trying to
-    add or upade a datastream on a Fedora object.
+    add or update a datastream on a Fedora object.
     '''
     error_label = 'Checksum Mismatch'
     def __init__(self, response, content):
