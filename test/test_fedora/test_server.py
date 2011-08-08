@@ -128,7 +128,7 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
 
         # fielded search
         objects = list(self.repo.find_objects(owner='tester', title='partially-prepared',
-                        description='more data'))
+                        description='more data', pid="%s:*" % FEDORA_PIDSPACE))
         # should find test object
         self.assertEqual(objects[0].pid, pid)
         self.assertEqual(1, len(objects))
