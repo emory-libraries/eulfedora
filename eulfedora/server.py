@@ -150,7 +150,7 @@ class Repository(object):
                 init_pooled_connection()
             root = _connection
 
-            # if username and password are not set, attempt to full from django conf
+            # if username and password are not set, attempt to pull from django conf
             if username is None and password is None:
                 try:
                     from django.conf import settings
@@ -289,7 +289,7 @@ class Repository(object):
 
         return type(self.api, pid, create, default_pidspace=self.default_pidspace)
 
-    def infer_object_subtype(self, api, pid=None, create=False):
+    def infer_object_subtype(self, api, pid=None, create=False, default_pidspace=None):
         """Construct a DigitalObject or appropriate subclass, inferring the
         appropriate subtype using :meth:`best_subtype_for_object`. Note that
         this method signature has been selected to match the
@@ -300,7 +300,7 @@ class Repository(object):
 
         See also: :class:`TypeInferringRepository`
         """
-        obj = DigitalObject(api, pid, create)
+        obj = DigitalObject(api, pid, create, default_pidspace)
         if create:
             return obj
         if not obj.exists:
