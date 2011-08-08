@@ -211,6 +211,9 @@ class Repository(object):
         kwargs = {}
         if namespace:
             kwargs['namespace'] = namespace
+        elif self.default_pidspace:
+            kwargs['namespace'] = self.default_pidspace
+            
         if count:
             kwargs['numPIDs'] = count
         data, url = self.api.getNextPID(**kwargs)
@@ -283,7 +286,7 @@ class Repository(object):
             if create is None:
                 create = False
 
-        return type(self.api, pid, create)
+        return type(self.api, pid, create, default_pidspace=self.default_pidspace)
 
     def infer_object_subtype(self, api, pid=None, create=False):
         """Construct a DigitalObject or appropriate subclass, inferring the

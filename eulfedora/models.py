@@ -705,10 +705,11 @@ class DigitalObject(object):
             'format': 'info:fedora/fedora-system:FedoraRELSExt-1.0',
         })
 
-    def __init__(self, api, pid=None, create=False):
+    def __init__(self, api, pid=None, create=False, default_pidspace=None):
         self.api = api
         self.dscache = {}       # accessed by DatastreamDescriptor to store and cache datastreams
 
+        self.default_pidspace = default_pidspace
         # cache object profile, track if it is modified and needs to be saved
         self._info = None
         self.info_modified = False
