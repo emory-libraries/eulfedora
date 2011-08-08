@@ -124,6 +124,7 @@ class Repository(object):
 
     default_object_type = DigitalObject
     "Default type to use for methods that return fedora objects - :class:`DigitalObject`"
+    default_pidspace = None
 
     search_fields = ['pid', 'label', 'state', 'ownerId', 'cDate', 'mDate',
     'dcmDate', 'title', 'creator', 'subject', 'description', 'publisher',
