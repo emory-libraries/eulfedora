@@ -264,7 +264,7 @@ class REST_API(HTTP_API_Base):
             body = None
 
         url = 'objects/%s/datastreams/%s?' % (pid, dsID) + _safe_urlencode(http_args)
-        with self.open('POST', url, body, headers, throw_errors=True) as response:
+        with self.open('POST', url, body, headers) as response:
             # if a file object was opened to post data, close it now
             if fp is not None:
                 fp.close()
@@ -435,7 +435,7 @@ class REST_API(HTTP_API_Base):
 
 
         url = 'objects/%s/datastreams/%s?' % (pid, dsID) + _safe_urlencode(http_args)
-        with self.open('PUT', url, body, headers, throw_errors=True) as response:
+        with self.open('PUT', url, body, headers) as response:
             # expected response: 200 (success)
             # response body contains error message, if any
             # return success/failure and any additional information
@@ -449,7 +449,7 @@ class REST_API(HTTP_API_Base):
         if logMessage is not None:
             http_args['logMessage'] = logMessage
         url = 'objects/%s' % (pid,) + '?' + _safe_urlencode(http_args)
-        with self.open('PUT', url, '', {}, throw_errors=True) as response:
+        with self.open('PUT', url, '', {}) as response:
             # returns response code 200 on success
             return response.status == 200
 
@@ -479,7 +479,7 @@ class REST_API(HTTP_API_Base):
             http_args['force'] = force
 
         url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
-        with self.open('DELETE', url, '', {}, throw_errors=True) as response:
+        with self.open('DELETE', url, '', {}) as response:
             # as of Fedora 3.4, returns 200 on success with a list of the
             # timestamps for the versions deleted as response content
             # NOTE: response content may be useful on error, e.g.
@@ -506,7 +506,7 @@ class REST_API(HTTP_API_Base):
             http_args['logMessage'] = logMessage
 
         url = 'objects/' + pid  + '?' + _safe_urlencode(http_args)
-        with self.open('DELETE', url, '', {}, throw_errors=True) as response:
+        with self.open('DELETE', url, '', {}) as response:
             # as of Fedora 3.4, returns 200 on success; response content is timestamp
             return response.status == 200, response.read()
 
@@ -516,7 +516,7 @@ class REST_API(HTTP_API_Base):
         # /objects/{pid}/datastreams/{dsID} ? [dsState]
         http_args = { 'dsState' : dsState }
         url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
-        with self.open('PUT', url, '', {}, throw_errors=True) as response:
+        with self.open('PUT', url, '', {}) as response:
             # returns response code 200 on success
             return response.status == 200
 
@@ -524,7 +524,7 @@ class REST_API(HTTP_API_Base):
         # /objects/{pid}/datastreams/{dsID} ? [versionable]
         http_args = { 'versionable' : versionable }
         url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
-        with self.open('PUT', url, '', {}, throw_errors=True) as response:
+        with self.open('PUT', url, '', {}) as response:
             # returns response code 200 on success
             return response.status == 200
 
