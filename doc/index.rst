@@ -28,6 +28,7 @@ Contents
    tutorials/examples
    fedora
    changelog
+   readme
 
 Indices and tables
 ------------------

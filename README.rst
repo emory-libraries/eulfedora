@@ -1,5 +1,5 @@
-EULfedora
-=========
+README
+======
 
 EULfedora is a `Python <http://www.python.org/>`_ module that provides
 utilities, API wrappers, and classes for interacting with the
@@ -66,4 +66,5 @@ history of **eulfedora**, see
 Developer Notes
 ---------------
 When running unit tests you must set the the PYTHONPATH variable::
+
     $ PYTHONPATH = .:test
