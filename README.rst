@@ -61,3 +61,9 @@ Development History
 For instructions on how to see and interact with the full development
 history of **eulfedora**, see
 `eulcore-history <https://github.com/emory-libraries/eulcore-history>`_.
+
+
+Developer Notes
+---------------
+When running unit tests you must set the the PYTHONPATH variable::
+    $ PYTHONPATH = .:test

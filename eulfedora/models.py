@@ -709,7 +709,13 @@ class DigitalObject(object):
         self.api = api
         self.dscache = {}       # accessed by DatastreamDescriptor to store and cache datastreams
 
-        self.default_pidspace = default_pidspace
+        if default_pidspace:
+            try:
+                self.default_pidspace = default_pidspace
+            except AttributeError:
+                # allow extending classes to make default_pidspace a custom property,
+                # but warn in case of conflict
+                logger.warn("Failed to set requested default_pidspace %s" % default_pidspace)
         # cache object profile, track if it is modified and needs to be saved
         self._info = None
         self.info_modified = False
