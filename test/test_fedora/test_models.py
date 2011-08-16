@@ -787,6 +787,11 @@ class RelatorObject(MyDigitalObject):
     dcid = models.Relation(DCNS.identifier, ns_prefix={'dcns': DCNS}, rdf_type=XSD.int)
 
 
+class ReverseRelator(MyDigitalObject):
+    member = models.ReverseRelation(relsext.isMemberOfCollection, type=RelatorObject)
+    members = models.ReverseRelation(relsext.isMemberOfCollection,
+                                     type=RelatorObject, multiple=True)
+
 class TestRelation(FedoraTestCase):
     fixtures = ['object-with-pid.foxml']
     
@@ -865,7 +870,26 @@ class TestRelation(FedoraTestCase):
                                                                predicate=DCNS.identifier),
                          'dc:identifier should not be set in rels-ext after delete')
         
+    def test_reverse_relation(self):
+        rev = ReverseRelator(self.api, 'foo:1')
+        # add a relation to the object and save so we can query risearch
+        self.obj.parent = rev
+        self.obj.save()
+        self.fedora_fixtures_ingested.append(self.obj.pid) # save pid for cleanup in tearDown
+        self.assertEqual(rev.member.pid, self.obj.pid,
+            'ReverseRelation returns correct object based on risearch query')
+        self.assert_(isinstance(rev.member, RelatorObject),
+            'ReverseRelation returns correct object type')
+
+        self.assert_(isinstance(rev.members, list),
+            'ReverseRelation returns list when multiple=True')
+        self.assertEqual(rev.members[0].pid, self.obj.pid,
+            'ReverseRelation list includes correct item')
+        self.assert_(isinstance(rev.members[0], RelatorObject),
+            'ReverseRelation list items initialized as correct object type')
         
+        
+       
 
 
 

@@ -1497,6 +1497,7 @@ class DigitalObjectSaveFailure(StandardError):
 class Relation(object):
     '''Descriptor for use with
     :class:`~eulfedora.server.DigitalObject` RELS-EXT relations.
+    
     Example use::
 
     	class Page(DigitalObject):
@@ -1577,3 +1578,42 @@ class Relation(object):
                 uris[0]
             ))
 
+
+class ReverseRelation(object):
+    '''Descriptor for use with
+    :class:`~eulfedora.server.DigitalObject` RELS-EXT reverse
+    relations, where the owning object is the RDF **object** of the
+    predicate and the related object is the RDF **subject**.  This
+    descriptor will query the Fedora ResourceIndex for the requested
+    subjects, based on the configured predicate, and return resulting
+    items.
+
+    Currently only supports get (no set or delete).
+    
+    Example use::
+
+    	class Volume(DigitalObject):
+            pages = ReverseRelation(relsext.isConstituentOf, type=Page, multiple=True)
+            
+    '''
+    def __init__(self, relation, type=None, multiple=False):
+        self.relation = relation
+        self.object_type = type
+        self.multiple = multiple
+
+    def __get__(self, obj, objtype):
+        # query RIsearch for subjects based on configured relation and current object
+        uris = list(obj.risearch.get_subjects(self.relation, obj.uriref))
+        if uris:
+            if self.multiple:
+                return [self._init_val(obj, uri) for uri in uris]
+            else:
+                return self._init_val(obj, uris[0])
+
+    def _init_val(self, obj, val):
+        # initialize the desired return type, based on configuration
+        # would any reverse relation not be an object?
+        if self.object_type:
+            return obj.get_object(val, type=self.object_type)
+        else:
+            return val
