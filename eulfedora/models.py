@@ -759,6 +759,21 @@ class DigitalObject(object):
             self.rels_ext.content.add((self.uriref, modelns.hasModel,
                                        URIRef(cmodel)))
 
+    def get_object(self, pid, type=None):
+        '''Initialize and return a new
+        :class:`~eulfedora.models.DigitalObject` instance from the same
+        repository, passing along the connection credentials in use by
+        the current object.  If type is not specified, the current
+        DigitalObject class will be used.
+
+        :param pid: pid of the object to return
+        :param type: (optional) :class:`~eulfedora.models.DigitalObject`
+           type to initialize and return
+        '''
+        if type is None:
+            type = self.__class__
+        return type(self.api, pid)
+
     def __str__(self):
         if callable(self.pid):
             return '(generated pid; uningested)'
@@ -1262,8 +1277,8 @@ class DigitalObject(object):
 
         Example usage::
 
-            isMemberOfCollection = "info:fedora/fedora-system:def/relations-external#isMemberOfCollection"
-            collection_uri = "info:fedora/foo:456"
+            isMemberOfCollection = 'info:fedora/fedora-system:def/relations-external#isMemberOfCollection'
+            collection_uri = 'info:fedora/foo:456'
             object.add_relationship(isMemberOfCollection, collection_uri)
 
         :param rel_uri: URI for the new relationship
@@ -1463,4 +1478,3 @@ class DigitalObjectSaveFailure(StandardError):
     def __str__(self):
         return "Error saving %s - failed to save %s; saved %s; successfully backed out %s" \
                 % (self.obj_pid, self.failure, ', '.join(self.saved), ', '.join(self.cleaned))
-        

@@ -707,6 +707,19 @@ class TestDigitalObject(FedoraTestCase):
         # descriptive data included in index data
         self.assert_(self.obj.dc.content.title in indexdata['title'])
         self.assert_(self.obj.dc.content.description in indexdata['description'])
+
+    def test_get_object(self):
+        obj = MyDigitalObject(self.api)
+        otherobj = obj.get_object(self.pid)
+
+        self.assert_(isinstance(otherobj, MyDigitalObject),
+            'if type is not specified, get_object should return current type')
+        self.assertEqual(self.api, otherobj.api,
+            'get_object should pass existing api connection')
+        
+        otherobj = obj.get_object(self.pid, type=SimpleDigitalObject)
+        self.assert_(isinstance(otherobj, SimpleDigitalObject),
+            'get_object should object with requested type')
         
 
 
