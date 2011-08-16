@@ -20,7 +20,8 @@ from datetime import datetime
 from dateutil.tz import tzutc
 import logging
 import os
-from rdflib import URIRef, Graph as RdfGraph
+from rdflib import URIRef, Graph as RdfGraph, XSD, Literal
+from rdflib.namespace import Namespace
 import tempfile
 
 from eulfedora import models
@@ -774,5 +775,100 @@ class TestContentModel(FedoraTestCase):
                           MyDigitalObject, self.repo)
 
 
+# using DC namespace to test RDF literal values
+DCNS = Namespace(URIRef('http://purl.org/dc/elements/1.1/'))        
+
+class RelatorObject(MyDigitalObject):
+    # related object
+    parent = models.Relation(relsext.isMemberOfCollection, type=SimpleDigitalObject)
+    # literal
+    dctitle = models.Relation(DCNS.title)
+    # literal with explicit type and namespace prefix
+    dcid = models.Relation(DCNS.identifier, ns_prefix={'dcns': DCNS}, rdf_type=XSD.int)
+
+
+class TestRelation(FedoraTestCase):
+    fixtures = ['object-with-pid.foxml']
+    
+    def setUp(self):
+        super(TestRelation, self).setUp()
+        #self.pid = self.fedora_fixtures_ingested[-1] # get the pid for the last object
+        self.obj = RelatorObject(self.api)
+
+    def test_object_relation(self):
+        # get - not yet set
+        self.assertEqual(None, self.obj.parent)
+        
+        # set via descriptor
+        newobj = models.DigitalObject(self.api)
+        newobj.pid = 'foo:2'	# test pid for convenience/distinguish temp pids
+        self.obj.parent = newobj
+        self.assert_((self.obj.uriref, relsext.isMemberOfCollection, newobj.uriref)
+            in self.obj.rels_ext.content,
+            'isMemberOfCollection should be set in RELS-EXT after updating via descriptor')
+        # access via descriptor
+        self.assertEqual(newobj.pid, self.obj.parent.pid)
+        self.assert_(isinstance(self.obj.parent, SimpleDigitalObject),
+                     'Relation descriptor returns configured type of DigitalObject')
+        # set existing property
+        otherobj = models.DigitalObject(self.api)
+        otherobj.pid = 'bar:none'
+        self.obj.parent = otherobj
+        self.assert_((self.obj.uriref, relsext.isMemberOfCollection, otherobj.uriref)
+            in self.obj.rels_ext.content,
+            'isMemberOfCollection should be updated in RELS-EXT after update')
+        self.assert_((self.obj.uriref, relsext.isMemberOfCollection, newobj.uriref)
+            not in self.obj.rels_ext.content,
+            'previous isMemberOfCollection value should not be in RELS-EXT after update')
+        
+        # delete
+        del self.obj.parent
+        self.assertEqual(None, self.obj.rels_ext.content.value(subject=self.obj.uriref,
+                                                               predicate=relsext.isMemberOfCollection),
+                         'isMemberOfCollection should not be set in rels-ext after delete')
+        
+    def test_literal_relation(self):
+        # get - not set
+        self.assertEqual(None, self.obj.dcid)
+        self.assertEqual(None, self.obj.dctitle)
+       
+        # set via descriptor
+        # - integer, with type specified
+        self.obj.dcid = 1234
+        self.assert_((self.obj.uriref, DCNS.identifier, Literal(1234, datatype=XSD.int))
+            in self.obj.rels_ext.content,
+            'literal value should be set in RELS-EXT after updating via descriptor')
+        # check namespace prefix
+        self.assert_('dcns:identifier' in self.obj.rels_ext.content.serialize(),
+            'configured namespace prefix should be used for serialization')
+        # check type
+        self.assert_('XMLSchema#int' in self.obj.rels_ext.content.serialize(),
+            'configured RDF type should be used for serialization')
+        # - simpler case
+        self.obj.dctitle = 'foo'
+        self.assert_((self.obj.uriref, DCNS.title, Literal('foo'))
+            in self.obj.rels_ext.content,
+            'literal value should be set in RELS-EXT after updating via descriptor')
+        self.assertEqual('foo', self.obj.dctitle)
+        
+
+        # get
+        self.assertEqual(1234, self.obj.dcid)
+
+        # update
+        self.obj.dcid = 987
+        self.assertEqual(987, self.obj.dcid)
+
+        # delete
+        del self.obj.dcid
+        self.assertEqual(None, self.obj.rels_ext.content.value(subject=self.obj.uriref,
+                                                               predicate=DCNS.identifier),
+                         'dc:identifier should not be set in rels-ext after delete')
+        
+        
+
+
+
 if __name__ == '__main__':
     main()
+

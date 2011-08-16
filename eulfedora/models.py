@@ -18,7 +18,7 @@ import cStringIO
 import hashlib
 import logging
 
-from rdflib import URIRef, Graph as RdfGraph
+from rdflib import URIRef, Graph as RdfGraph, Literal
 
 from lxml import etree
 from lxml.builder import ElementMaker
@@ -1478,3 +1478,93 @@ class DigitalObjectSaveFailure(StandardError):
     def __str__(self):
         return "Error saving %s - failed to save %s; saved %s; successfully backed out %s" \
                 % (self.obj_pid, self.failure, ', '.join(self.saved), ', '.join(self.cleaned))
+
+### Descriptors for dealing with object relations
+
+# Relation
+# ReverseRelation  (TODO)
+# single/multiple variants  (TODO)
+
+class Relation(object):
+    '''Descriptor for use with
+    :class:`~eulfedora.server.DigitalObject` RELS-EXT relations.
+    Example use::
+
+    	class Page(DigitalObject):
+            volume = Relation(relsext.isConstituentOf)
+
+    Supports configuring the RDF type and namespace prefixes used for
+    serialization, e.g.::
+        
+        from rdflib import XSD, URIRef
+        from rdflib.namespace import Namespace
+        
+        MYNS = Namespace(URIRef("http://example.com/ns/2011/my-test-namespace/#"))
+
+        int = Relation(MYNS.count, ns_prefix={"my": MYNS}, rdf_type=XSD.int)
+
+
+    Initialization options:
+
+        :param relation: the RDF predicate URI
+        :param type: optional :class:`~eulfedora.models.DigitalObject` subclass
+            to initialize (for object relations)
+        :param ns_prefix: optional dictionary to configure namespace
+            prefixes to be used for serialization; key should be the
+            desired prefix, value should be an instance of
+            :class:`rdflib.namespace.Namespace`
+        :param rdf_type: optional rdf type for literal values (passed
+            to :class:`rdflib.Literal` as the datatype option)
+        
+    '''
+    
+    def __init__(self, relation, type=None, ns_prefix={}, rdf_type=None):
+        self.relation = relation
+        self.object_type = type
+        self.ns_prefix = ns_prefix
+        self.rdf_type = rdf_type
+
+    def __get__(self, obj, objtype):
+        # no caching on related objects for now
+        uri_val = obj.rels_ext.content.value(subject=obj.uriref,
+                                         predicate=self.relation)
+        if uri_val and self.object_type:	# don't init new object if val is None
+            # need get_object wrapper method on digital object
+            return obj.get_object(uri_val, type=self.object_type)
+        else:
+            return uri_val
+
+    def __set__(self, obj, subject):
+        # if any namespace prefixes were specified, bind them before adding the tuple
+        for prefix, ns in self.ns_prefix.iteritems():
+            obj.rels_ext.content.bind(prefix, ns)
+
+        # TODO: do we need to check that subject matches self.object_type (if any)?
+
+        if isinstance(subject, URIRef):
+            subject_uri = subject
+        elif hasattr(subject, 'uriref'):
+            subject_uri = subject.uriref
+        elif self.rdf_type:
+            subject_uri = Literal(subject, datatype=self.rdf_type)
+        else:
+            subject_uri = Literal(subject)
+        
+        # set the property in the rels-ext, removing any existing
+        # value for that property (single-value relation only, for now)
+        obj.rels_ext.content.set((
+            obj.uriref,
+            self.relation,
+            subject_uri
+        ))
+
+    def __delete__(self, obj):
+        # find the subject uri and remove from rels-ext
+        uris = list(obj.rels_ext.content.objects(obj.uriref, self.relation))
+        if uris:
+            obj.rels_ext.content.remove((
+                obj.uriref,
+                self.relation,
+                uris[0]
+            ))
+
