@@ -284,6 +284,27 @@ Solr Schema for projects using eulfedora and indexdata.
    <field name="subject" type="text" indexed="true" stored="true" multiValued="true"/>
    <field name="type" type="text" indexed="true" stored="true" multiValued="true"/>
 
+   <!-- Fedora Relations -->
+   <field name="isPartOf" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="hasPart" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isConstituentOf" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="hasConstituent" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isMemberOf" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="hasMember" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isSubsetOf" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="hasSubset" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isMemberOfCollection" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="hasCollectionMember" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isDerivationOf" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isDependentOf" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="hasDependent" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isDescriptionOf" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isMetadataFor" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="HasMetadata" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="isAnnotationOf" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="HasAnnotation" type="string" indexed="true" stored="true" multiValued="true"/>
+   <field name="hasEquivalent" type="string" indexed="true" stored="true" multiValued="true"/>
+
    <!-- catchall field, containing all other searchable text fields (implemented
         via copyField further on in this schema  -->
    <field name="text" type="text" indexed="true" stored="false" multiValued="true"/>

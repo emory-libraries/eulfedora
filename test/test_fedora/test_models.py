@@ -709,6 +709,24 @@ class TestDigitalObject(FedoraTestCase):
         self.assert_(self.obj.dc.content.title in indexdata['title'])
         self.assert_(self.obj.dc.content.description in indexdata['description'])
 
+
+    def test_index_data_relations(self):
+        # add a few rels-ext relations to test
+        partof = 'something bigger'
+        self.obj.rels_ext.content.add((self.obj.uriref, relsext.isPartOf, URIRef(partof)))
+        member1 = 'foo'
+        member2 = 'bar'
+        self.obj.rels_ext.content.add((self.obj.uriref, relsext.hasMember, URIRef(member1)))
+        self.obj.rels_ext.content.add((self.obj.uriref, relsext.hasMember, URIRef(member2)))
+        indexdata = self.obj.index_data_relations()
+        self.assertEqual([partof], indexdata['isPartOf'])
+        self.assert_(member1 in indexdata['hasMember'])
+        self.assert_(member2 in indexdata['hasMember'])
+        # rels-ext data included in main index data
+        indexdata = self.obj.index_data()
+        self.assert_('isPartOf' in indexdata)
+        self.assert_('hasMember' in indexdata)
+
     def test_get_object(self):
         obj = MyDigitalObject(self.api)
         otherobj = obj.get_object(self.pid)

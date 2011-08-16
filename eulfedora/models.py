@@ -25,7 +25,7 @@ from lxml.builder import ElementMaker
 
 from eulxml import xmlmap
 from eulfedora.api import ResourceIndex
-from eulfedora.rdfns import model as modelns
+from eulfedora.rdfns import model as modelns, relsext as relsextns, fedora_rels
 from eulfedora.util import parse_xml_object, parse_rdf, RequestFailed, datetime_to_fedoratime
 from eulfedora.xml import ObjectDatastreams, ObjectProfile, DatastreamProfile, \
     NewPids, ObjectHistory, ObjectMethods, DsCompositeModel
@@ -1388,7 +1388,7 @@ class DigitalObject(object):
             })
             
         index_data.update(self.index_data_descriptive())
-        # TODO: perhaps add something similar for rels-ext and common/all fedora rels? (membership/collection/etc)
+        index_data.update(self.index_data_relations())
         
         return index_data
 
@@ -1408,6 +1408,24 @@ class DigitalObject(object):
                 # convert xmlmap lists to straight lists so simplejson can handle them
                 dc_data[field] = list(list_field)
         return dc_data
+
+    def index_data_relations(self):
+        '''Standard Fedora relations to be included in
+        :meth:`index_data` output.  This implementation includes all
+        standard relations included in the Fedora relations namespace,
+        but should be extended or overridden as appropriate for custom
+        :class:`~eulfedora.models.DigitalObject` classes.'''
+        data = {}
+        # NOTE: hasModel relation is handled with top-level object properties above
+        # currently not indexing other model rels (service bindings)
+        for rel in fedora_rels:
+            values = []
+            for o in self.rels_ext.content.objects(self.uriref, relsextns[rel]):
+                values.append(str(o))
+            if values:
+                data[rel] = values
+        return data
+
 
         
 class ContentModel(DigitalObject):
@@ -1491,7 +1509,7 @@ class DigitalObjectSaveFailure(StandardError):
 ### Descriptors for dealing with object relations
 
 # Relation
-# ReverseRelation  (TODO)
+# ReverseRelation 
 # single/multiple variants  (TODO)
 
 class Relation(object):
@@ -1589,6 +1607,8 @@ class ReverseRelation(object):
     items.
 
     Currently only supports get (no set or delete).
+    
+    NOTE: Currently does not do any sorting.
     
     Example use::
 

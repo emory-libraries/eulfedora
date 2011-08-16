@@ -18,7 +18,7 @@ from rdflib import URIRef
 from rdflib.namespace import ClosedNamespace
 
 # ids copied from http://www.fedora.info/definitions/1/0/fedora-relsext-ontology.rdfs
-relsext = ClosedNamespace('info:fedora/fedora-system:def/relations-external#', [
+fedora_rels = [
     'fedoraRelationship',
     'isPartOf',
     'hasPart',
@@ -41,7 +41,11 @@ relsext = ClosedNamespace('info:fedora/fedora-system:def/relations-external#', [
     'isAnnotationOf',
     'HasAnnotation',
     'hasEquivalent',
-])
+]
+
+
+relsext = ClosedNamespace('info:fedora/fedora-system:def/relations-external#',
+                          fedora_rels)
 
 # TODO: find and catalog full namespace. currently this is just a list of
 # names we use in this ns.
