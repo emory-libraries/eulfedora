@@ -24,6 +24,7 @@ from lxml import etree
 from lxml.builder import ElementMaker
 
 from eulxml import xmlmap
+from eulfedora.api import ResourceIndex
 from eulfedora.rdfns import model as modelns
 from eulfedora.util import parse_xml_object, parse_rdf, RequestFailed, datetime_to_fedoratime
 from eulfedora.xml import ObjectDatastreams, ObjectProfile, DatastreamProfile, \
@@ -708,6 +709,7 @@ class DigitalObject(object):
     def __init__(self, api, pid=None, create=False, default_pidspace=None):
         self.api = api
         self.dscache = {}       # accessed by DatastreamDescriptor to store and cache datastreams
+        self._risearch = None
 
         if default_pidspace:
             try:
@@ -758,6 +760,13 @@ class DigitalObject(object):
         for cmodel in getattr(self, 'CONTENT_MODELS', ()):
             self.rels_ext.content.add((self.uriref, modelns.hasModel,
                                        URIRef(cmodel)))
+
+    @property
+    def risearch(self):
+        "Instance of :class:`eulfedora.api.ResourceIndex`, with the same root url and credentials"
+        if self._risearch is None:
+            self._risearch = ResourceIndex(self.api.opener)
+        return self._risearch
 
     def get_object(self, pid, type=None):
         '''Initialize and return a new
