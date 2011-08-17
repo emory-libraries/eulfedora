@@ -1514,15 +1514,22 @@ class DigitalObjectSaveFailure(StandardError):
 
 class Relation(object):
     '''Descriptor for use with
-    :class:`~eulfedora.server.DigitalObject` RELS-EXT relations.
+    :class:`~eulfedora.models.DigitalObject` RELS-EXT relations.
+    Allows getting, setting, and removing related DigitalObjects and
+    literals in the RELS-EXT of the object.
     
-    Example use::
+    Example use for a related object.  The Relation should be defined
+    something like this, passing in the predicate URI and optionally
+    the subclass of :class:`~eulfedora.models.DigitalObject` that
+    should be returned::
 
     	class Page(DigitalObject):
-            volume = Relation(relsext.isConstituentOf)
+            volume = Relation(relsext.isConstituentOf, type=Volume)
 
-    Supports configuring the RDF type and namespace prefixes used for
-    serialization, e.g.::
+
+    :class:`~eulfedora.models.Relation` also supports configuring the
+    RDF type and namespace prefixes that should be used for
+    serialization; for example::
         
         from rdflib import XSD, URIRef
         from rdflib.namespace import Namespace
@@ -1599,16 +1606,20 @@ class Relation(object):
 
 class ReverseRelation(object):
     '''Descriptor for use with
-    :class:`~eulfedora.server.DigitalObject` RELS-EXT reverse
+    :class:`~eulfedora.models.DigitalObject` RELS-EXT reverse
     relations, where the owning object is the RDF **object** of the
     predicate and the related object is the RDF **subject**.  This
-    descriptor will query the Fedora ResourceIndex for the requested
-    subjects, based on the configured predicate, and return resulting
-    items.
+    descriptor will query the Fedora
+    :class:`~eulfedora.api.ResourceIndex` for the requested subjects,
+    based on the configured predicate, and return resulting items.
 
     Currently only supports get (no set or delete).
     
-    NOTE: Currently does not do any sorting.
+    .. Note::
+    
+       Currently has no support for sorting when multiple items are
+       returned; items will be returned in whatever order the
+       :class:`~eulfedora.api.ResourceIndex` returns them.
     
     Example use::
 
