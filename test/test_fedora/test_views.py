@@ -30,7 +30,8 @@ from django.template import Context, Template
 from eulfedora.util import RequestFailed, PermissionDenied
 from eulfedora.models import DigitalObject, Datastream, FileDatastream
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
-from eulfedora.views import raw_datastream, login_and_store_credentials_in_session
+from eulfedora.views import raw_datastream, login_and_store_credentials_in_session, \
+     datastream_etag
 from eulfedora import cryptutil
 
 from testcore import main
@@ -73,6 +74,8 @@ class FedoraViewsTest(unittest.TestCase):
     def test_raw_datastream(self):
         rqst = Mock()
         rqst.method = 'GET'
+        # return empty headers for ETag condition check
+        rqst.META.get.return_value = None
 
         # DC
         response = raw_datastream(rqst, self.obj.pid, 'DC')
@@ -163,7 +166,16 @@ class FedoraViewsTest(unittest.TestCase):
             'Expected %s but returned %s for HEAD request on raw_datastream view' \
                 % (expected, got))
         self.assertEqual('', response.content)
-        
+
+    def test_datastream_etag(self):
+        rqst = Mock()
+        # DC
+        etag = datastream_etag(rqst, self.obj.pid, 'DC')
+        self.assertEqual(self.obj.dc.checksum, etag)
+
+        # bogus dsid should not error
+        etag = datastream_etag(rqst, self.obj.pid, 'bogus-datastream-id')
+        self.assertEqual(None, etag)        
 
     def test_login_and_store_credentials_in_session(self):
         # only testing custom logic, which happens on POST

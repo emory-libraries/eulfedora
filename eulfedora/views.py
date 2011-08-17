@@ -33,13 +33,35 @@ Using these views (in the simpler cases) should be as easy as::
 from django.conf import settings
 from django.contrib.auth import views as authviews
 from django.http import HttpResponse, Http404
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, condition
 
 from eulfedora.util import RequestFailed
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.cryptutil import encrypt
 
 
+def datastream_etag(request, pid, dsid, type=None, repo=None, **kwargs):
+    '''Method suitable for use as an etag function with
+    :class:`django.views.decorators.http.condition`.  Takes the same
+    arguments as :meth:`~eulfedora.views.raw_datastream`.
+    '''
+    try:
+        if repo is None:
+            repo = Repository()
+        get_obj_opts = {}
+        if type is not None:
+            get_obj_opts['type'] = type
+        obj = repo.get_object(pid, **get_obj_opts)
+        ds = obj.getDatastreamObject(dsid)
+        if ds and ds.exists and ds.checksum_type != 'DISABLED':
+            return ds.checksum
+    except RequestFailed:
+        pass
+    
+    return None
+
+
+@condition(etag_func=datastream_etag)
 @require_http_methods(['GET', 'HEAD'])
 def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
     '''View to display a raw datastream that belongs to a Fedora Object.
