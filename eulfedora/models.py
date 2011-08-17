@@ -1258,8 +1258,9 @@ class DigitalObject(object):
                              for sdef in methods.service_definitions)
         return self._methods
 
-    def getDissemination(self, service_pid, method, params={}):
-        return self.api.getDissemination(self.pid, service_pid, method, method_params=params)
+    def getDissemination(self, service_pid, method, params={}, return_http_response=False):
+        return self.api.getDissemination(self.pid, service_pid, method, method_params=params,
+                                         return_http_response=return_http_response)
 
     def getDatastreamObject(self, dsid):
         "Get any datastream on this object as a :class:`DatastreamObject`"
@@ -1541,16 +1542,15 @@ class Relation(object):
 
     Initialization options:
 
-        :param relation: the RDF predicate URI
-        :param type: optional :class:`~eulfedora.models.DigitalObject` subclass
-            to initialize (for object relations)
-        :param ns_prefix: optional dictionary to configure namespace
-            prefixes to be used for serialization; key should be the
-            desired prefix, value should be an instance of
-            :class:`rdflib.namespace.Namespace`
-        :param rdf_type: optional rdf type for literal values (passed
-            to :class:`rdflib.Literal` as the datatype option)
-        
+    :param relation: the RDF predicate URI
+    :param type: optional :class:`~eulfedora.models.DigitalObject` subclass
+    	to initialize (for object relations)
+    :param ns_prefix: optional dictionary to configure namespace
+    	prefixes to be used for serialization; key should be the
+        desired prefix, value should be an instance of
+        :class:`rdflib.namespace.Namespace`
+    :param rdf_type: optional rdf type for literal values (passed
+        to :class:`rdflib.Literal` as the datatype option)
     '''
     
     def __init__(self, relation, type=None, ns_prefix={}, rdf_type=None):

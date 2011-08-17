@@ -140,6 +140,14 @@ Hey, nonny-nonny."""
         self.assert_('<title>Object Items HTML Presentation</title>' in profile)
         self.assert_(self.pid in profile)
 
+        # return_http_response
+        response = self.rest_api.getDissemination(self.pid, "fedora-system:3", "viewItemIndex",
+                                                  return_http_response=True)
+        self.assert_(isinstance(response, httplib.HTTPResponse),
+                     'getDissemination should return an HTTPResponse when return_http_response is True')
+        # datastream content should still be accessible
+        self.assert_(self.pid in response.read())
+
     def test_getObjectHistory(self):
         history, url = self.rest_api.getObjectHistory(self.pid)
         self.assert_('<fedoraObjectHistory' in history)

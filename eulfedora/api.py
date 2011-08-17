@@ -153,12 +153,12 @@ class REST_API(HTTP_API_Base):
         return self.read(url, return_http_response=return_http_response)
 
     # NOTE: getDissemination was not available in REST API until Fedora 3.3
-    def getDissemination(self, pid, sdefPid, method, method_params={}):        
+    def getDissemination(self, pid, sdefPid, method, method_params={}, return_http_response=False):        
         # /objects/{pid}/methods/{sdefPid}/{method} ? [method parameters]        
         uri = 'objects/%s/methods/%s/%s' % (pid, sdefPid, method)
         if method_params:
             uri += '?' + _safe_urlencode(method_params)
-        return self.read(uri)
+        return self.read(uri, return_http_response=return_http_response)
 
     def getObjectHistory(self, pid):
         # /objects/{pid}/versions ? [format]
