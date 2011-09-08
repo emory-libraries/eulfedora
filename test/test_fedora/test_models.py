@@ -300,6 +300,17 @@ class TestNewObject(FedoraTestCase):
         self.assertEqual(fetched.owner, 'tester')
         self.assertEqual(fetched.state, 'I')
 
+    def test_multiple_owners(self):
+        obj = self.repo.get_object(type=MyDigitalObject)
+        obj.owner = 'thing1, thing2'
+        self.assert_(isinstance(obj.owners, list))
+        self.assertEqual(['thing1', 'thing2'], obj.owners)
+
+        obj.owner = ' thing1,   thing2 '
+        self.assertEqual(['thing1', 'thing2'], obj.owners)
+        
+
+
     def test_default_datastreams(self):
         """If we just create and save an object, verify that DigitalObject
         initializes its datastreams appropriately."""
@@ -697,7 +708,7 @@ class TestDigitalObject(FedoraTestCase):
         # check that top-level object properties are included in index data
         # (implicitly checking types)
         self.assertEqual(self.obj.pid, indexdata['pid'])
-        self.assertEqual(self.obj.owner, indexdata['owner'])
+        self.assertEqual(self.obj.owners, indexdata['owner'])
         self.assertEqual(self.obj.label, indexdata['label'])
         self.assertEqual(self.obj.modified.isoformat(), indexdata['last_modified'])
         self.assertEqual(self.obj.created.isoformat(), indexdata['created'])

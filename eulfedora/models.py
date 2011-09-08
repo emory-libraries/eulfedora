@@ -695,7 +695,13 @@ class DigitalObject(object):
     """Default namespace to use when generating new PIDs in
         :meth:`get_default_pid` (by default, calls Fedora getNextPid,
         which will use Fedora-configured namespace if default_pidspace
-        is not set)."""        
+        is not set)."""
+
+    OWNER_ID_SEPARATOR = ','
+    '''Owner ID separator for multiple owners.  Should match the
+    OWNER-ID-SEPARATOR configured in Fedora.
+    For more detail, see https://jira.duraspace.org/browse/FCREPO-82
+    '''
 
     dc = XmlDatastream("DC", "Dublin Core", DublinCore, defaults={
             'control_group': 'X',
@@ -887,6 +893,12 @@ class DigitalObject(object):
         self.info.owner = val
         self.info_modified = True
     owner = property(_get_owner, _set_owner, None, "object owner")
+
+    @property
+    def owners(self):
+        '''Read-only list of object owners, separated by the configured
+        :attr:`OWNER_ID_SEPARATOR`, with whitspace stripped.'''
+        return [o.strip() for o in self.owner.split(self.OWNER_ID_SEPARATOR)]
 
     def _get_state(self):
         return self.info.state
@@ -1373,7 +1385,7 @@ class DigitalObject(object):
             # TODO: select and standardize solr index field names for object properties
             'pid': self.pid,	
             'label': self.label,
-            'owner': self.owner,
+            'owner': self.owners,
             'state': self.state,
             'content_model': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
             }
