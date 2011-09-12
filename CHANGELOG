@@ -42,6 +42,11 @@ any necessary information about installation or upgrade notes.
     :class:`~eulfedora.util.ChecksumMismatch` exception being raised.
     You should see a warning if your code attempts to do this.
 
+* Added read-only access to :class:`~eulfedora.models.DigitalObject`
+  owners as a list; changed default
+  :meth:`eulfedora.models.DigitalObject.index_data` to make owner
+  field a list.
+
 
 0.16.0 - Indexing Support
 -------------------------
