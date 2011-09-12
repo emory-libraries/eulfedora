@@ -47,6 +47,10 @@ any necessary information about installation or upgrade notes.
   :meth:`eulfedora.models.DigitalObject.index_data` to make owner
   field a list.
 
+* Modified default :meth:`eulfedora.models.DigitalObject.index_data`
+  and sample Solr schema to include a new field (dsids) with a list of
+  datastream IDs available on the indexed object.
+
 
 0.16.0 - Indexing Support
 -------------------------

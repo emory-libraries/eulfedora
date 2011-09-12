@@ -720,6 +720,7 @@ class TestDigitalObject(FedoraTestCase):
         self.assert_(self.obj.dc.content.title in indexdata['title'])
         self.assert_(self.obj.dc.content.description in indexdata['description'])
 
+        self.assertEqual(['TEXT', 'DC'], indexdata['dsids'])
 
     def test_index_data_relations(self):
         # add a few rels-ext relations to test

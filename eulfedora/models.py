@@ -1382,7 +1382,6 @@ class DigitalObject(object):
         This method was designed for use with :mod:`eulfedora.indexdata`.
         '''
         index_data = {
-            # TODO: select and standardize solr index field names for object properties
             'pid': self.pid,	
             'label': self.label,
             'owner': self.owners,
@@ -1397,7 +1396,9 @@ class DigitalObject(object):
                 # last_modified and created are configured as date type in sample solr Schema
                 # using isoformat here so they can be serialized via JSON
                 'last_modified': self.modified.isoformat(),	
-                'created': self.created.isoformat()
+                'created': self.created.isoformat(),
+                # datastream ids
+                'dsids': list(self.ds_list.iterkeys()),
             })
             
         index_data.update(self.index_data_descriptive())
