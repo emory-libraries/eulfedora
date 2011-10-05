@@ -48,7 +48,7 @@ class MyDigitalObject(models.DigitalObject):
         })
 
 class SimpleDigitalObject(models.DigitalObject):
-    CONTENT_MODELS = ['info:fedora/%s:SimpleCModel' % FEDORA_PIDSPACE]
+    CONTENT_MODELS = ['info:fedora/%s:SimpleObject' % FEDORA_PIDSPACE]
 
     # extend digital object with datastreams for testing
     text = models.Datastream("TEXT", "Text datastream", defaults={
@@ -401,6 +401,26 @@ class TestNewObject(FedoraTestCase):
         self.assertEqual(fetched.text.format, 'http://example.com/')
         self.assertEqual(fetched.text.content, 'We are controlling transmission.')
 
+    def test_modify_multiple(self):
+        obj = self.repo.get_object(type=MyDigitalObject)
+        obj.label = 'test label'
+        obj.dc.content.title = 'test dc title'
+        obj.image.content = open(os.path.join(FIXTURE_ROOT, 'test.png'))
+        obj.save()
+        self.append_test_pid(obj.pid)
+
+        # update and save multiple pieces, including filedatastream metadata
+        obj.label = 'new label'
+        obj.dc.content.title = 'new dc title'
+        obj.image.label = 'testimage.png'
+        saved = obj.save()
+        self.assertTrue(saved)
+        updated_obj = self.repo.get_object(obj.pid, type=MyDigitalObject)
+        self.assertEqual(obj.label, updated_obj.label)
+        self.assertEqual(obj.dc.content.title, updated_obj.dc.content.title)
+        self.assertEqual(obj.image.label, updated_obj.image.label)
+ 
+        
     def test_new_file_datastream(self):
         obj = self.repo.get_object(type=MyDigitalObject)
         obj.image.content = open(os.path.join(FIXTURE_ROOT, 'test.png'))
@@ -467,7 +487,7 @@ class TestDigitalObject(FedoraTestCase):
         self.append_test_pid(self.obj.pid)
 
         # modify object profile, datastream content, datastream info
-        self.obj.label = "new label"        
+        self.obj.label = "new label"
         self.obj.dc.content.title = "new dublin core title"
         self.obj.text.label = "text content"
         self.obj.text.checksum_type = "MD5"
@@ -482,10 +502,13 @@ class TestDigitalObject(FedoraTestCase):
             expected_error = e
         self.assert_(str(expected_error).endswith('successfully backed out '), 'Incorrect checksum should back out successfully.') 
         
-        
+
+        # re-initialize the object. do it with a unicode pid to test a regression.
+        self.obj = MyDigitalObject(self.api, unicode(self.pid))
+
         # modify object profile, datastream content, datastream info
-        self.obj.label = "new label"        
-        self.obj.dc.content.title = "new dublin core title"
+        self.obj.label = u"new label\u2014with unicode"
+        self.obj.dc.content.title = u"new dublin core title\u2014also with unicode"
         self.obj.text.label = "text content"
         self.obj.text.checksum_type = "MD5"
         self.obj.text.checksum = "1c83260ff729265470c0d349e939c755"
@@ -496,9 +519,9 @@ class TestDigitalObject(FedoraTestCase):
 
         # confirm all changes were saved to fedora
         profile = self.obj.getProfile() 
-        self.assertEqual(profile.label, "new label")
+        self.assertEqual(profile.label, u"new label\u2014with unicode")
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
-        self.assert_('<dc:title>new dublin core title</dc:title>' in data)
+        self.assert_(u'<dc:title>new dublin core title\u2014also with unicode</dc:title>' in unicode(data, 'utf-8'))
         text_info = self.obj.getDatastreamProfile(self.obj.text.id)
         self.assertEqual(text_info.label, "text content")
         self.assertEqual(text_info.checksum_type, "MD5")
@@ -585,6 +608,13 @@ class TestDigitalObject(FedoraTestCase):
         self.assertTrue(self.obj.has_model(cmodel_uri))
         self.assertFalse(self.obj.has_model(self.obj.uri))
 
+    def test_get_models(self):
+        cmodel_uri = "info:fedora/control:ContentType"
+        # FIXME: checking when rels-ext datastream does not exist causes an error
+        self.assertEqual(self.obj.get_models(), [])
+        self.obj.add_relationship(modelns.hasModel, cmodel_uri)
+        self.assertEquals(self.obj.get_models(), [URIRef(cmodel_uri)])
+
     def test_has_requisite_content_models(self):
         # fixture has no content models
         # init fixture as generic object
@@ -643,6 +673,24 @@ class TestDigitalObject(FedoraTestCase):
         self.assert_('test_fedora.test_models.MyDigitalObject' in
                      models.DigitalObject.defined_types)
 
+    def test_index_data(self):
+        indexdata = self.obj.index_data()
+        # check that top-level object properties are included in index data
+        # (implicitly checking types)
+        self.assertEqual(self.obj.pid, indexdata['pid'])
+        self.assertEqual(self.obj.owner, indexdata['owner'])
+        self.assertEqual(self.obj.label, indexdata['label'])
+        self.assertEqual(self.obj.modified.isoformat(), indexdata['last_modified'])
+        self.assertEqual(self.obj.created.isoformat(), indexdata['created'])
+        self.assertEqual(self.obj.state, indexdata['state'])
+        for cm in self.obj.get_models():
+            self.assert_(str(cm) in indexdata['content_model'])
+            
+        # descriptive data included in index data
+        self.assert_(self.obj.dc.content.title in indexdata['title'])
+        self.assert_(self.obj.dc.content.description in indexdata['description'])
+        
+
 
 class TestContentModel(FedoraTestCase):
 
@@ -659,6 +707,9 @@ class TestContentModel(FedoraTestCase):
     def test_for_class(self):
         CMODEL_URI = models.ContentModel.CONTENT_MODELS[0]
 
+        # NOTE: these tests can fail if a content model with the same
+        # URI (but not the same datastreams) actually exists in Fedora
+        
         # first: create a cmodel for SimpleDigitalObject, the simple case
         cmodel = models.ContentModel.for_class(SimpleDigitalObject, self.repo)
         self.append_test_pid(cmodel.pid)

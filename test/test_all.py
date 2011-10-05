@@ -18,6 +18,7 @@
 
 
 import os
+import sys
 import unittest
 import logging.config
 
@@ -25,6 +26,7 @@ from testcore import tests_from_modules, get_test_runner
 
 test_modules = (
     'test_fedora',
+    'test_indexdata',
     )
 
 if __name__ == '__main__':
@@ -33,6 +35,14 @@ if __name__ == '__main__':
     LOGGING_CONF = os.path.join(test_dir, 'logging.conf')
     if os.path.exists(LOGGING_CONF):
         logging.config.fileConfig(LOGGING_CONF)
+    
+    # if command-line arguments are present, only run the specified test_modules
+    args = sys.argv
+    if __file__ in args:
+        del args[args.index(__file__)]
+    if len(args):
+        test_modules = list(set(test_modules) & set(args))
+        print 'Testing %s' % ', '.join(test_modules)
 
     # generate test suite from test modules
     alltests = unittest.TestSuite(

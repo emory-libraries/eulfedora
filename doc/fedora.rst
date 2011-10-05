@@ -25,7 +25,7 @@ Repository & Resource Index
     :members:
 
 
-Django-integration
+Django integration
 ------------------
 
 :mod:`~eulfedora.views` Fedora views
@@ -34,6 +34,16 @@ Django-integration
 .. automodule:: eulfedora.views
 
    .. automethod:: eulfedora.views.raw_datastream
+
+
+:mod:`~eulfedora.indexdata` Fedora Indexing
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. automodule:: eulfedora.indexdata
+
+  .. automodule:: eulfedora.indexdata.views
+    :members:
+  
 
 Management commands
 ^^^^^^^^^^^^^^^^^^^

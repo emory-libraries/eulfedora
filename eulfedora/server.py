@@ -68,7 +68,6 @@ from eulfedora.models import DigitalObject
 from eulfedora.util import AuthorizingServerConnection, \
      RelativeServerConnection, parse_rdf, parse_xml_object, RequestFailed
 from eulfedora.xml import SearchResults, NewPids
-from eulfedora import cryptutil
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +87,10 @@ def init_pooled_connection(fedora_root=None):
         except ImportError:
             raise Exception('Cannot initialize a Fedora connection without specifying ' +
                             'Fedora root url directly or in Django settings as FEDORA_ROOT')
-    _connection = RelativeServerConnection(fedora_root)
 
+    if not fedora_root.endswith('/'):
+        fedora_root = fedora_root + '/'
+    _connection = RelativeServerConnection(fedora_root)
 
 
 # a repository object, basically a handy facade for easy api access
@@ -152,6 +153,7 @@ class Repository(object):
             if username is None and password is None:
                 try:
                     from django.conf import settings
+                    from eulfedora import cryptutil
                     
                     if request is not None and request.user.is_authenticated() and \
                        FEDORA_PASSWORD_SESSION_KEY in request.session:
@@ -278,14 +280,85 @@ class Repository(object):
             if create is None:
                 create = True
         else:
-            if isinstance(pid, basestring) and \
-                    pid.startswith('info:fedora/'): # passed a uri
-                pid = pid[len('info:fedora/'):]
-
             if create is None:
                 create = False
 
         return type(self.api, pid, create)
+
+    def infer_object_subtype(self, api, pid=None, create=False):
+        """Construct a DigitalObject or appropriate subclass, inferring the
+        appropriate subtype using :meth:`best_subtype_for_object`. Note that
+        this method signature has been selected to match the
+        :class:`~eulfedora.models.DigitalObject` constructor so that this
+        method might be passed directly to :meth:`get_object` as a `type`::
+
+        >>> obj = repo.get_object(pid, type=repo.infer_object_subtype)
+
+        See also: :class:`TypeInferringRepository`
+        """
+        obj = DigitalObject(api, pid, create)
+        if create:
+            return obj
+        if not obj.exists:
+            return obj
+
+        match_type = self.best_subtype_for_object(obj)
+        return match_type(api, pid)
+
+    def best_subtype_for_object(self, obj):
+        """Given a :class:`~eulfedora.models.DigitalObject`, examine the
+        object to select the most appropriate subclass to instantiate. This
+        generic implementation examines the object's content models and
+        compares them against the defined subclasses of
+        :class:`~eulfedora.models.DigitalObject` to pick the best match.
+        Projects that have a more nuanced understanding of their particular
+        objects should override this method in a :class:`Repository`
+        subclass. This method is intended primarily for use by
+        :meth:`infer_object_subtype`.
+
+        :param obj: a :class:`~eulfedora.models.DigitalObject` to inspect
+        :rtype: a subclass of :class:`~eulfedora.models.DigitalObject`
+        """
+        obj_models = set(str(m) for m in obj.get_models())
+
+        # go through registered DigitalObject subtypes looking for what type
+        # this object might be. use the first longest match: that is, look
+        # for classes we qualify for by having all of their cmodels, and use
+        # the class with the longest set of cmodels. if there's a tie, warn
+        # and pick one.
+        # TODO: store these at registration in a way that doesn't require
+        # this manual search every time
+        # TODO: eventually we want to handle the case where a DigitalObject
+        # can use multiple unrelated cmodels, though we need some major
+        # changes beyond here to support that
+        match_len, matches = 0, []
+        for obj_type in DigitalObject.defined_types.values():
+            type_model_list = getattr(obj_type, 'CONTENT_MODELS', None)
+            if not type_model_list:
+                continue
+            type_models = set(type_model_list)
+            if type_models.issubset(obj_models):
+                if len(type_models) > match_len:
+                    match_len, matches = len(type_models), [obj_type]
+                elif len(type_models) == match_len:
+                    matches.append(obj_type)
+
+        if not matches:
+            return DigitalObject
+
+        if len(matches) > 1:
+            # Check to see if there happens to be an end subclass to the list of matches.
+            for obj_type in matches:
+                is_root_subclass = True
+                for possible_parent_type in matches:
+                    if not issubclass(obj_type,possible_parent_type):
+                        is_root_subclass = False
+                if is_root_subclass:
+                    return obj_type
+                
+            logger.warn('%s has %d potential classes with no root subclass for the list. using the first: %s' % 
+                (obj.pid, len(matches), repr(matches)))
+        return matches[0]
 
     def find_objects(self, terms=None, type=None, chunksize=None, **kwargs):
         """
@@ -319,6 +392,7 @@ class Repository(object):
             'gt': '>',
             'gte': '>=',
             'lt': '<',
+
             'lte': '<=',
             'contains': '~'
         }
@@ -360,6 +434,17 @@ class Repository(object):
                 chunk = parse_xml_object(SearchResults, data, url)
             else:
                 break
+
+
+class TypeInferringRepository(Repository):
+    """A simple :class:`Repository` subclass whose default object type for
+    :meth:`~Repository.get_object` is
+    :meth:`~Repository.infer_object_subtype`. Thus, each call to
+    :meth:`~Repository.get_object` on a repository such as this will
+    automatically use :meth:`~Repository.best_subtype_for_object` (or a
+    subclass override) to infer the object's proper type.
+    """
+    default_object_type = Repository.infer_object_subtype
 
 
 # session key for storing a user password that will be used for Fedora access

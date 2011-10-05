@@ -1,50 +1,51 @@
 Creating a simple Django app for Fedora Commons repository content
 ==================================================================
 
-This is a tutorial to walk you through using EULfedor with Django to build
+This is a tutorial to walk you through using EULfedora with Django to build
 a simple interface to the Fedora-Commons repository for uploading files,
 viewing uploaded files in the repository, editing Dublin Core metadata,
 and searching content in the repository.
 
-This tutorial assumes that you have `Django`_ installed and an
-installation of the `Fedora Commons repository`_ available to interact
-with.  You should have some familiarity with Python and Django (at the
-very least, you should have worked through the `Django
-Tutorial`_). You should also have some familiarity with the Fedora
-Commons Repository and a basic understanding of objects and content
-models in Fedora.
+This tutorial assumes that you have an installation of the `Fedora Commons
+repository`_ available to interact with.  You should have some familiarity with
+Python and Django (at the very least, you should have worked through the
+`Django Tutorial`_). You should also have some familiarity with the Fedora
+Commons Repository and a basic understanding of objects and content models in
+Fedora.
 
-.. _Django: http://www.djangoproject.com/
 .. _Django Tutorial: http://docs.djangoproject.com/en/1.2/intro/tutorial01/
 .. _Fedora Commons repository: http://www.fedora-commons.org/
 
-We will use ``pip`` to install EULfedora and its dependencies; on some
-platforms (most notably, in Windows), you may need to install some of
-the python dependencies manually.
+We will use `pip <http://www.pip-installer.org/en/latest/index.html>`_ to
+install EULfedora and its dependencies; on some platforms (most notably, in
+Windows), you may need to install some of the python dependencies manually.
 
 
 Create a new Django project and setup :mod:`eulfedora`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use ``pip`` to install the :mod:`eulfedora` library and its
-dependencies.  For this tutorial, we'll use the latest version::
+dependencies.  For this tutorial, we'll use the latest released
+version::
 
-    pip install git://github.com/emory-libraries/eulfedora.git#egg=eulfedora
+    $ pip install eulfedora
 
 This command should install EULfedora and its Python dependencies.
 
 We're going to make use of a few items in :mod:`eulcommon`, so let's
 install that now too::
 
-    pip install git://github.com/emory-libraries/eulcommon.git#egg=eulcommon
+    $ pip install eulcommon
 
-.. TODO: tag an initial release and use here?
+We'll use `Django <http://www.djangoproject.org/>`_, a popular web framework,
+for the web components of this tutorial::
 
-
+    $ pip install django
+    
 Now, let's go ahead and create a new Django project.  We'll call it
 *simplerepo*::
 
-    django-admin.py startproject simplerepo
+    $ django-admin.py startproject simplerepo
 
 Go ahead and do some minimal configuration in your django settings.
 For simplicity, you can use a sqlite database for this tutorial (in
@@ -59,7 +60,7 @@ to your configured Fedora repository::
     # Fedora Repository settings
     FEDORA_ROOT = 'https://localhost:8543/fedora/'
     FEDORA_USER = 'fedoraAdmin'
-    FEDORA_PASS = 'fedoraAdmin'
+    FEDORA_PASSWORD = 'fedoraAdmin'
     FEDORA_PIDSPACE = 'simplerepo'
 
 Since we're planning to upload content into Fedora, make sure you are
@@ -73,14 +74,14 @@ Before we can upload any content, we need to create an object to
 represent how we want to store that data in Fedora.  Let's create a
 new Django app where we will create this model and associated views::
 
-    python manage.py startapp repo
+    $ python manage.py startapp repo
 
 In ``repo/models.py``, create a class that extends :class:`~eulfedora.models.DigitalObject`::
 
     from eulfedora.models import DigitalObject, FileDatastream
 
     class FileObject(DigitalObject):
-        FILE_CONTENT_MODEL = 'info:fedora/eulctl:File-1.0'
+        FILE_CONTENT_MODEL = 'info:fedora/genrepo:File-1.0'
         CONTENT_MODELS = [ FILE_CONTENT_MODEL ]
         file = FileDatastream("FILE", "Binary datastream", defaults={
                 'versionable': True,
@@ -93,12 +94,12 @@ every Fedora object.  In addition, we're defining a custom datastream
 that we will use to store the binary files that we're going to upload
 for ingest into Fedora.  This configures a versionable
 :class:`~eulfedora.models.FileDatastream` with a datastream id of
-``FILE`` and a default datastream label of ``Binary Datastream``.  We
+``FILE`` and a default datastream label of ``Binary datastream``.  We
 could also set a default mimetype here, if we wanted.
 
 Let's inspect our new model object in the Django console for a moment::
 
-    python manage.py shell
+    $ python manage.py shell
 
 The easiest way to initialize a new object is to use the Repository object ``get_object`` method, which can also be used
 to access existing Fedora objects.  Using the Repository object allows us to seamlessly pass along the Fedora
@@ -141,7 +142,7 @@ connection configuration that the Repository object picks up from your django ``
        xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
     >
       <rdf:Description rdf:about="info:fedora/TEMP:DUMMY_PID">
-        <fedora-model:hasModel rdf:resource="info:fedora/eulctl:File-1.0"/>
+        <fedora-model:hasModel rdf:resource="info:fedora/genrepo:File-1.0"/>
       </rdf:Description>
     </rdf:RDF>
 
@@ -175,7 +176,7 @@ created the content model object in Fedora yet.  For simple content
 models, we can do this with a custom django manage.py command.  Run it
 in verbose mode so you can more details about what it is doing::
 
-    python manage.py syncrepo -v 2
+    $ python manage.py syncrepo -v 2
 
 
 You should see some output indicating that content models were
@@ -247,7 +248,9 @@ But we still need a template to display our form.  Create a template
 directory and add it to your ``TEMPLATE_DIRS`` configuration in
 ``settings.py``.  Create a ``repo`` directory inside your template
 directory, and then create ``upload.html`` inside that directory and
-give it this content::
+give it this content:
+
+.. code-block:: django
 
     <form method="post" enctype="multipart/form-data">{% csrf_token %}
         {{ form.as_p }}
@@ -315,7 +318,9 @@ saving it.  The view is now passing that object to the template, so if
 it is defined that should mean we've successfully ingested content
 into Fedora.  Let's update our template to show something if that is
 defined.  Add this to ``repo/upload.html`` before the form is
-displayed::
+displayed:
+
+.. code-block:: django
 
     {% if obj %}
         <p>Successfully ingested <b>{{ obj.label }}</b> as {{ obj.pid }}.</p>
@@ -360,7 +365,9 @@ error handling for those cases a bit later.
 
 We still need a template to display something.  Create a new file
 called ``repo/display.html`` in your templates directory, and then add
-some code to output some information from the object::
+some code to output some information from the object:
+
+.. code-block:: django
 
     <h1>{{ obj.label }}</h1>
     <table>
@@ -384,31 +391,40 @@ above, then the the first item you uploaded should now be viewable at
 
 You might notice that we're displaying the text 'None' for creator and
 date.  This is because those fields aren't present at all yet in our
-object Dublin Core, and :mod:`eulxml.xmlmap.` fields distinguish
+object Dublin Core, and :mod:`eulxml.xmlmap` fields distinguish
 between an empty XML field and one that is not-present at all by using
 the empty string and None respectively.  Still, that doesn't look
-great, so let's adjust our template a little bit::
+great, so let's adjust our template a little bit:
+
+.. code-block:: django
 
     <tr><th>creator:</th><td>{{ dc.creator|default:'' }}</td></tr>
     <tr><th>date:</th><td>{{ dc.date|default:'' }}</td></tr>
 
-We actually have more information about this object than we're
-currently displaying, so let's add a few more things to our object
-display template.  The object has information about when it was
-created and when it was last modified, so let's add a line after the object label:: 
+We actually have more information about this object than we're currently
+displaying, so let's add a few more things to our object display template.
+The object has information about when it was created and when it was last
+modified, so let's add a line after the object label:
 
-    <p> Uploaded at {{ obj.created }}; last modified {{ obj.modified }}.</p>
+.. code-block:: django
+
+    <p>Uploaded at {{ obj.created }}; last modified {{ obj.modified }}.</p>
 
 These fields are actually Python datetime objects, so we can use
 Django template filters to display then a bit more nicely.  Try
-modifying the line we just added::
+modifying the line we just added:
 
-    <p> Uploaded at {{ obj.created }}; last modified {{ obj.modified }} ({{  obj.modified|timesince }} ago).</p>
+.. code-block:: django
+
+    <p>Uploaded at {{ obj.created }}; last modified {{ obj.modified }}
+       ({{  obj.modified|timesince }} ago).</p>
 
 It's pretty easy to display the Dublin Core datastream content as XML
 too.  This may not be something you'd want to expose to regular users,
 but it may be helpful as we develop the site.  Add a few more lines at
-the end of your ``repo/display.html`` template::
+the end of your ``repo/display.html`` template:
+
+.. code-block:: django
 
     <hr/>
     <pre>{{ obj.dc.content.serialize }}</pre>
@@ -419,9 +435,12 @@ since we're not going to be modifying the RELS-EXST just yet.
 
 So far, we've got information about the object and the Dublin Core
 displaying, but nothing about the file that we uploaded to create this
-object.  Let's add a bit more to our template::
+object.  Let's add a bit more to our template:
 
-    <p>{{ obj.file.label }} ({{ obj.file.info.size|filesizeformat }}, {{ obj.file.mimetype }})</p>
+.. code-block:: django
+
+    <p>{{ obj.file.label }} ({{ obj.file.info.size|filesizeformat }},
+                             {{ obj.file.mimetype }})</p>
 
 Remember that in our ``upload`` view method we set the file datastream
 label and mimetype based on the file that was uploaded from the web
@@ -467,7 +486,9 @@ object in fedora.  The :meth:`~eulfedora.views.raw_datastream` method
 will add a few additional response headers based on the datastream
 information from Fedora.  Let's link this in from our object display
 page so we can try it out.  Edit your ``repo/display.html`` template
-and turn the original filename into a link::
+and turn the original filename into a link:
+
+.. code-block:: django
 
 	<a href="{% url download obj.pid %}">{{ obj.file.label }}</a> 
 
@@ -525,14 +546,14 @@ Then we can define our new edit form::
             model = DublinCore
             fields = ['title', 'creator', 'date']
 
-We'll start simple, with just the three fields we're currently
-displaying on our object display page.  This code creates a custom
-:class:`~eulxml.forms.XmlObjectForm` with a *model* of (which for us
-is an instance of :class:`~eulxml.xmlmap.XmlObject`)
-:class:`~eulxml.xmlmap.dc.DublinCore`.  XmlObjectForm knows how to
-look at the model object and figure out how to generate form fields
-that correspond to the xml fields. By adding a list of fields, we tell
-XmlObjectForm to only build form fields for these attributes of our
+We'll start simple, with just the three fields we're currently displaying on
+our object display page.  This code creates a custom
+:class:`~eulxml.forms.XmlObjectForm` with a *model* of (which for us is an
+instance of :class:`~eulxml.xmlmap.XmlObject`)
+:class:`~eulxml.xmlmap.dc.DublinCore`.  :class:`~eulxml.forms.XmlObjectForm`
+knows how to look at the model object and figure out how to generate form
+fields that correspond to the xml fields. By adding a list of fields, we
+tell XmlObjectForm to only build form fields for these attributes of our
 model.
 
 Now we need a view and a template to display our new form.  Add
@@ -558,11 +579,13 @@ form, bind it to our content, and pass it to a template::
 We have to instantiate our object, and then pass in the *content* of
 the DC datastream as the instance to our model.  Our XmlObjectForm is
 using :class:`~eulxml.xmlmap.dc.DublinCore` as its model, and
-**obj.dc.content** is an instance of DublinCore with data loaded from
+``obj.dc.content`` is an instance of DublinCore with data loaded from
 Fedora.
 
 Create a new file called ``repo/edit.html`` in your templates
-directory and add a little bit of code to display the form::
+directory and add a little bit of code to display the form:
+
+.. code-block:: django
 
     <h1>Edit {{ obj.label }}</h1>
     <form method="post">{% csrf_token %}
@@ -588,25 +611,27 @@ method so it will do something when we submit the form::
         return render_to_response('repo/edit.html', {'form': form, 'obj': obj},
                 context_instance=RequestContext(request))
 	    
-When the data is posted to this view, we're binding our form to the
-posted data and the XmlObject instance.  If it's valid, then we can
-call the ``update_instance`` method, which actually updates the
-XmlObject that is attached to our DC datastream object based on the
-form data that was posted to the view.  When we save the object, the
-:class:`~eulfedora.models.DigitalObject` class detects that the
-``dc.content`` has been modified and will make the necessary API calls
-to update that content in Fedora.
+When the data is posted to this view, we're binding our form to the posted
+data and the XmlObject instance.  If it's valid, then we can call the
+:meth:`~eulxml.forms.XmlObjectForm.update_instance` method, which actually
+updates the :class:`~eulxml.xmlmap.XmlObject` that is attached to our DC
+datastream object based on the form data that was posted to the view. When
+we save the object, the :class:`~eulfedora.models.DigitalObject` class
+detects that the ``dc.content`` has been modified and will make the
+necessary API calls to update that content in Fedora.
 
 .. Note::
 
-  It may not matter too much in this case, since we are working with
-  simple Dublin Core XML, but it's probably worth noting that the form
-  ``is_valid`` check actually includes XSD schema validation on
-  XmlObject instances that have a schema defined.  In most cases, it
-  should be difficult (if not impossible) to generate invalid XML via
-  an XmlObjectForm; but if you edit the XML manually and introduce
-  something that is not schema-valid, you'll see the validation error
-  when you attempt to update that content with XmlObjectForm.
+  It may not matter too much in this case, since we are working with simple
+  Dublin Core XML, but it's probably worth noting that the form
+  :meth:`~eulxml.forms.XmlObjectForm.is_valid` check actually includes `XML
+  Schema <http://www.w3.org/XML/Schema>`_ validation on
+  :class:`~eulxml.xmlmap.XmlObject` instances that have a schema defined.
+  In most cases, it should be difficult (if not impossible) to generate
+  invalid XML via an :class:`~eulxml.forms.XmlObjectForm`; but if you edit
+  the XML manually and introduce something that is not schema-valid, you'll
+  see the validation error when you attempt to update that content with
+  :class:`~eulxml.forms.XmlObjectForm`.
 
 Try entering some text in your form and submitting the data.  It
 should update your object in Fedora with the changes you made.
@@ -621,10 +646,12 @@ We'll need some additional imports::
 
 .. Note::
 
-  :class:`~eulcommon.djangoextras.http.HttpResponseSeeOtherRedirect`
-  is a custom subclass of :class:`django.http.HttpResponse` analogous
-  to HttpResponseRedirect or HttpResponsePermanentRedirect, but it
-  returns a 'See Other' redirect (HTTP status code 303).
+  :class:`~eulcommon.djangoextras.http.HttpResponseSeeOtherRedirect` is a
+  custom subclass of :class:`django.http.HttpResponse` analogous to
+  :class:`~django.http.HttpResponseRedirect` or
+  :class:`~django.http.HttpResponsePermanentRedirect`, but it returns a
+  `See Other <http://tools.ietf.org/html/rfc2616#section-10.3.4>`_
+  redirect (HTTP status code 303).
 
 After the ``object.save()`` call in the edit view method, add this::
 
@@ -664,7 +691,9 @@ your changes.
 While we're adding fields, let's change our display template so that
 we can see any Dublin Core fields that are present, not just those
 first three we started with.  Replace the title, creator, and date
-lines in your ``repo/display.html`` template with this::
+lines in your ``repo/display.html`` template with this:
+
+.. code-block:: django
 
     {% for el in dc.elements %}
         <tr><th>{{ el.name }}:</th><td>{{el}}</td</tr>
@@ -722,21 +751,23 @@ that will actually do the searching::
         return render_to_response('repo/search.html', {'form': form, 'objects': objects},
                 context_instance=RequestContext(request))
 
-As before, on a GET request we simple pass the form to the template
-for display.  When the request is a POST with valid search data, we're
-going to instantiate our :class:`~eulfedora.server.Repository` object
-and call the :meth:`~eulfedora.server.Repository.find_objects` method.
-Since we're just doing a term search, we can just pass in the keywords
-from the form.  If you wanted to do a fielded search, you could build
-a keyword-argument style list of fields and search terms instead.
-We're telling ``find_objects`` to return everything it finds as an
-instance of our ``FileObject`` class for now, even though that is an
-over-simplification and in searching across all content in the Fedora
+As before, on a GET request we simple pass the form to the template for
+display.  When the request is a POST with valid search data, we're going to
+instantiate our :class:`~eulfedora.server.Repository` object and call the
+:meth:`~eulfedora.server.Repository.find_objects` method. Since we're just
+doing a term search, we can just pass in the keywords from the form.  If you
+wanted to do a fielded search, you could build a keyword-argument style list
+of fields and search terms instead. We're telling
+:meth:`~eulfedora.server.Repository.find_objects` to return everything it
+finds as an instance of our ``FileObject`` class for now, even though that
+is an over-simplification and in searching across all content in the Fedora
 repository we may well find other kinds of content.
 
 Let's create a search template to display the search form and search
 results.  Create ``repo/search.html`` in your templates directory and
-add this::
+add this:
+
+.. code-block:: django
 
     <h1>Search for objects</h1>
     <form method="post">{% csrf_token %}
@@ -750,24 +781,25 @@ add this::
         {% endfor %}
     {% endif %}
 
-This template will always display the search form, and if any objects
-were found, it will list them.  Let's take it for a whirl!  Go to
-`<http://localhost:8000/search/>`_ and enter a search term.  Try
-searching for the object labels, any of the values you entered into
-the Dublin Core fields that you edited, or if you're using
-``simplerepo`` for your configured PIDSPACE, search on
-``simplerepo:*`` to find the objects you've uploaded.
+This template will always display the search form, and if any objects were
+found, it will list them.  Let's take it for a whirl!  Go to
+`<http://localhost:8000/search/>`_ and enter a search term.  Try searching
+for the object labels, any of the values you entered into the Dublin Core
+fields that you edited, or if you're using ``simplerepo`` for your
+configured ``PIDSPACE``, search on ``simplerepo:*`` to find the objects
+you've uploaded.
 
-When you are searching across disparate content in the Fedora
-repository, depending on how you have access configured for that
-repository, there is a possibility that the search could return an
-object that the current user doesn't actually have permission to view.
-For efficiency reasons, the :class:`~eulfedora.models .DigitalObject`
-postpones any Fedora API calls until the last possibly moment-- which
-means that in our search results, any connection errors will happen in
-the template instead of in the view method.  Fortunately, there is an
-``eulfedora`` template tag to help with that!  Let's rewrite the search
-template to use it::
+When you are searching across disparate content in the Fedora repository,
+depending on how you have access configured for that repository, there is a
+possibility that the search could return an object that the current user
+doesn't actually have permission to view. For efficiency reasons, the
+:class:`~eulfedora.models.DigitalObject` postpones any Fedora API calls
+until the last possibly moment-- which means that in our search results, any
+connection errors will happen in the template instead of in the view method.
+Fortunately, :mod:`eulfedora.templatetags` has a template tag to help with
+that!  Let's rewrite the search template to use it:
+
+.. code-block:: django
 
     {% load fedora %}
     <h1>Search for objects</h1>
@@ -788,15 +820,13 @@ template to use it::
         {% endfor %}
     {% endif %}
 
-What we're doing here is loading the ``fedora`` template tag, and then
-using ``fedora_access`` for each object that we want to display.  That
-way we can catch any permission or connection errors and display some
-kind of message to the user, and still display all the content they
-have permission to view.  See :mod:`eulfedora.templatetags` for more
-details.
+What we're doing here is loading the ``fedora`` template tag library, and
+then using `fedora_access <../fedora.html#fedora-access>`_ for each object that
+we want to display.  That way we can catch any permission or connection
+errors and display some kind of message to the user, and still display all
+the content they have permission to view.
 
 For this template tag to work correctly, you're also going to have
 disable template debugging (otherwise, the Django template debugging
 will catch the error first).  Edit your ``settings.py`` and change
 ``TEMPLATE_DEBUG`` to False.
-

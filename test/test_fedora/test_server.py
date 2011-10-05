@@ -91,6 +91,35 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         self.assertTrue(isinstance(obj, MyDigitalObject))
         self.assertTrue(obj._create)
 
+    def test_infer_object_subtype(self):
+        class AnotherDigitalObject(DigitalObject):
+            CONTENT_MODELS = [ 'info:fedora/example:ExampleObject-1.0' ]
+
+        obj = self.repo.get_object(type=AnotherDigitalObject)
+        obj.save()
+        testpid = obj.pid
+        self.append_test_pid(testpid)
+
+        basic_obj = self.repo.get_object(testpid, type=DigitalObject)
+        obj_type = self.repo.best_subtype_for_object(basic_obj)
+        self.assertEqual(obj_type, AnotherDigitalObject)
+
+        obj = self.repo.get_object(testpid, type=self.repo.infer_object_subtype)
+        self.assertTrue(isinstance(obj, AnotherDigitalObject))
+
+        #Test that subclass does resolve correctly.
+        class SubclassedAnotherDigitalObject(AnotherDigitalObject):
+            NO_CHANGES_EXCEPT_SUBCLASSED = True
+
+        obj = self.repo.get_object(type=SubclassedAnotherDigitalObject)
+        obj.save()
+        testpid = obj.pid
+        self.append_test_pid(testpid)
+        
+        obj = self.repo.get_object(testpid, type=self.repo.infer_object_subtype)
+        self.assertTrue(isinstance(obj, SubclassedAnotherDigitalObject))
+
+        #TODO: Test for errors? Test for multiple possible matches?
 
 
     def test_find_objects(self):

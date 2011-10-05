@@ -1,36 +1,32 @@
-EULfedora |release|
-===================
+EULfedora
+=========
 
-EULfedora is one component from a collection of reusable Python_
-components from `Emory University Libraries`_. The library contains
-both released and unreleased beta components. Except where noted
-otherwise, components documented here are released and ready for
-production use.
+EULfedora is an extensible library for creating and managing digital objects
+in a `Fedora Commons <http://fedora-commons.org/>`_ repository. It eases
+`mapping Fedora digital object types to Python classes
+<tutorials/fedora.html#create-a-model-for-your-fedora-object>`_ along with
+`ingesting <tutorials/fedora.html#process-the-upload>`_, `managing
+<tutorials/fedora.html#edit-fedora-content>`_, and `searching
+<tutorials/fedora.html#search-fedora-content>`_ reposited content. Its
+builtin datastream abstractions include idiomatic Python access to `XML
+<fedora/models.html#eulfedora.models.XmlDatastream>`_ and `RDF
+<fedora/models.html#eulfedora.models.RdfDatastream>`_ datastreams. They're
+also extensible, allowing applications to define other datastream types as
+needed.
 
-:mod:`eulfedora` attempts to provide a pythonic interface to the
-`Fedora Commons repository
-<http://fedora-commons.org/confluence/display/FCR30>`_.
-
-
-
-.. _Python: http://www.python.org/
-.. _Emory University Libraries: http://web.library.emory.edu/
+The library contains extra `integration for Django apps
+<fedora.html#django-integration>`_, though the core repository functionality
+is framework-agnostic.
 
 Contents
 --------
 
 .. toctree::
-   :maxdepth: 3
-   
-   changelog
-   fedora
-
-----
-
-.. toctree::
    :maxdepth: 2
    
-   tutorials/index
+   tutorials/fedora
+   fedora
+   changelog
 
 Indices and tables
 ------------------

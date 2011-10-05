@@ -1,4 +1,4 @@
-# file fedora/models.py
+# file eulfedora/models.py
 # 
 #   Copyright 2010,2011 Emory University Libraries
 #
@@ -440,9 +440,11 @@ class XmlDatastream(Datastream):
         from eulxml.xmlmap.dc import DublinCore
         
         class MyDigitalObject(DigitalObject):
-            dc = XmlDatastream("DC", "Dublin Core", DublinCore)
+            extra_dc = XmlDatastream("EXTRA_DC", "Dublin Core", DublinCore)
 
-
+        my_obj = repo.get_object("example:1234", type=MyDigitalObject)
+        my_obj.extra_dc.content.title = "Example object"
+        my_obj.save(logMessage="automatically setting dc title")
     """
     _datastreamClass = XmlDatastreamObject
     
@@ -453,14 +455,14 @@ class XmlDatastream(Datastream):
 
 class RdfDatastreamObject(DatastreamObject):
     """Extends :class:`DatastreamObject` in order to initialize datastream content
-    as an RDF graph.
+    as an `rdflib <http://pypi.python.org/pypi/rdflib/>`_ RDF graph.
     """
     default_mimetype = "application/rdf+xml"
     # prefixes for namespaces expected to be used in RELS-EXT
     default_namespaces = {
         'fedora-model': 'info:fedora/fedora-system:def/model#',
         'fedora-rels-ext': 'info:fedora/fedora-system:def/relations-external#',
-        'oai': 'http://www.openarchives.org/OAI/2.0/',
+        'oai': 'http://www.openarchives.org/OAI/2.0/'
         }
 
     # FIXME: override _set_content to handle setting content?
@@ -530,13 +532,22 @@ class RdfDatastreamObject(DatastreamObject):
 
 
 class RdfDatastream(Datastream):
-    """RDF-specific version of :class:`Datastream`.  Datastreams are initialized
-    as instances of :class:`RdfDatastreamObject`.
+    """RDF-specific version of :class:`Datastream` for accessing datastream
+    content as an `rdflib <http://pypi.python.org/pypi/rdflib/>`_ RDF graph.
+    Datastreams are initialized as instances of
+    :class:`RdfDatastreamObject`.
 
     Example usage::
 
+        from rdflib import RDFS, Literal
+
         class MyDigitalObject(DigitalObject):
-            rels_ext = RdfDatastream("RELS-EXT", "External Relations")
+            extra_rdf = RdfDatastream("EXTRA_RDF", "an RDF graph of stuff")
+
+        my_obj = repo.get_object("example:4321", type=MyDigitalObject)
+        my_obj.extra_rdf.content.add((my_obj.uriref, RDFS.comment,
+                                      Literal("This is an example object.")))
+        my_obj.save(logMessage="automatically setting rdf comment")
     """
     _datastreamClass = RdfDatastreamObject
 
@@ -559,8 +570,13 @@ class FileDatastreamObject(DatastreamObject):
 
     _content_modified = False
 
-    def _raw_content(self):  
-        return self.content     # return the file itself (handled by upload/save API calls)
+    def _raw_content(self):
+        # return the content in the format needed to save to Fedora
+        # if content has not been loaded, return None (no changes)
+        if self._content is None:
+            return None
+        else:
+            return self.content     # return the file itself (handled by upload/save API calls)
 
     def _convert_content(self, data, url):
         # for now, using stringio to return a file-like object
@@ -682,6 +698,9 @@ class DigitalObject(object):
             # in this class. Barring clever hanky-panky, it should be
             # reliably callable.
             pid = self.get_default_pid
+        elif isinstance(pid, basestring) and \
+                 pid.startswith('info:fedora/'): # passed a uri
+            pid = pid[len('info:fedora/'):]
 
         # callable(pid) signals a function to call to obtain a pid if and
         # when one is needed
@@ -933,11 +952,11 @@ class DigitalObject(object):
         # - list of datastreams that should be saved
         to_save = [ds for ds, dsobj in self.dscache.iteritems() if dsobj.isModified()]
         # - track successfully saved datastreams, in case roll-back is necessary
-        saved = []        
+        saved = []
         # save modified datastreams
         for ds in to_save:
             if self.dscache[ds].save(logMessage):
-                    saved.append(ds)
+                saved.append(ds)
             else:
                 # save datastream failed - back out any changes that have been made
                 cleaned = self._undo_save(saved, 
@@ -1240,12 +1259,83 @@ class DigitalObject(object):
             if "RELS-EXT" not in self.ds_list.keys():
                 return False
             else:
-                raise Exception(e)            
+                raise
             
         st = (self.uriref, modelns.hasModel, URIRef(model))
         return st in rels
 
+    def get_models(self):
+        """
+        Get a list of content models the object subscribes to.
+        """
+        try:
+            rels = self.rels_ext.content
+        except RequestFailed, e:
+            # if rels-ext can't be retrieved, confirm this object does not have a RELS-EXT
+            # (in which case, it does not have any content models)
+            if "RELS-EXT" not in self.ds_list.keys():
+                return []
+            else:
+                raise
+            
+        return list(rels.objects(self.uriref, modelns.hasModel))
 
+    def index_data(self):
+        '''Generate and return a dictionary of default fields to be
+        indexed for searching (e.g., in Solr).  Includes top-level
+        object properties, Content Model URIs, and Dublin Core
+        fields.
+
+        This method is intended to be customized and extended in order
+        to easily modify the fields that should be indexed for any
+        particular type of object in any project; data returned from
+        this method should be serializable as JSON (the current
+        implementation uses :mod:`django.utils.simplejson`).
+        
+        This method was designed for use with :mod:`eulfedora.indexdata`.
+        '''
+        index_data = {
+            # TODO: select and standardize solr index field names for object properties
+            'pid': self.pid,	
+            'label': self.label,
+            'owner': self.owner,
+            'state': self.state,
+            'content_model': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
+            }
+
+        # date created/modified won't be set unless the object actually exists in Fedora
+        # (probably the case for anything being indexed, except in tests)
+        if self.exists:
+            index_data.update({
+                # last_modified and created are configured as date type in sample solr Schema
+                # using isoformat here so they can be serialized via JSON
+                'last_modified': self.modified.isoformat(),	
+                'created': self.created.isoformat()
+            })
+            
+        index_data.update(self.index_data_descriptive())
+        # TODO: perhaps add something similar for rels-ext and common/all fedora rels? (membership/collection/etc)
+        
+        return index_data
+
+    def index_data_descriptive(self):
+        '''Descriptive data to be included in :meth:`index_data`
+        output.  This implementation includes all Dublin Core fields,
+        but should be extended or overridden as appropriate for custom
+        :class:`~eulfedora.models.DigitalObject` classes.'''
+
+        dc_fields = ['title', 'contributor', 'coverage', 'creator', 'date', 'description',
+                     'format', 'identifier', 'language', 'publisher', 'relation',
+                     'rights', 'source', 'subject', 'type']
+        dc_data = {}
+        for field in dc_fields:
+            list_field = getattr(self.dc.content, '%s_list' % field)
+            if list_field:
+                # convert xmlmap lists to straight lists so simplejson can handle them
+                dc_data[field] = list(list_field)
+        return dc_data
+
+        
 class ContentModel(DigitalObject):
     """Fedora CModel object"""
 

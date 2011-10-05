@@ -7,13 +7,13 @@
 DigitalObject
 -------------
 
-.. autoclass:: eulfedora.models.DigitalObject
+.. autoclass:: DigitalObject
     :members:
 
 Custom Exception
 ^^^^^^^^^^^^^^^^
 
-.. autoclass:: eulfedora.models.DigitalObjectSaveFailure
+.. autoclass:: DigitalObjectSaveFailure
     :members:
 
 Datastream
@@ -22,24 +22,29 @@ Datastream
 Datastream Descriptors
 ^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: eulfedora.models.Datastream
+.. autoclass:: Datastream
     :members:
 
-.. autoclass:: eulfedora.models.XmlDatastream
+.. autoclass:: XmlDatastream
     :members:
 
-.. autoclass:: eulfedora.models.RdfDatastream
+.. autoclass:: RdfDatastream
+    :members:
+
+.. autoclass:: FileDatastream
     :members:
 
 Datastream Objects
 ^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: eulfedora.models.DatastreamObject
+.. autoclass:: DatastreamObject
     :members:
 
-.. autoclass:: eulfedora.models.XmlDatastreamObject
+.. autoclass:: XmlDatastreamObject
     :members:
 
-.. autoclass:: eulfedora.models.RdfDatastreamObject
+.. autoclass:: RdfDatastreamObject
     :members:
 
+.. autoclass:: FileDatastreamObject
+    :members:
