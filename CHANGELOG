@@ -5,8 +5,8 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
-0.17 (preliminary)
-------------------
+0.17.0 
+------
 
 * Previously, several of the REST API calls in
   :class:`eulfedora.api.REST_API` suppressed errors and only returned
