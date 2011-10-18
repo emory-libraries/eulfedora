@@ -44,8 +44,23 @@ class FedoraTestCase(unittest.TestCase):
         self.fedora_fixtures_ingested = []
         self.pidspace = FEDORA_PIDSPACE
 
-    def setUp(self):
         self.repo = Repository(FEDORA_ROOT, FEDORA_USER, FEDORA_PASSWORD)
+
+        # fixture cleanup happens in tearDown, which doesn't always run
+        # if a test fails - clean up stale test objects from a previous run here
+        stale_objects = list(self.repo.find_objects(pid__contains='%s:*' % self.pidspace))
+        if stale_objects:
+            print 'Removing %d stale test object(s) in pidspase %s' % (len(stale_objects),
+                                                                       self.pidspace)
+            for obj in stale_objects:
+                try:
+                    self.repo.purge_object(obj.pid)
+                except RequestFailed as rf:
+                    logger.warn('Error purging stale test object %s (TestCase init): %s' % \
+                                (obj.pid, rf))
+                
+
+    def setUp(self):
         # NOTE: queries require RI flush=True or test objects will not show up in RI
         self.repo.risearch.RISEARCH_FLUSH_ON_QUERY = True
         self.opener = self.repo.opener
