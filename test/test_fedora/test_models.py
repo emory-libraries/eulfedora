@@ -16,9 +16,10 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.tz import tzutc
 import logging
+from lxml import etree
 import os
 from rdflib import URIRef, Graph as RdfGraph, XSD, Literal
 from rdflib.namespace import Namespace
@@ -26,14 +27,16 @@ import tempfile
 
 from eulfedora import models
 from eulfedora.rdfns import relsext, model as modelns
-from eulfedora.util import RequestFailed
-from eulfedora.xml import ObjectDatastream
+from eulfedora.util import RequestFailed, fedoratime_to_datetime
+from eulfedora.xml import ObjectDatastream, FEDORA_MANAGE_NS
 from eulxml.xmlmap.dc import DublinCore
 
 from test_fedora.base import FedoraTestCase, FEDORA_PIDSPACE, FIXTURE_ROOT
 from testcore import main
 
 logger = logging.getLogger(__name__)
+
+ONE_SEC = timedelta(seconds=1)
 
 class MyDigitalObject(models.DigitalObject):
     CONTENT_MODELS = ['info:fedora/%s:ExampleCModel' % FEDORA_PIDSPACE,
@@ -83,9 +86,6 @@ class TestDatastreams(FedoraTestCase):
     fixtures = ['object-with-pid.foxml']
     pidspace = FEDORA_PIDSPACE
 
-    # save date-time before fixtures are created in fedora
-    now = datetime.now(tzutc())   
-
     def setUp(self):
         super(TestDatastreams, self).setUp()
         self.pid = self.fedora_fixtures_ingested[-1] # get the pid for the last object
@@ -93,6 +93,14 @@ class TestDatastreams(FedoraTestCase):
 
         # add a text datastream to the current test object
         _add_text_datastream(self.obj)
+
+        # get fixture ingest time from the server (the hard way) for testing
+        dsprofile_data, url = self.obj.api.getDatastream(self.pid, "DC")
+        dsprofile_node = etree.fromstring(dsprofile_data, base_url=url)
+        created_s = dsprofile_node.xpath('string(m:dsCreateDate)',
+                                         namespaces={'m': FEDORA_MANAGE_NS})
+        self.ingest_time = fedoratime_to_datetime(created_s)
+
 
     def test_get_ds_content(self):
         dc = self.obj.dc.content
@@ -110,7 +118,11 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.dc.state, "A")
         self.assertEqual(self.obj.dc.versionable, True) 
         self.assertEqual(self.obj.dc.control_group, "X")
-        self.assert_(self.now < self.obj.dc.created)
+        # there may be micro-second variation between these two
+        # ingest/creation times, but they should probably be less than
+        # a second apart        
+        self.assertAlmostEqual(self.ingest_time, self.obj.dc.created,
+                               delta=ONE_SEC)
         # short-cut to datastream size
         self.assertEqual(self.obj.dc.info.size, self.obj.dc.size)
 
@@ -119,7 +131,8 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.text.state, "A")
         self.assertEqual(self.obj.text.versionable, False)
         self.assertEqual(self.obj.text.control_group, "M")
-        self.assert_(self.now < self.obj.text.created)
+        self.assertAlmostEqual(self.ingest_time, self.obj.text.created,
+                               delta=ONE_SEC)
 
     def test_savedatastream(self):
         new_text = "Here is some totally new text content."
@@ -466,14 +479,19 @@ class TestDigitalObject(FedoraTestCase):
     fixtures = ['object-with-pid.foxml']
     pidspace = FEDORA_PIDSPACE
 
-    # save date-time before fixtures are created in fedora
-    now = datetime.now(tzutc())   
-
     def setUp(self):
         super(TestDigitalObject, self).setUp()
         self.pid = self.fedora_fixtures_ingested[-1] # get the pid for the last object
         self.obj = MyDigitalObject(self.api, self.pid)
         _add_text_datastream(self.obj)
+
+        # get fixture ingest time from the server (the hard way) for testing
+        dsprofile_data, url = self.obj.api.getDatastream(self.pid, "DC")
+        dsprofile_node = etree.fromstring(dsprofile_data, base_url=url)
+        created_s = dsprofile_node.xpath('string(m:dsCreateDate)',
+                                         namespaces={'m': FEDORA_MANAGE_NS})
+        self.ingest_time = fedoratime_to_datetime(created_s)
+
 
     def test_properties(self):
         self.assertEqual(self.pid, self.obj.pid)
@@ -484,8 +502,9 @@ class TestDigitalObject(FedoraTestCase):
         self.assertEqual(self.obj.label, "A partially-prepared test object")
         self.assertEqual(self.obj.owner, "tester")
         self.assertEqual(self.obj.state, "A")
-        self.assert_(self.now < self.obj.created)
-        self.assert_(self.now < self.obj.modified)
+        self.assertAlmostEqual(self.ingest_time, self.obj.created,
+                               delta=ONE_SEC)
+        self.assert_(self.ingest_time < self.obj.modified)
 
     def test_save_object_info(self):
         self.obj.label = "An updated test object"
@@ -622,7 +641,7 @@ class TestDigitalObject(FedoraTestCase):
     def test_history(self):
         self.assert_(isinstance(self.obj.history, list))
         self.assert_(isinstance(self.obj.history[0], datetime))
-        self.assert_(self.now < self.obj.history[0])
+        self.assertEqual(self.ingest_time, self.obj.history[0])
 
     def test_methods(self):
         methods = self.obj.methods

@@ -582,16 +582,19 @@ class TestAPI_M(FedoraTestCase):
     rel_isMemberOf = "info:fedora/fedora-system:def/relations-external#isMemberOf"
     rel_owner = "info:fedora/fedora-system:def/relations-external#owner"
 
-    # save date-time before fixtures are created in fedora
-    # getting time here instead of setUp should give a little more leeway if server times are not synced
-    now = datetime.now(tzutc())   
-
     def setUp(self):
         super(TestAPI_M, self).setUp()
         self.pid = self.fedora_fixtures_ingested[0]
         self.api_m = API_M(self.opener)
         self.opener = AuthorizingServerConnection(FEDORA_ROOT_NONSSL, FEDORA_USER, FEDORA_PASSWORD)
         self.rest_api = REST_API(self.opener)
+
+        # get fixture ingest time from the server the hard way for testing
+        dsprofile_data, url = self.rest_api.getDatastream(self.pid, "DC")
+        dsprofile_node = etree.fromstring(dsprofile_data, base_url=url)
+        created_s = dsprofile_node.xpath('string(m:dsCreateDate)',
+                                         namespaces={'m': FEDORA_MANAGE_NS})
+        self.ingest_time = fedoratime_to_datetime(created_s)
         
     def test_addRelationship(self):
         # rel to resource
@@ -661,7 +664,7 @@ class TestAPI_M(FedoraTestCase):
         self.assertTrue(dc_info.versionable)
         self.assertEqual("text/xml", dc_info.MIMEType)
         # formatURI not set in test fixture
-        self.assert_(self.now < dc_info.createDate)     # created after 'now' in setup
+        self.assertEqual(self.ingest_time, dc_info.createDate) 
         self.assert_(dc_info.size) # size should be non-zero - number comparison not reliable
         self.assertEqual('A', dc_info.state) 
         # location, checksumType, and checksum not set in current fixture
