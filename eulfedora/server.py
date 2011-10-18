@@ -174,7 +174,8 @@ class Repository(object):
         if root is None:
             raise Exception('Could not determine Fedora root url from django settings or parameter')
 
-        logger.debug("Connecting to fedora at %s as %s" % (root, username))
+        logger.debug("Connecting to fedora at %s %s" % (root,
+                      'as %s' % username if username else '(no user credentials)'))
         self.opener = AuthorizingServerConnection(root, username, password)
         self.api = ApiFacade(self.opener)
         self.fedora_root = self.opener.base_url
