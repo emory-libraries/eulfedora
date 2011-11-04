@@ -733,7 +733,7 @@ class ResourceIndex(HTTP_API_Base):
     def find_statements(self, query, language='spo', type='triples', flush=None):
         """
         Run a query in a format supported by the Fedora Resource Index (e.g., SPO
-        os Sparql) and return the results.
+        or Sparql) and return the results.
 
         :param query: query as a string
         :param language: query language to use; defaults to 'spo'
@@ -742,7 +742,6 @@ class ResourceIndex(HTTP_API_Base):
         :rtype: :class:`rdflib.ConjunctiveGraph` when type is ``triples``; list
             of dictionaries (keys based on return fields) when type is ``tuples``
         """
-        risearch_url = 'risearch?'
         http_args = {
             'type': type,
             'lang': language,
@@ -755,11 +754,36 @@ class ResourceIndex(HTTP_API_Base):
         # else - error/exception ?
         http_args['format'] = format
 
+        return self._query(format, http_args, flush)
+
+    def count_statements(self, query, language='spo', type='triples',
+                         flush=None):
+        """
+        Run a query in a format supported by the Fedora Resource Index
+        (e.g., SPO or Sparql) and return the count of the results.
+
+        :param query: query as a string
+        :param language: query language to use; defaults to 'spo'
+        :param flush: flush results to get recent changes; defaults to False
+        :rtype: integer
+        """
+        format = 'count'
+        http_args = {
+            'type': type,
+            'lang': language,
+            'query': query,
+            'format': format
+        }
+        return self._query(format, http_args, flush)
+
+
+    def _query(self, format, http_args, flush=None):
         # if flush parameter was not specified, use class setting
         if flush is None:
             flush = self.RISEARCH_FLUSH_ON_QUERY
         http_args['flush'] = 'true' if flush else 'false'
-
+        
+        risearch_url = 'risearch?'
         rel_url = risearch_url + urlencode(http_args)
         try:
             data, abs_url = self.read(rel_url)
@@ -769,7 +793,11 @@ class ResourceIndex(HTTP_API_Base):
             elif format == 'CSV':
                 # reader expects a file or a list; for now, just split the string
                 # TODO: when we can return url contents as file-like objects, use that
-                return csv.DictReader(data.split('\n'))     
+                return csv.DictReader(data.split('\n'))
+            elif format == 'count':
+                return int(data)
+            
+            # should we return the response as fallback? 
         except RequestFailed, f:
             if 'Unrecognized query language' in f.detail:
                 raise UnrecognizedQueryLanguage(f.detail)

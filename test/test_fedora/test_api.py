@@ -753,6 +753,12 @@ class TestResourceIndex(FedoraTestCase):
         self.assertRaises(UnrecognizedQueryLanguage,  self.risearch.find_statements,
                           '* * *', language='bogus')
 
+    def test_count_statements(self):
+        # query something unique to our test objects
+        q = '* <fedora-rels-ext:isMemberOf> <%s>' % self.related.uri
+        total = self.risearch.count_statements(q)
+        self.assertEqual(1, total)
+
 
 if __name__ == '__main__':
     main()
