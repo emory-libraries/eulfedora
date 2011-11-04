@@ -50,7 +50,7 @@ class FedoraTestCase(unittest.TestCase):
         # if a test fails - clean up stale test objects from a previous run here
         stale_objects = list(self.repo.find_objects(pid__contains='%s:*' % self.pidspace))
         if stale_objects:
-            print 'Removing %d stale test object(s) in pidspase %s' % (len(stale_objects),
+            print 'Removing %d stale test object(s) in pidspace %s' % (len(stale_objects),
                                                                        self.pidspace)
             for obj in stale_objects:
                 try:
