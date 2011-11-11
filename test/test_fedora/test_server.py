@@ -21,7 +21,7 @@ from datetime import date
 from test_fedora.base import FedoraTestCase, load_fixture_data, FEDORA_ROOT_NONSSL, FEDORA_PIDSPACE
 from eulfedora.rdfns import model as modelns
 from eulfedora.models import DigitalObject
-from eulfedora.server import Repository, UnrecognizedQueryLanguage
+from eulfedora.server import Repository
 
 from testcore import main
 
@@ -128,7 +128,7 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
 
         # fielded search
         objects = list(self.repo.find_objects(owner='tester', title='partially-prepared',
-                        description='more data'))
+                        description='more data', pid="%s:*" % FEDORA_PIDSPACE))
         # should find test object
         self.assertEqual(objects[0].pid, pid)
         self.assertEqual(1, len(objects))
@@ -196,68 +196,6 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
 
 
      
-class TestResourceIndex(FedoraTestCase):
-    fixtures = ['object-with-pid.foxml']
-    pidspace = FEDORA_PIDSPACE
-    # relationship predicates for testing
-    rel_isMemberOf = "info:fedora/fedora-system:def/relations-external#isMemberOf"
-    rel_owner = "info:fedora/fedora-system:def/relations-external#owner"
-
-    def setUp(self):
-        super(TestResourceIndex, self).setUp()
-        self.risearch = self.repo.risearch
-        
-        pid = self.fedora_fixtures_ingested[0]
-        self.object = self.repo.get_object(pid)
-        # add some rels to query
-        self.cmodel = DigitalObject(self.api, "control:TestObject")
-        self.object.add_relationship(modelns.hasModel, self.cmodel)
-        self.related = DigitalObject(self.api, "foo:123")
-        self.object.add_relationship(self.rel_isMemberOf, self.related)
-        self.object.add_relationship(self.rel_owner, "testuser")
-
-    def testGetPredicates(self):
-        # get all predicates for test object
-        predicates = list(self.risearch.get_predicates(self.object.uri, None))        
-        self.assertTrue(unicode(modelns.hasModel) in predicates)
-        self.assertTrue(self.rel_isMemberOf in predicates)
-        self.assertTrue(self.rel_owner in predicates)
-        # resource
-        predicates = list(self.risearch.get_predicates(self.object.uri, self.related.uri))        
-        self.assertEqual(predicates[0], self.rel_isMemberOf)
-        self.assertEqual(len(predicates), 1)
-        # literal
-        predicates = list(self.risearch.get_predicates(self.object.uri, "'testuser'"))
-        self.assertEqual(predicates[0], self.rel_owner)
-        self.assertEqual(len(predicates), 1)
-
-    def testGetSubjects(self):
-        subjects = list(self.risearch.get_subjects(self.rel_isMemberOf, self.related.uri))
-        self.assertEqual(subjects[0], self.object.uri)
-        self.assertEqual(len(subjects), 1)
-
-        # no match
-        subjects = list(self.risearch.get_subjects(self.rel_isMemberOf, self.object.uri))
-        self.assertEqual(len(subjects), 0)
-
-    def testGetObjects(self):
-        objects =  list(self.risearch.get_objects(self.object.uri, modelns.hasModel))
-        self.assert_(self.cmodel.uri in objects)
-        # also includes generic fedora-object cmodel
-
-    def test_sparql(self):
-        # simple sparql to retrieve our test object
-        query = '''SELECT ?obj
-        WHERE {
-            ?obj <%s> "%s"
-        }
-        ''' % (self.rel_owner, 'testuser')
-        objects = list(self.risearch.sparql_query(query))
-        self.assert_({'obj': self.object.uri} in objects)
-
-    def test_custom_errors(self):
-        self.assertRaises(UnrecognizedQueryLanguage,  self.risearch.find_statements,
-                          '* * *', language='bogus')
 
 if __name__ == '__main__':
     main()

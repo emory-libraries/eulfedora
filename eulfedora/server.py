@@ -14,8 +14,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-""":
-
+"""
 :class:`eulfedora.server.Repository` has the capability to
 automatically use connection configuration parameters pulled from
 Django settings, when available, but it can also be used without Django.
@@ -54,19 +53,19 @@ the configured Fedora credentials should use the following settings::
     FEDORA_TEST_USER = 'testuser'
     FEDORA_TEST_PASSWORD = 'testpassword'
 
+----
 """
 
 
-import csv
 from urllib import urlencode
 import logging
 import warnings
 
 from eulfedora.rdfns import model as modelns
-from eulfedora.api import HTTP_API_Base, ApiFacade
+from eulfedora.api import HTTP_API_Base, ApiFacade, ResourceIndex
 from eulfedora.models import DigitalObject
 from eulfedora.util import AuthorizingServerConnection, \
-     RelativeServerConnection, parse_rdf, parse_xml_object, RequestFailed
+     RelativeServerConnection, parse_xml_object, RequestFailed
 from eulfedora.xml import SearchResults, NewPids
 
 logger = logging.getLogger(__name__)
@@ -124,6 +123,7 @@ class Repository(object):
 
     default_object_type = DigitalObject
     "Default type to use for methods that return fedora objects - :class:`DigitalObject`"
+    default_pidspace = None
 
     search_fields = ['pid', 'label', 'state', 'ownerId', 'cDate', 'mDate',
     'dcmDate', 'title', 'creator', 'subject', 'description', 'publisher',
@@ -149,7 +149,7 @@ class Repository(object):
                 init_pooled_connection()
             root = _connection
 
-            # if username and password are not set, attempt to full from django conf
+            # if username and password are not set, attempt to pull from django conf
             if username is None and password is None:
                 try:
                     from django.conf import settings
@@ -185,7 +185,7 @@ class Repository(object):
 
     @property
     def risearch(self):
-        "instance of :class:`ResourceIndex`, with the same root url and credentials"
+        "instance of :class:`eulfedora.api.ResourceIndex`, with the same root url and credentials"
         if self._risearch is None:
             self._risearch = ResourceIndex(self.opener)
         return self._risearch
@@ -211,6 +211,9 @@ class Repository(object):
         kwargs = {}
         if namespace:
             kwargs['namespace'] = namespace
+        elif self.default_pidspace:
+            kwargs['namespace'] = self.default_pidspace
+            
         if count:
             kwargs['numPIDs'] = count
         data, url = self.api.getNextPID(**kwargs)
@@ -283,9 +286,9 @@ class Repository(object):
             if create is None:
                 create = False
 
-        return type(self.api, pid, create)
+        return type(self.api, pid, create, default_pidspace=self.default_pidspace)
 
-    def infer_object_subtype(self, api, pid=None, create=False):
+    def infer_object_subtype(self, api, pid=None, create=False, default_pidspace=None):
         """Construct a DigitalObject or appropriate subclass, inferring the
         appropriate subtype using :meth:`best_subtype_for_object`. Note that
         this method signature has been selected to match the
@@ -296,7 +299,7 @@ class Repository(object):
 
         See also: :class:`TypeInferringRepository`
         """
-        obj = DigitalObject(api, pid, create)
+        obj = DigitalObject(api, pid, create, default_pidspace)
         if create:
             return obj
         if not obj.exists:
@@ -452,138 +455,5 @@ class TypeInferringRepository(Repository):
 FEDORA_PASSWORD_SESSION_KEY = 'eulfedora_password'
 
 
-
-
-class UnrecognizedQueryLanguage(EnvironmentError):
-    pass
-
-class ResourceIndex(HTTP_API_Base):
-    "Python object for accessing Fedora's Resource Index."
-
-    RISEARCH_FLUSH_ON_QUERY = False
-    """Specify whether or not RI search queries should specify flush=true to obtain
-    the most recent results.  If flush is specified to the query method, that
-    takes precedence.
-
-    Irrelevant if Fedora RIsearch is configured with syncUpdates = True.
-    """
-
-    def find_statements(self, query, language='spo', type='triples', flush=None):
-        """
-        Run a query in a format supported by the Fedora Resource Index (e.g., SPO
-        os Sparql) and return the results.
-
-        :param query: query as a string
-        :param language: query language to use; defaults to 'spo'
-        :param type: type of query - tuples or triples; defaults to 'triples'
-        :param flush: flush results to get recent changes; defaults to False
-        :rtype: :class:`rdflib.ConjunctiveGraph` when type is ``triples``; list
-            of dictionaries (keys based on return fields) when type is ``tuples``
-        """
-        risearch_url = 'risearch?'
-        http_args = {
-            'type': type,
-            'lang': language,
-            'query': query,
-        }
-        if type == 'triples':
-            format = 'N-Triples'
-        elif type == 'tuples':
-            format = 'CSV'
-        # else - error/exception ?
-        http_args['format'] = format
-
-        # if flush parameter was not specified, use class setting
-        if flush is None:
-            flush = self.RISEARCH_FLUSH_ON_QUERY
-        http_args['flush'] = 'true' if flush else 'false'
-
-        rel_url = risearch_url + urlencode(http_args)
-        try:
-            data, abs_url = self.read(rel_url)
-            # parse the result according to requested format
-            if format == 'N-Triples':
-                return parse_rdf(data, abs_url, format='n3')
-            elif format == 'CSV':
-                # reader expects a file or a list; for now, just split the string
-                # TODO: when we can return url contents as file-like objects, use that
-                return csv.DictReader(data.split('\n'))     
-        except RequestFailed, f:
-            if 'Unrecognized query language' in f.detail:
-                raise UnrecognizedQueryLanguage(f.detail)
-            # could also see 'Unsupported output format' 
-            else:
-                raise f
-        
-
-    def spo_search(self, subject=None, predicate=None, object=None):
-        """
-        Create and run a subject-predicate-object (SPO) search.  Any search terms
-        that are not specified will be replaced as a wildcard in the query.
-
-        :param subject: optional subject to search
-        :param predicate: optional predicate to search
-        :param object: optional object to search
-        :rtype: :class:`rdflib.ConjunctiveGraph`
-        """
-        spo_query = '%s %s %s' % \
-                (self.spoencode(subject), self.spoencode(predicate), self.spoencode(object))
-        return self.find_statements(spo_query)
-
-    def spoencode(self, val):
-        """
-        Encode search terms for an SPO query.
-
-        :param val: string to be encoded
-        :rtype: string
-        """
-        if val is None:
-            return '*'
-        elif "'" in val:    # FIXME: need better handling for literal strings
-            return val
-        else:
-            return '<%s>' % (val,)
-
-    def get_subjects(self, predicate, object):
-        """
-        Search for all subjects related to the specified predicate and object.
-
-        :param predicate:
-        :param object:
-        :rtype: generator of RDF statements
-        """
-        for statement in self.spo_search(predicate=predicate, object=object):
-            yield str(statement[0])
-
-    def get_predicates(self, subject, object):
-        """
-        Search for all subjects related to the specified subject and object.
-
-        :param subject:
-        :param object:
-        :rtype: generator of RDF statements
-        """
-        for statement in self.spo_search(subject=subject, object=object):
-            yield str(statement[1])
-
-    def get_objects(self, subject, predicate):
-        """
-        Search for all subjects related to the specified subject and predicate.
-
-        :param subject:
-        :param object:
-        :rtype: generator of RDF statements
-        """
-        for statement in self.spo_search(subject=subject, predicate=predicate):
-            yield str(statement[2])
-
-    def sparql_query(self, query, flush=None):
-        """
-        Run a Sparql query.
-
-        :param query: sparql query string
-        :rtype: list of dictionary
-        """
-        return self.find_statements(query, language='sparql', type='tuples', flush=flush)
 
 

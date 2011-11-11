@@ -40,6 +40,13 @@ setup(
         'soaplib==0.8.1',
     ],
 
+    # indexdata utils are optional. They include things like PDF text stripping (pyPdf).
+    # Be sure to include the below in your own pip dependencies file if you need to use
+    # the built in indexer utility support.
+    extras_require = {
+        'indexdata_util': ['pyPdf',],
+    },
+
     description='Idiomatic access to digital objects in a Fedora Commons repository',
     long_description=LONG_DESCRIPTION,
     classifiers=CLASSIFIERS,

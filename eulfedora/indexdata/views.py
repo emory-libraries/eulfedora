@@ -26,6 +26,12 @@ Projects that use this module should include the following settings in their
     SOLR_SERVER_URL = "http://localhost:8983/solr/"
     # IPs that will be allowed to access the indexdata views
     EUL_INDEXER_ALLOWED_IPS = "ANY" #Or put in a list such as ("127.0.0.1", "127.0.0.2")
+    
+    # OPTIONAL SETTING: A list of lists of content models you want this application to index.
+    # If this setting is missing, the code will automatically detect all content
+    # models the application is using. In this example, it will index items with BOTH
+    # content-model_1 and content-model_2 as well as those that have just content-model_3.
+    EUL_INDEXER_CONTENT_MODELS = "[['content-model_1', 'content-model_2'], ['content-model_3']]"
 
 To use these views in your :mod:`eulfedora` -based application, make
 sure that ``eulfedora`` is included in INSTALLED_APPS in your ``settings.py``::
@@ -87,15 +93,18 @@ def index_config(request):
     if _permission_denied_check(request):
         return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
 
-    # Generate a list of lists of content models (one list for each defined type)
-    content_list = []
-    for cls in DigitalObject.defined_types.itervalues():
-        # by default, Fedora system content models are excluded
-        content_group = [model for model in getattr(cls, 'CONTENT_MODELS', [])
-                         if not model.startswith('info:fedora/fedora-system:')]
-        # if the group of content models is not empty, add it to the list
-        if content_group:
-            content_list.append(content_group)
+    content_list = getattr(settings, 'EUL_INDEXER_CONTENT_MODELS', [])
+
+    # Generate an automatic list of lists of content models (one list for each defined type)
+    # if no content model settings exist
+    if not content_list:
+        for cls in DigitalObject.defined_types.itervalues():
+            # by default, Fedora system content models are excluded
+            content_group = [model for model in getattr(cls, 'CONTENT_MODELS', [])
+                             if not model.startswith('info:fedora/fedora-system:')]
+            # if the group of content models is not empty, add it to the list
+            if content_group:
+                content_list.append(content_group)
 
     response = {
         'CONTENT_MODELS': content_list,

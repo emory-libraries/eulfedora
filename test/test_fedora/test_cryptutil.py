@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # file test_fedora/test_cryptutil.py
 # 
 #   Copyright 2011 Emory University Libraries
@@ -14,7 +16,6 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-#!/usr/bin/env python
 
 import unittest
 

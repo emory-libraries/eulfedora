@@ -18,13 +18,14 @@ import cStringIO
 import hashlib
 import logging
 
-from rdflib import URIRef, Graph as RdfGraph
+from rdflib import URIRef, Graph as RdfGraph, Literal
 
 from lxml import etree
 from lxml.builder import ElementMaker
 
 from eulxml import xmlmap
-from eulfedora.rdfns import model as modelns
+from eulfedora.api import ResourceIndex
+from eulfedora.rdfns import model as modelns, relsext as relsextns, fedora_rels
 from eulfedora.util import parse_xml_object, parse_rdf, RequestFailed, datetime_to_fedoratime
 from eulfedora.xml import ObjectDatastreams, ObjectProfile, DatastreamProfile, \
     NewPids, ObjectHistory, ObjectMethods, DsCompositeModel
@@ -286,17 +287,30 @@ class DatastreamObject(object):
             else:
                 modify_opts['mimeType'] = self.defaults['mimetype']
 
-        if not self.versionable:
-            self._backup()
-        
-        if(self.exists):    
+        if self.exists:
+            # if not versionable, make a backup to back out changes if object save fails
+            if not self.versionable:
+                self._backup()
+                
+            # if this datastream already exists, use modifyDatastream API call
             success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id, content=data,
                     logMessage=logmessage, **modify_opts)
         else:
-            success, msg = self.obj.api.addDatastream(self.obj.pid, self.id, controlGroup='M', content=data, logMessage=logmessage, **modify_opts)
-            #If added successfully, set the exists flag to true.
+            # if this datastream does not yet exist, add it
+            success, msg = self.obj.api.addDatastream(self.obj.pid, self.id,
+                    controlGroup=self.defaults['control_group'], content=data,
+                    logMessage=logmessage, **modify_opts)
+
+            # clean-up required for object info after adding a new datastream
             if success:
+                # update exists flag - if add succeeded, the datastrea exists now
                 self.exists = True
+                # if the datastream content is a file-like object, clear it out
+                # (we don't want to attempt to save the current file contents again,
+                # particularly since the file is not guaranteed to still be open)
+                if hasattr(data, 'read'):
+                    self._content = None
+                    self._content_modified = False      
  
         if success:
             # update modification indicators
@@ -336,7 +350,8 @@ class DatastreamObject(object):
             # and purge the most recent version 
             history = self.obj.api.getDatastreamHistory(self.obj.pid, self.id)
             last_save = history.datastreams[0].createDate   # fedora returns with most recent first
-            success, timestamps = self.obj.api.purgeDatastream(self.obj.pid, self.id, datetime_to_fedoratime(last_save),
+            success, timestamps = self.obj.api.purgeDatastream(self.obj.pid, self.id,
+                                                datetime_to_fedoratime(last_save),
                                                 logMessage=logMessage)
             return success
         else:
@@ -349,7 +364,22 @@ class DatastreamObject(object):
                 args.update(self._info_backup)
             success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id,
                             logMessage=logMessage, **args)
-            return success                   
+            return success
+
+    def get_chunked_content(self, chunksize=4096):
+        '''Generator that returns the datastream content in chunks, so
+        larger datastreams can be used without reading the entire
+        contents into memory.'''
+        # get the datastream dissemination, but return the actual http response 
+        response = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
+                                                           return_http_response=True)
+        # read and yield the response in chunks
+        while True:
+            chunk = response.read(chunksize)
+            if not chunk:
+                return
+            yield chunk
+
 
 class Datastream(object):
     """Datastream descriptor to simplify configuration and access to datastreams
@@ -665,7 +695,13 @@ class DigitalObject(object):
     """Default namespace to use when generating new PIDs in
         :meth:`get_default_pid` (by default, calls Fedora getNextPid,
         which will use Fedora-configured namespace if default_pidspace
-        is not set)."""        
+        is not set)."""
+
+    OWNER_ID_SEPARATOR = ','
+    '''Owner ID separator for multiple owners.  Should match the
+    OWNER-ID-SEPARATOR configured in Fedora.
+    For more detail, see https://jira.duraspace.org/browse/FCREPO-82
+    '''
 
     dc = XmlDatastream("DC", "Dublin Core", DublinCore, defaults={
             'control_group': 'X',
@@ -676,10 +712,18 @@ class DigitalObject(object):
             'format': 'info:fedora/fedora-system:FedoraRELSExt-1.0',
         })
 
-    def __init__(self, api, pid=None, create=False):
+    def __init__(self, api, pid=None, create=False, default_pidspace=None):
         self.api = api
         self.dscache = {}       # accessed by DatastreamDescriptor to store and cache datastreams
+        self._risearch = None
 
+        if default_pidspace:
+            try:
+                self.default_pidspace = default_pidspace
+            except AttributeError:
+                # allow extending classes to make default_pidspace a custom property,
+                # but warn in case of conflict
+                logger.warn("Failed to set requested default_pidspace %s" % default_pidspace)
         # cache object profile, track if it is modified and needs to be saved
         self._info = None
         self.info_modified = False
@@ -722,6 +766,28 @@ class DigitalObject(object):
         for cmodel in getattr(self, 'CONTENT_MODELS', ()):
             self.rels_ext.content.add((self.uriref, modelns.hasModel,
                                        URIRef(cmodel)))
+
+    @property
+    def risearch(self):
+        "Instance of :class:`eulfedora.api.ResourceIndex`, with the same root url and credentials"
+        if self._risearch is None:
+            self._risearch = ResourceIndex(self.api.opener)
+        return self._risearch
+
+    def get_object(self, pid, type=None):
+        '''Initialize and return a new
+        :class:`~eulfedora.models.DigitalObject` instance from the same
+        repository, passing along the connection credentials in use by
+        the current object.  If type is not specified, the current
+        DigitalObject class will be used.
+
+        :param pid: pid of the object to return
+        :param type: (optional) :class:`~eulfedora.models.DigitalObject`
+           type to initialize and return
+        '''
+        if type is None:
+            type = self.__class__
+        return type(self.api, pid)
 
     def __str__(self):
         if callable(self.pid):
@@ -827,6 +893,12 @@ class DigitalObject(object):
         self.info.owner = val
         self.info_modified = True
     owner = property(_get_owner, _set_owner, None, "object owner")
+
+    @property
+    def owners(self):
+        '''Read-only list of object owners, separated by the configured
+        :attr:`OWNER_ID_SEPARATOR`, with whitspace stripped.'''
+        return [o.strip() for o in self.owner.split(self.OWNER_ID_SEPARATOR)]
 
     def _get_state(self):
         return self.info.state
@@ -955,7 +1027,15 @@ class DigitalObject(object):
         saved = []
         # save modified datastreams
         for ds in to_save:
-            if self.dscache[ds].save(logMessage):
+            # in eulfedora 0.16 and before, add/modify datastream returned True/False
+            # in later versions, it throws an exception 
+            try:
+                ds_saved = self.dscache[ds].save(logMessage)
+            except RequestFailed:
+                logger.error('Failed to save %s/%s' % (self.pid, ds))
+                ds_saved = False
+                
+            if ds_saved:
                 saved.append(ds)
             else:
                 # save datastream failed - back out any changes that have been made
@@ -969,7 +1049,13 @@ class DigitalObject(object):
 
         # save object profile (if needed) after all modified datastreams have been successfully saved
         if self.info_modified:
-            if not self._saveProfile(logMessage):
+            try:
+                profile_saved = self._saveProfile(logMessage)
+            except RequestFailed:
+                logger.error('Failed to save object profile for %s' % self.pid)
+                profile_saved = False
+
+            if not profile_saved:
                 cleaned = self._undo_save(saved, "failed to save object profile, rolling back changes")
                 raise DigitalObjectSaveFailure(self.pid, "object profile", to_save, saved, cleaned)
             
@@ -1184,8 +1270,9 @@ class DigitalObject(object):
                              for sdef in methods.service_definitions)
         return self._methods
 
-    def getDissemination(self, service_pid, method, params={}):
-        return self.api.getDissemination(self.pid, service_pid, method, method_params=params)
+    def getDissemination(self, service_pid, method, params={}, return_http_response=False):
+        return self.api.getDissemination(self.pid, service_pid, method, method_params=params,
+                                         return_http_response=return_http_response)
 
     def getDatastreamObject(self, dsid):
         "Get any datastream on this object as a :class:`DatastreamObject`"
@@ -1212,8 +1299,8 @@ class DigitalObject(object):
 
         Example usage::
 
-            isMemberOfCollection = "info:fedora/fedora-system:def/relations-external#isMemberOfCollection"
-            collection_uri = "info:fedora/foo:456"
+            isMemberOfCollection = 'info:fedora/fedora-system:def/relations-external#isMemberOfCollection'
+            collection_uri = 'info:fedora/foo:456'
             object.add_relationship(isMemberOfCollection, collection_uri)
 
         :param rel_uri: URI for the new relationship
@@ -1295,10 +1382,9 @@ class DigitalObject(object):
         This method was designed for use with :mod:`eulfedora.indexdata`.
         '''
         index_data = {
-            # TODO: select and standardize solr index field names for object properties
             'pid': self.pid,	
             'label': self.label,
-            'owner': self.owner,
+            'owner': self.owners,
             'state': self.state,
             'content_model': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
             }
@@ -1310,11 +1396,13 @@ class DigitalObject(object):
                 # last_modified and created are configured as date type in sample solr Schema
                 # using isoformat here so they can be serialized via JSON
                 'last_modified': self.modified.isoformat(),	
-                'created': self.created.isoformat()
+                'created': self.created.isoformat(),
+                # datastream ids
+                'dsids': list(self.ds_list.iterkeys()),
             })
             
         index_data.update(self.index_data_descriptive())
-        # TODO: perhaps add something similar for rels-ext and common/all fedora rels? (membership/collection/etc)
+        index_data.update(self.index_data_relations())
         
         return index_data
 
@@ -1334,6 +1422,24 @@ class DigitalObject(object):
                 # convert xmlmap lists to straight lists so simplejson can handle them
                 dc_data[field] = list(list_field)
         return dc_data
+
+    def index_data_relations(self):
+        '''Standard Fedora relations to be included in
+        :meth:`index_data` output.  This implementation includes all
+        standard relations included in the Fedora relations namespace,
+        but should be extended or overridden as appropriate for custom
+        :class:`~eulfedora.models.DigitalObject` classes.'''
+        data = {}
+        # NOTE: hasModel relation is handled with top-level object properties above
+        # currently not indexing other model rels (service bindings)
+        for rel in fedora_rels:
+            values = []
+            for o in self.rels_ext.content.objects(self.uriref, relsextns[rel]):
+                values.append(str(o))
+            if values:
+                data[rel] = values
+        return data
+
 
         
 class ContentModel(DigitalObject):
@@ -1413,4 +1519,145 @@ class DigitalObjectSaveFailure(StandardError):
     def __str__(self):
         return "Error saving %s - failed to save %s; saved %s; successfully backed out %s" \
                 % (self.obj_pid, self.failure, ', '.join(self.saved), ', '.join(self.cleaned))
+
+### Descriptors for dealing with object relations
+
+# Relation
+# ReverseRelation 
+# single/multiple variants  (TODO)
+
+class Relation(object):
+    '''Descriptor for use with
+    :class:`~eulfedora.models.DigitalObject` RELS-EXT relations.
+    Allows getting, setting, and removing related DigitalObjects and
+    literals in the RELS-EXT of the object.
+    
+    Example use for a related object.  The Relation should be defined
+    something like this, passing in the predicate URI and optionally
+    the subclass of :class:`~eulfedora.models.DigitalObject` that
+    should be returned::
+
+    	class Page(DigitalObject):
+            volume = Relation(relsext.isConstituentOf, type=Volume)
+
+
+    :class:`~eulfedora.models.Relation` also supports configuring the
+    RDF type and namespace prefixes that should be used for
+    serialization; for example::
         
+        from rdflib import XSD, URIRef
+        from rdflib.namespace import Namespace
+        
+        MYNS = Namespace(URIRef("http://example.com/ns/2011/my-test-namespace/#"))
+
+        int = Relation(MYNS.count, ns_prefix={"my": MYNS}, rdf_type=XSD.int)
+
+
+    Initialization options:
+
+    :param relation: the RDF predicate URI
+    :param type: optional :class:`~eulfedora.models.DigitalObject` subclass
+    	to initialize (for object relations)
+    :param ns_prefix: optional dictionary to configure namespace
+    	prefixes to be used for serialization; key should be the
+        desired prefix, value should be an instance of
+        :class:`rdflib.namespace.Namespace`
+    :param rdf_type: optional rdf type for literal values (passed
+        to :class:`rdflib.Literal` as the datatype option)
+    '''
+    
+    def __init__(self, relation, type=None, ns_prefix={}, rdf_type=None):
+        self.relation = relation
+        self.object_type = type
+        self.ns_prefix = ns_prefix
+        self.rdf_type = rdf_type
+
+    def __get__(self, obj, objtype):
+        # no caching on related objects for now
+        uri_val = obj.rels_ext.content.value(subject=obj.uriref,
+                                         predicate=self.relation)
+        if uri_val and self.object_type:	# don't init new object if val is None
+            # need get_object wrapper method on digital object
+            return obj.get_object(uri_val, type=self.object_type)
+        else:
+            return uri_val
+
+    def __set__(self, obj, subject):
+        # if any namespace prefixes were specified, bind them before adding the tuple
+        for prefix, ns in self.ns_prefix.iteritems():
+            obj.rels_ext.content.bind(prefix, ns)
+
+        # TODO: do we need to check that subject matches self.object_type (if any)?
+
+        if isinstance(subject, URIRef):
+            subject_uri = subject
+        elif hasattr(subject, 'uriref'):
+            subject_uri = subject.uriref
+        elif self.rdf_type:
+            subject_uri = Literal(subject, datatype=self.rdf_type)
+        else:
+            subject_uri = Literal(subject)
+        
+        # set the property in the rels-ext, removing any existing
+        # value for that property (single-value relation only, for now)
+        obj.rels_ext.content.set((
+            obj.uriref,
+            self.relation,
+            subject_uri
+        ))
+
+    def __delete__(self, obj):
+        # find the subject uri and remove from rels-ext
+        uris = list(obj.rels_ext.content.objects(obj.uriref, self.relation))
+        if uris:
+            obj.rels_ext.content.remove((
+                obj.uriref,
+                self.relation,
+                uris[0]
+            ))
+
+
+class ReverseRelation(object):
+    '''Descriptor for use with
+    :class:`~eulfedora.models.DigitalObject` RELS-EXT reverse
+    relations, where the owning object is the RDF **object** of the
+    predicate and the related object is the RDF **subject**.  This
+    descriptor will query the Fedora
+    :class:`~eulfedora.api.ResourceIndex` for the requested subjects,
+    based on the configured predicate, and return resulting items.
+
+    Currently only supports get (no set or delete).
+    
+    .. Note::
+    
+       Currently has no support for sorting when multiple items are
+       returned; items will be returned in whatever order the
+       :class:`~eulfedora.api.ResourceIndex` returns them.
+    
+    Example use::
+
+    	class Volume(DigitalObject):
+            pages = ReverseRelation(relsext.isConstituentOf, type=Page, multiple=True)
+            
+    '''
+    def __init__(self, relation, type=None, multiple=False):
+        self.relation = relation
+        self.object_type = type
+        self.multiple = multiple
+
+    def __get__(self, obj, objtype):
+        # query RIsearch for subjects based on configured relation and current object
+        uris = list(obj.risearch.get_subjects(self.relation, obj.uriref))
+        if uris:
+            if self.multiple:
+                return [self._init_val(obj, uri) for uri in uris]
+            else:
+                return self._init_val(obj, uris[0])
+
+    def _init_val(self, obj, val):
+        # initialize the desired return type, based on configuration
+        # would any reverse relation not be an object?
+        if self.object_type:
+            return obj.get_object(val, type=self.object_type)
+        else:
+            return val

@@ -4,3 +4,4 @@ coverage
 django
 mock
 unittest2
+pyPdf

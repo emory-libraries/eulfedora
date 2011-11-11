@@ -112,6 +112,21 @@ class IndexDataViewsTest(unittest.TestCase):
             'Expected %s but returned %s for indexdata/index_details view' \
                 % (expected, got))
 
+        #Test with 'EUL_INDEXER_CONTENT_MODELS' setting configured to override autodetect.
+        settings.EUL_INDEXER_CONTENT_MODELS = [['content-model_1', 'content-model_2'], ['content-model_3']]
+        response = index_config(self.request)
+        expected, got = 200, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for indexdata/index_details view' \
+                % (expected, got))
+        expected, got = 'application/json', response['Content-Type']
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for mimetype on indexdata/index_details view' \
+                % (expected, got))
+        # load json content so we can inspect the result
+        content = simplejson.loads(response.content)
+        self.assertEqual(settings.EUL_INDEXER_CONTENT_MODELS, content['CONTENT_MODELS'])
+
     def test_index_data(self):
         # create a test object for testing index data view
         repo = Repository()

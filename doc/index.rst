@@ -25,8 +25,10 @@ Contents
    :maxdepth: 2
    
    tutorials/fedora
+   tutorials/examples
    fedora
    changelog
+   readme
 
 Indices and tables
 ------------------

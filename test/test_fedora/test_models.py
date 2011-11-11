@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # file test_fedora/test_models.py
 # 
 #   Copyright 2011 Emory University Libraries
@@ -14,21 +16,24 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-#!/usr/bin/env python
 from datetime import datetime
-import os
-import tempfile
-
 from dateutil.tz import tzutc
-from rdflib import URIRef, Graph as RdfGraph
+import logging
+import os
+from rdflib import URIRef, Graph as RdfGraph, XSD, Literal
+from rdflib.namespace import Namespace
+import tempfile
 
 from eulfedora import models
 from eulfedora.rdfns import relsext, model as modelns
+from eulfedora.util import RequestFailed
 from eulfedora.xml import ObjectDatastream
 from eulxml.xmlmap.dc import DublinCore
 
 from test_fedora.base import FedoraTestCase, FEDORA_PIDSPACE, FIXTURE_ROOT
 from testcore import main
+
+logger = logging.getLogger(__name__)
 
 class MyDigitalObject(models.DigitalObject):
     CONTENT_MODELS = ['info:fedora/%s:ExampleCModel' % FEDORA_PIDSPACE,
@@ -170,23 +175,28 @@ class TestDatastreams(FedoraTestCase):
                      self.obj.rels_ext.content)
 
     def test_file_datastream(self):
+        # confirm the image datastream does not exist, so we can test adding it
+        self.assertFalse(self.obj.image.exists)
+
         # add file datastream to test object
         filename = os.path.join(FIXTURE_ROOT, 'test.png')
-        defaults = self.obj.image.defaults
-        return_status = self.obj.api.addDatastream(self.obj.pid, self.obj.image.id, defaults['label'],
-            defaults['mimetype'], controlGroup=defaults['control_group'],
-            versionable=defaults['versionable'], filename=filename, checksum='d745e8a99847777dabf0d8c6e11fca84', checksumType='MD5')
-        #Have to set the datastream as existing for the object now.
-        self.obj.image.exists = True
-        #Verify the insertion succeeded
-        self.assertEqual(return_status[0], True)
+        with open(filename) as imgfile:
+            self.obj.image.content = imgfile
+            imgsaved = self.obj.save()
+
+        self.assertTrue(imgsaved)
+        # datastream should exist now
+        self.assertTrue(self.obj.image.exists)
+        # file content should be reset
+        self.assertEqual(None, self.obj.image._raw_content())
+        self.assertFalse(self.obj.image.isModified(),
+                         "isModified should return False for image datastream after it has been saved")
         
         # access via file datastream descriptor
         self.assert_(isinstance(self.obj.image, models.FileDatastreamObject))
         self.assertEqual(self.obj.image.content.read(), open(filename).read())
 
         # update via descriptor
-        self.assertFalse(self.obj.image.isModified())
         new_file = os.path.join(FIXTURE_ROOT, 'test.jpeg')
         self.obj.image.content = open(new_file)
         self.obj.image.checksum='aaa'
@@ -246,7 +256,16 @@ class TestDatastreams(FedoraTestCase):
         history = self.obj.api.getDatastreamHistory(self.obj.pid, self.obj.text.id)
         self.assertEqual("text datastream", history.datastreams[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
-        self.assertEqual(TEXT_CONTENT, data)     
+        self.assertEqual(TEXT_CONTENT, data)
+
+    def test_get_chunked_content(self):
+        # get chunks - chunksize larger than entire text content
+        chunks = list(self.obj.text.get_chunked_content(1024))
+        self.assertEqual(self.obj.text.content, chunks[0])
+        # smaller chunksize
+        chunks = list(self.obj.text.get_chunked_content(10))
+        self.assertEqual(self.obj.text.content[:10], chunks[0])
+        self.assertEqual(self.obj.text.content[10:20], chunks[1])
         
 class TestNewObject(FedoraTestCase):
     pidspace = FEDORA_PIDSPACE
@@ -280,6 +299,17 @@ class TestNewObject(FedoraTestCase):
         self.assertEqual(fetched.label, 'test label')
         self.assertEqual(fetched.owner, 'tester')
         self.assertEqual(fetched.state, 'I')
+
+    def test_multiple_owners(self):
+        obj = self.repo.get_object(type=MyDigitalObject)
+        obj.owner = 'thing1, thing2'
+        self.assert_(isinstance(obj.owners, list))
+        self.assertEqual(['thing1', 'thing2'], obj.owners)
+
+        obj.owner = ' thing1,   thing2 '
+        self.assertEqual(['thing1', 'thing2'], obj.owners)
+        
+
 
     def test_default_datastreams(self):
         """If we just create and save an object, verify that DigitalObject
@@ -678,7 +708,7 @@ class TestDigitalObject(FedoraTestCase):
         # check that top-level object properties are included in index data
         # (implicitly checking types)
         self.assertEqual(self.obj.pid, indexdata['pid'])
-        self.assertEqual(self.obj.owner, indexdata['owner'])
+        self.assertEqual(self.obj.owners, indexdata['owner'])
         self.assertEqual(self.obj.label, indexdata['label'])
         self.assertEqual(self.obj.modified.isoformat(), indexdata['last_modified'])
         self.assertEqual(self.obj.created.isoformat(), indexdata['created'])
@@ -689,6 +719,38 @@ class TestDigitalObject(FedoraTestCase):
         # descriptive data included in index data
         self.assert_(self.obj.dc.content.title in indexdata['title'])
         self.assert_(self.obj.dc.content.description in indexdata['description'])
+
+        self.assertEqual(['TEXT', 'DC'], indexdata['dsids'])
+
+    def test_index_data_relations(self):
+        # add a few rels-ext relations to test
+        partof = 'something bigger'
+        self.obj.rels_ext.content.add((self.obj.uriref, relsext.isPartOf, URIRef(partof)))
+        member1 = 'foo'
+        member2 = 'bar'
+        self.obj.rels_ext.content.add((self.obj.uriref, relsext.hasMember, URIRef(member1)))
+        self.obj.rels_ext.content.add((self.obj.uriref, relsext.hasMember, URIRef(member2)))
+        indexdata = self.obj.index_data_relations()
+        self.assertEqual([partof], indexdata['isPartOf'])
+        self.assert_(member1 in indexdata['hasMember'])
+        self.assert_(member2 in indexdata['hasMember'])
+        # rels-ext data included in main index data
+        indexdata = self.obj.index_data()
+        self.assert_('isPartOf' in indexdata)
+        self.assert_('hasMember' in indexdata)
+
+    def test_get_object(self):
+        obj = MyDigitalObject(self.api)
+        otherobj = obj.get_object(self.pid)
+
+        self.assert_(isinstance(otherobj, MyDigitalObject),
+            'if type is not specified, get_object should return current type')
+        self.assertEqual(self.api, otherobj.api,
+            'get_object should pass existing api connection')
+        
+        otherobj = obj.get_object(self.pid, type=SimpleDigitalObject)
+        self.assert_(isinstance(otherobj, SimpleDigitalObject),
+            'get_object should object with requested type')
         
 
 
@@ -701,8 +763,8 @@ class TestContentModel(FedoraTestCase):
         for pid in cmodels:
             try:
                 self.repo.purge_object(pid)
-            except Exception:
-                print 'exception purging ', pid
+            except RequestFailed as rf:
+                logger.warn('Error purging %s: %s' % (pid, rf))
 
     def test_for_class(self):
         CMODEL_URI = models.ContentModel.CONTENT_MODELS[0]
@@ -743,5 +805,124 @@ class TestContentModel(FedoraTestCase):
                           MyDigitalObject, self.repo)
 
 
+# using DC namespace to test RDF literal values
+DCNS = Namespace(URIRef('http://purl.org/dc/elements/1.1/'))        
+
+class RelatorObject(MyDigitalObject):
+    # related object
+    parent = models.Relation(relsext.isMemberOfCollection, type=SimpleDigitalObject)
+    # literal
+    dctitle = models.Relation(DCNS.title)
+    # literal with explicit type and namespace prefix
+    dcid = models.Relation(DCNS.identifier, ns_prefix={'dcns': DCNS}, rdf_type=XSD.int)
+
+
+class ReverseRelator(MyDigitalObject):
+    member = models.ReverseRelation(relsext.isMemberOfCollection, type=RelatorObject)
+    members = models.ReverseRelation(relsext.isMemberOfCollection,
+                                     type=RelatorObject, multiple=True)
+
+class TestRelation(FedoraTestCase):
+    fixtures = ['object-with-pid.foxml']
+    
+    def setUp(self):
+        super(TestRelation, self).setUp()
+        #self.pid = self.fedora_fixtures_ingested[-1] # get the pid for the last object
+        self.obj = RelatorObject(self.api)
+
+    def test_object_relation(self):
+        # get - not yet set
+        self.assertEqual(None, self.obj.parent)
+        
+        # set via descriptor
+        newobj = models.DigitalObject(self.api)
+        newobj.pid = 'foo:2'	# test pid for convenience/distinguish temp pids
+        self.obj.parent = newobj
+        self.assert_((self.obj.uriref, relsext.isMemberOfCollection, newobj.uriref)
+            in self.obj.rels_ext.content,
+            'isMemberOfCollection should be set in RELS-EXT after updating via descriptor')
+        # access via descriptor
+        self.assertEqual(newobj.pid, self.obj.parent.pid)
+        self.assert_(isinstance(self.obj.parent, SimpleDigitalObject),
+                     'Relation descriptor returns configured type of DigitalObject')
+        # set existing property
+        otherobj = models.DigitalObject(self.api)
+        otherobj.pid = 'bar:none'
+        self.obj.parent = otherobj
+        self.assert_((self.obj.uriref, relsext.isMemberOfCollection, otherobj.uriref)
+            in self.obj.rels_ext.content,
+            'isMemberOfCollection should be updated in RELS-EXT after update')
+        self.assert_((self.obj.uriref, relsext.isMemberOfCollection, newobj.uriref)
+            not in self.obj.rels_ext.content,
+            'previous isMemberOfCollection value should not be in RELS-EXT after update')
+        
+        # delete
+        del self.obj.parent
+        self.assertEqual(None, self.obj.rels_ext.content.value(subject=self.obj.uriref,
+                                                               predicate=relsext.isMemberOfCollection),
+                         'isMemberOfCollection should not be set in rels-ext after delete')
+        
+    def test_literal_relation(self):
+        # get - not set
+        self.assertEqual(None, self.obj.dcid)
+        self.assertEqual(None, self.obj.dctitle)
+       
+        # set via descriptor
+        # - integer, with type specified
+        self.obj.dcid = 1234
+        self.assert_((self.obj.uriref, DCNS.identifier, Literal(1234, datatype=XSD.int))
+            in self.obj.rels_ext.content,
+            'literal value should be set in RELS-EXT after updating via descriptor')
+        # check namespace prefix
+        self.assert_('dcns:identifier' in self.obj.rels_ext.content.serialize(),
+            'configured namespace prefix should be used for serialization')
+        # check type
+        self.assert_('XMLSchema#int' in self.obj.rels_ext.content.serialize(),
+            'configured RDF type should be used for serialization')
+        # - simpler case
+        self.obj.dctitle = 'foo'
+        self.assert_((self.obj.uriref, DCNS.title, Literal('foo'))
+            in self.obj.rels_ext.content,
+            'literal value should be set in RELS-EXT after updating via descriptor')
+        self.assertEqual('foo', self.obj.dctitle)
+        
+
+        # get
+        self.assertEqual(1234, self.obj.dcid)
+
+        # update
+        self.obj.dcid = 987
+        self.assertEqual(987, self.obj.dcid)
+
+        # delete
+        del self.obj.dcid
+        self.assertEqual(None, self.obj.rels_ext.content.value(subject=self.obj.uriref,
+                                                               predicate=DCNS.identifier),
+                         'dc:identifier should not be set in rels-ext after delete')
+        
+    def test_reverse_relation(self):
+        rev = ReverseRelator(self.api, 'foo:1')
+        # add a relation to the object and save so we can query risearch
+        self.obj.parent = rev
+        self.obj.save()
+        self.fedora_fixtures_ingested.append(self.obj.pid) # save pid for cleanup in tearDown
+        self.assertEqual(rev.member.pid, self.obj.pid,
+            'ReverseRelation returns correct object based on risearch query')
+        self.assert_(isinstance(rev.member, RelatorObject),
+            'ReverseRelation returns correct object type')
+
+        self.assert_(isinstance(rev.members, list),
+            'ReverseRelation returns list when multiple=True')
+        self.assertEqual(rev.members[0].pid, self.obj.pid,
+            'ReverseRelation list includes correct item')
+        self.assert_(isinstance(rev.members[0], RelatorObject),
+            'ReverseRelation list items initialized as correct object type')
+        
+        
+       
+
+
+
 if __name__ == '__main__':
     main()
+

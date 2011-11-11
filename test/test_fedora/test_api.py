@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # file test_fedora/test_api.py
 # 
 #   Copyright 2011 Emory University Libraries
@@ -14,23 +16,28 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-#!/usr/bin/env python
-
-from test_fedora.base import FedoraTestCase, load_fixture_data, FEDORA_ROOT_NONSSL,\
-                FEDORA_USER, FEDORA_PASSWORD, FEDORA_PIDSPACE
-from eulfedora.api import REST_API, API_A_LITE, API_M_LITE, API_M
-from eulfedora.rdfns import model as modelns
-from eulfedora.util import AuthorizingServerConnection, fedoratime_to_datetime, datetime_to_fedoratime
-from eulfedora.xml import FEDORA_MANAGE_NS, FEDORA_ACCESS_NS
-from testcore import main
 
 from datetime import date, datetime, timedelta
 from dateutil.tz import tzutc
+import httplib
+from lxml import etree
+import re
 from time import sleep
 import tempfile
-import re
+import warnings
 
-from lxml import etree
+from test_fedora.base import FedoraTestCase, load_fixture_data, FEDORA_ROOT_NONSSL,\
+                FEDORA_USER, FEDORA_PASSWORD, FEDORA_PIDSPACE
+from eulfedora.api import REST_API, API_A_LITE, API_M_LITE, API_M, ResourceIndex, \
+     UnrecognizedQueryLanguage
+from eulfedora.models import DigitalObject
+from eulfedora.rdfns import model as modelns
+from eulfedora.util import AuthorizingServerConnection, fedoratime_to_datetime, \
+     datetime_to_fedoratime, RequestFailed, ChecksumMismatch
+from eulfedora.xml import FEDORA_MANAGE_NS, FEDORA_ACCESS_NS
+from testcore import main
+
+
 
 # TODO: test for errors - bad pid, dsid, etc
 
@@ -71,8 +78,8 @@ Hey, nonny-nonny."""
     # API-A calls
 
     def test_findObjects(self):
-        # search for current test object
-        found, url = self.rest_api.findObjects("ownerId~tester")
+        # search for current test object  (restrict to current pidspace to avoid bogus failures)
+        found, url = self.rest_api.findObjects("ownerId~tester pid~%s:*" % FEDORA_PIDSPACE)
         self.assert_('<result ' in found)
         self.assert_('<resultList>' in found)
         self.assert_('<pid>%s</pid>' % self.pid in found)
@@ -119,12 +126,27 @@ Hey, nonny-nonny."""
         self.assertRaises(Exception, self.rest_api.getDatastreamDissemination,
             "bogus:pid", "BOGUS")
 
+        # return_http_response
+        response = self.rest_api.getDatastreamDissemination(self.pid, 'DC', return_http_response=True)
+        self.assert_(isinstance(response, httplib.HTTPResponse),
+                     'getDatastreamDissemination should return an HTTPResponse when return_http_response is True')
+        # datastream content should still be accessible
+        self.assertEqual(dc, response.read())
+
     # NOTE: getDissemination not available in REST API until Fedora 3.3
     def test_getDissemination(self):
         # testing with built-in fedora dissemination
         profile, uri = self.rest_api.getDissemination(self.pid, "fedora-system:3", "viewItemIndex")
         self.assert_('<title>Object Items HTML Presentation</title>' in profile)
         self.assert_(self.pid in profile)
+
+        # return_http_response
+        response = self.rest_api.getDissemination(self.pid, "fedora-system:3", "viewItemIndex",
+                                                  return_http_response=True)
+        self.assert_(isinstance(response, httplib.HTTPResponse),
+                     'getDissemination should return an HTTPResponse when return_http_response is True')
+        # datastream content should still be accessible
+        self.assert_(self.pid in response.read())
 
     def test_getObjectHistory(self):
         history, url = self.rest_api.getObjectHistory(self.pid)
@@ -210,17 +232,31 @@ Hey, nonny-nonny."""
         # content returned from fedora should be exactly what we started with
         ds_content, url = self.rest_api.getDatastreamDissemination(self.pid, ds['id'])
         self.assertEqual(self.TEXT_CONTENT, ds_content)
+
+        # invalid checksum
+        self.assertRaises(ChecksumMismatch, self.rest_api.addDatastream, self.pid,
+            "TEXT2", "text datastream",  mimeType="text/plain", logMessage="creating TEXT2",
+            content='<some> text content</some>', checksum='totally-bogus-not-even-an-MD5',
+            checksumType='MD5')
+        
+        # invalid checksum without a checksum type - warning, but no checksum mismatch
+        with warnings.catch_warnings(record=True) as w:
+            self.rest_api.addDatastream(self.pid,
+                "TEXT2", "text datastream",  mimeType="text/plain", logMessage="creating TEXT2",
+                content='<some> text content</some>', checksum='totally-bogus-not-even-an-MD5',
+                checksumType=None)
+            self.assertEqual(1, len(w),
+                'calling addDatastream with checksum but no checksum type should generate a warning')
+            self.assert_('Fedora will ignore the checksum' in str(w[0].message))
         
         # attempt to add to a non-existent object
         FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
         FILE.write("bogus")
         FILE.flush()
-        (added, msg) = self.rest_api.addDatastream("bogus:pid", 'TEXT', "text datastream",
-            mimeType="text/plain", logMessage="creating new datastream",
-            controlGroup="M", filename=FILE.name)
-        self.assertFalse(added)
-        self.assertEqual("no path in db registry for [bogus:pid]", msg)
-
+        self.assertRaises(RequestFailed, self.rest_api.addDatastream, 'bogus:pid',
+                          'TEXT', 'text datastream',
+                          mimeType='text/plain', logMessage='creating new datastream',
+                          controlGroup='M', filename=FILE.name)
         FILE.close()
 
     def test_compareDatastreamChecksum(self):
@@ -361,18 +397,20 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<dc:title>Test-Object</dc:title>' in dc)
         self.assert_('<dc:description>modified!</dc:description>' in dc)
 
+        # invalid checksum
+        self.assertRaises(ChecksumMismatch, self.rest_api.modifyDatastream, self.pid,
+            "DC", "Dublin Core",  mimeType="text/xml", logMessage="updating DC",
+            content=new_dc, checksum='totally-bogus-not-even-an-MD5', checksumType='MD5')
+
         # bogus datastream on valid pid
-        updated, msg = self.rest_api.modifyDatastream(self.pid, "BOGUS", "Text DS",
-            mimeType="text/plain", logMessage="modifiying non-existent DS", content=open(FILE.name))
-        self.assertFalse(updated)
-        # NOTE: error message is useless in this case (java null pointer)  - fedora bug
+        self.assertRaises(RequestFailed, self.rest_api.modifyDatastream, self.pid,
+            "BOGUS", "Text DS",  mimeType="text/plain", logMessage="modifiying non-existent DS",
+             content=open(FILE.name))
 
         # bogus pid
-        updated, msg = self.rest_api.modifyDatastream("bogus:pid", "TEXT", "Text DS",
-            mimeType="text/plain", logMessage="modifiying non-existent DS", content=open(FILE.name))
-        self.assertFalse(updated)
-        self.assertEqual("no path in db registry for [bogus:pid]", msg)
-
+        self.assertRaises(RequestFailed, self.rest_api.modifyDatastream, "bogus:pid",
+             "TEXT", "Text DS", mimeType="text/plain", logMessage="modifiying non-existent DS",
+              content=open(FILE.name))
         FILE.close()
 
     def test_modifyObject(self):
@@ -389,9 +427,8 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<objState>I</objState>' in profile)
 
         # bogus id
-        modified = self.rest_api.modifyObject("bogus:pid", "modified test object", "testuser",
-            "I", "testing modify object")
-        self.assertFalse(modified)
+        self.assertRaises(RequestFailed, self.rest_api.modifyObject, "bogus:pid",
+            "modified test object", "testuser",  "I", "testing modify object")
 
     def test_purgeDatastream(self):
         # add a datastream that can be purged
@@ -424,15 +461,12 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<datastream dsid="%s"' % ds['id'] not in dslist)
 
         # NOTE: Fedora bug - attempting to purge a non-existent datastream returns 204?
-        #purged = self.rest_api.purgeDatastream(self.pid, "BOGUS",
-        #    logMessage="test purging non-existent datastream")
-        #self.assertFalse(purged)
+        # purged = self.rest_api.purgeDatastream(self.pid, "BOGUS",
+        #     logMessage="test purging non-existent datastream")
+        # self.assertFalse(purged)
 
-        purged, message = self.rest_api.purgeDatastream("bogus:pid", "BOGUS",
-            logMessage="test purging non-existent datastream from non-existent object")
-        self.assertFalse(purged)
-        self.assert_('no path in db' in message)
-        
+        self.assertRaises(RequestFailed, self.rest_api.purgeDatastream, "bogus:pid",
+            "BOGUS", logMessage="test purging non-existent datastream from non-existent object")
         # also test purging specific versions of a datastream ?
 
         # attempt to purge a version that doesn't exist
@@ -456,9 +490,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assertRaises(Exception, self.rest_api.getObjectProfile, pid)
 
         # bad pid
-        purged, message = self.rest_api.purgeObject("bogus:pid")
-        self.assertFalse(purged)
-        self.assert_('no path in db' in message)
+        self.assertRaises(RequestFailed, self.rest_api.purgeObject, "bogus:pid")
 
     def test_setDatastreamState(self):
         set_state = self.rest_api.setDatastreamState(self.pid, "DC", "I")
@@ -469,12 +501,12 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<dsState>I</dsState>' in ds_profile)
 
         # bad datastream id
-        set_state = self.rest_api.setDatastreamState(self.pid, "BOGUS", "I")
-        self.assertFalse(set_state)
+        self.assertRaises(RequestFailed, self.rest_api.setDatastreamState,
+                          self.pid, "BOGUS", "I")
 
         # non-existent pid
-        set_state = self.rest_api.setDatastreamState("bogus:pid", "DC", "D")
-        self.assertFalse(set_state)
+        self.assertRaises(RequestFailed, self.rest_api.setDatastreamState,
+                          "bogus:pid", "DC", "D")
 
     def test_setDatastreamVersionable(self):
         set_versioned = self.rest_api.setDatastreamVersionable(self.pid, "DC", False)
@@ -485,12 +517,12 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assert_('<dsVersionable>false</dsVersionable>' in ds_profile)
 
         # bad datastream id
-        set_versioned = self.rest_api.setDatastreamVersionable(self.pid, "BOGUS", False)
-        self.assertFalse(set_versioned)
+        self.assertRaises(RequestFailed, self.rest_api.setDatastreamVersionable,
+                          self.pid, "BOGUS", False)
 
         # non-existent pid
-        set_versioned = self.rest_api.setDatastreamVersionable("bogus:pid", "DC", True)
-        self.assertFalse(set_versioned)
+        self.assertRaises(RequestFailed, self.rest_api.setDatastreamVersionable,
+                          "bogus:pid", "DC", True)
 
 
 class TestAPI_A_LITE(FedoraTestCase):
@@ -653,6 +685,71 @@ class TestAPI_M(FedoraTestCase):
 
         # bogus pid
         self.assertRaises(Exception, self.api_m.getDatastreamHistory, "bogus:pid", "DC")
+
+
+class TestResourceIndex(FedoraTestCase):
+    fixtures = ['object-with-pid.foxml']
+    pidspace = FEDORA_PIDSPACE
+    # relationship predicates for testing
+    rel_isMemberOf = "info:fedora/fedora-system:def/relations-external#isMemberOf"
+    rel_owner = "info:fedora/fedora-system:def/relations-external#owner"
+
+    def setUp(self):
+        super(TestResourceIndex, self).setUp()
+        self.risearch = self.repo.risearch
+        
+        pid = self.fedora_fixtures_ingested[0]
+        self.object = self.repo.get_object(pid)
+        # add some rels to query
+        self.cmodel = DigitalObject(self.api, "control:TestObject")
+        self.object.add_relationship(modelns.hasModel, self.cmodel)
+        self.related = DigitalObject(self.api, "foo:123")
+        self.object.add_relationship(self.rel_isMemberOf, self.related)
+        self.object.add_relationship(self.rel_owner, "testuser")
+
+    def testGetPredicates(self):
+        # get all predicates for test object
+        predicates = list(self.risearch.get_predicates(self.object.uri, None))        
+        self.assertTrue(unicode(modelns.hasModel) in predicates)
+        self.assertTrue(self.rel_isMemberOf in predicates)
+        self.assertTrue(self.rel_owner in predicates)
+        # resource
+        predicates = list(self.risearch.get_predicates(self.object.uri, self.related.uri))        
+        self.assertEqual(predicates[0], self.rel_isMemberOf)
+        self.assertEqual(len(predicates), 1)
+        # literal
+        predicates = list(self.risearch.get_predicates(self.object.uri, "'testuser'"))
+        self.assertEqual(predicates[0], self.rel_owner)
+        self.assertEqual(len(predicates), 1)
+
+    def testGetSubjects(self):
+        subjects = list(self.risearch.get_subjects(self.rel_isMemberOf, self.related.uri))
+        self.assertEqual(subjects[0], self.object.uri)
+        self.assertEqual(len(subjects), 1)
+
+        # no match
+        subjects = list(self.risearch.get_subjects(self.rel_isMemberOf, self.object.uri))
+        self.assertEqual(len(subjects), 0)
+
+    def testGetObjects(self):
+        objects =  list(self.risearch.get_objects(self.object.uri, modelns.hasModel))
+        self.assert_(self.cmodel.uri in objects)
+        # also includes generic fedora-object cmodel
+
+    def test_sparql(self):
+        # simple sparql to retrieve our test object
+        query = '''SELECT ?obj
+        WHERE {
+            ?obj <%s> "%s"
+        }
+        ''' % (self.rel_owner, 'testuser')
+        objects = list(self.risearch.sparql_query(query))
+        self.assert_({'obj': self.object.uri} in objects)
+
+    def test_custom_errors(self):
+        self.assertRaises(UnrecognizedQueryLanguage,  self.risearch.find_statements,
+                          '* * *', language='bogus')
+
 
 if __name__ == '__main__':
     main()

@@ -48,3 +48,12 @@ Datastream Objects
 
 .. autoclass:: FileDatastreamObject
     :members:
+
+Relations
+---------
+
+.. autoclass:: Relation
+   :members:
+
+.. autoclass:: ReverseRelation
+   :members:
