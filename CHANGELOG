@@ -12,8 +12,8 @@ any necessary information about installation or upgrade notes.
   :meth:`eulfedora.api.ResourceIndex.count_statements`
 
 
-0.17
-----
+0.17.0
+------
 
 * Previously, several of the REST API calls in
   :class:`eulfedora.api.REST_API` suppressed errors and only returned
