@@ -120,9 +120,14 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.dc.control_group, "X")
         # there may be micro-second variation between these two
         # ingest/creation times, but they should probably be less than
-        # a second apart        
-        self.assertAlmostEqual(self.ingest_time, self.obj.dc.created,
-                               delta=ONE_SEC)
+        # a second apart
+        try:
+            self.assertAlmostEqual(self.ingest_time, self.obj.dc.created,
+                                   delta=ONE_SEC)
+        except TypeError:
+            # delta keyword unavailable before python 2.7
+            self.assert_(abs(self.ingest_time - self.obj.dc.created) < ONE_SEC)
+
         # short-cut to datastream size
         self.assertEqual(self.obj.dc.info.size, self.obj.dc.size)
 
@@ -502,8 +507,13 @@ class TestDigitalObject(FedoraTestCase):
         self.assertEqual(self.obj.label, "A partially-prepared test object")
         self.assertEqual(self.obj.owner, "tester")
         self.assertEqual(self.obj.state, "A")
-        self.assertAlmostEqual(self.ingest_time, self.obj.created,
-                               delta=ONE_SEC)
+        try:
+            self.assertAlmostEqual(self.ingest_time, self.obj.created,
+                                   delta=ONE_SEC)
+        except TypeError:
+            # delta keyword unavailable before python 2.7
+            self.assert_(abs(self.ingest_time - self.obj.created) < ONE_SEC)
+
         self.assert_(self.ingest_time < self.obj.modified)
 
     def test_save_object_info(self):
