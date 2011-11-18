@@ -136,8 +136,14 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.text.state, "A")
         self.assertEqual(self.obj.text.versionable, False)
         self.assertEqual(self.obj.text.control_group, "M")
-        self.assertAlmostEqual(self.ingest_time, self.obj.text.created,
-                               delta=ONE_SEC)
+        try:
+            self.assertAlmostEqual(self.ingest_time, self.obj.text.created,
+                                   delta=ONE_SEC)
+        except TypeError:
+            # delta keyword unavailable before python 2.7
+            self.assert_(abs(self.ingest_time - self.obj.text.created) < ONE_SEC)
+
+
 
     def test_savedatastream(self):
         new_text = "Here is some totally new text content."
