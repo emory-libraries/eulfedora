@@ -684,9 +684,21 @@ class DigitalObjectType(type):
 
 class DigitalObject(object):
     """
-    A single digital object in a Fedora respository, with methods and properties
-    to easy creating, accessing, and updating a Fedora object or any of its component
-    parts.
+    A single digital object in a Fedora respository, with methods and
+    properties to easy creating, accessing, and updating a Fedora
+    object or any of its component parts, with pre-defined datastream
+    mappings for the standard Fedora Dublin Core
+    (:attr:`~eulfedora.models.DigitalObject.dc`) and RELS-EXT
+    (:attr:`~eulfedora.models.DigitalObject.rels_ext`) datastreams.
+
+    .. Note::
+
+      If you want idiomatic access to other datastreams, consider
+      extending :class:`DigitalObject` and defining your own
+      datastreams using :class:`XmlDatastream`,
+      :class:`RdfDatastream`, or :class:`FileDatastream` as
+      appropriate.
+    
     """
 
     __metaclass__ = DigitalObjectType
@@ -707,10 +719,14 @@ class DigitalObject(object):
             'control_group': 'X',
             'format': 'http://www.openarchives.org/OAI/2.0/oai_dc/',
         })
+    ''':class:`XmlDatastream` for the required Fedora **DC** datastream;
+    datastream content will be automatically loaded as an instance of
+    :class:`eulxml.xmlmap.dc.DublinCore`'''
     rels_ext = RdfDatastream("RELS-EXT", "External Relations", defaults={
             'control_group': 'X',
             'format': 'info:fedora/fedora-system:FedoraRELSExt-1.0',
         })
+    ''':class:`RdfDatastream` for the standard Fedora **RELS-EXT** datastream'''
 
     def __init__(self, api, pid=None, create=False, default_pidspace=None):
         self.api = api
@@ -852,7 +868,7 @@ class DigitalObject(object):
 
     @property
     def uri(self):
-        "Fedora URI for this object (info:fedora/foo:### form of object pid) "
+        "Fedora URI for this object (``info:fedora/foo:###`` form of object pid) "
         use_pid = self.pid
         if callable(use_pid):
             use_pid = self.DUMMY_PID
@@ -897,7 +913,7 @@ class DigitalObject(object):
     @property
     def owners(self):
         '''Read-only list of object owners, separated by the configured
-        :attr:`OWNER_ID_SEPARATOR`, with whitspace stripped.'''
+        :attr:`OWNER_ID_SEPARATOR`, with whitespace stripped.'''
         return [o.strip() for o in self.owner.split(self.OWNER_ID_SEPARATOR)]
 
     def _get_state(self):
@@ -1332,7 +1348,7 @@ class DigitalObject(object):
         Check if this object subscribes to the specified content model.
 
         :param model: URI for the content model, as a string
-                    (currently only accepted in info:fedora/foo:### format)
+                    (currently only accepted in ``info:fedora/foo:###`` format)
         :rtype: boolean
         """
         # TODO:
