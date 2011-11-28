@@ -934,7 +934,11 @@ class DigitalObject(object):
 
     @property
     def exists(self):
-        """Does the object exist in Fedora?"""
+        """:type: bool
+
+        True when the object actually exists (and can be accessed by
+        the current user) in Fedora
+        """
 
         # If we made the object under the pretext that it doesn't exist in
         # fedora yet, then assume it doesn't exist in fedora yet.
@@ -951,8 +955,11 @@ class DigitalObject(object):
 
     @property
     def has_requisite_content_models(self):
-        '''Does the object have the expected content models for this type of
-        :class:`DigitalObject` ?'''
+        ''':type: bool
+
+        True when the current object has the expected content models
+        for whatever subclass of :class:`DigitalObject` it was
+        initialized as.'''
         for cmodel in getattr(self, 'CONTENT_MODELS', ()):
             if not self.has_model(cmodel):
                 return False
@@ -1008,11 +1015,15 @@ class DigitalObject(object):
         return saved
     
     def save(self, logMessage=None):
-        """Save to Fedora any parts of this object that have been modified (object
-        profile or any datastream content or info).  If a failure occurs at any
-        point on saving any of the parts of the object, will back out any changes that
-        have been made and raise a :class:`DigitalObjectSaveFailure` with information
-        about where the failure occurred and whether or not it was recoverable.
+        """Save to Fedora any parts of this object that have been
+        modified (including object profile attributes such as
+        :attr:`label`, :attr:`owner`, or :attr:`state`, and any
+        changes to datastream content or datastream properties).  If a
+        failure occurs at any point on saving any of the parts of the
+        object, will back out any changes that have been made and
+        raise a :class:`DigitalObjectSaveFailure` with information
+        about where the failure occurred and whether or not it was
+        recoverable.
 
         If the object is new, ingest it. If object profile information has
         been modified before saving, this data is used in the ingest.
