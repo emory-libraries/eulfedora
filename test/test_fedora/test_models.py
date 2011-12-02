@@ -841,7 +841,10 @@ class TestContentModel(FedoraTestCase):
 
 
 # using DC namespace to test RDF literal values
-DCNS = Namespace(URIRef('http://purl.org/dc/elements/1.1/'))        
+DCNS = Namespace(URIRef('http://purl.org/dc/elements/1.1/'))
+
+class SiblingObject(models.DigitalObject):
+    pass
 
 class RelatorObject(MyDigitalObject):
     # related object
@@ -851,6 +854,13 @@ class RelatorObject(MyDigitalObject):
     # literal with explicit type and namespace prefix
     dcid = models.Relation(DCNS.identifier, ns_prefix={'dcns': DCNS}, rdf_type=XSD.int)
 
+    # test variant options for automatic reverse relations
+    other = models.Relation(relsext.isMemberOfCollection, type=SimpleDigitalObject,
+                                 related_name='related_items')
+    parent1 = models.Relation(relsext.isMemberOfCollection, type=models.DigitalObject,
+                              related_name='my_custom_rel')
+    sib = models.Relation(relsext.isMemberOf, type=SiblingObject,
+                                 related_name='+') 
 
 class ReverseRelator(MyDigitalObject):
     member = models.ReverseRelation(relsext.isMemberOfCollection, type=RelatorObject)
@@ -920,7 +930,6 @@ class TestRelation(FedoraTestCase):
             in self.obj.rels_ext.content,
             'literal value should be set in RELS-EXT after updating via descriptor')
         self.assertEqual('foo', self.obj.dctitle)
-        
 
         # get
         self.assertEqual(1234, self.obj.dcid)
@@ -953,10 +962,27 @@ class TestRelation(FedoraTestCase):
         self.assert_(isinstance(rev.members[0], RelatorObject),
             'ReverseRelation list items initialized as correct object type')
         
-        
-       
 
+    def test_auto_reverse_relation(self):
+        # default reverse name based on classname
+        self.assert_(hasattr(SimpleDigitalObject, 'relatorobject_set'))
+        self.assert_(isinstance(SimpleDigitalObject.relatorobject_set,
+                                models.ReverseRelation))
+        # check reverse-rel is configured correctly
+        self.assertEqual(relsext.isMemberOfCollection,
+                         SimpleDigitalObject.relatorobject_set.relation)
+        self.assertEqual(RelatorObject,
+                         SimpleDigitalObject.relatorobject_set.object_type)
+        self.assertEqual(True,
+                         SimpleDigitalObject.relatorobject_set.multiple)
 
+        # explicitly named reverse rel
+        self.assert_(hasattr(SimpleDigitalObject, 'related_items'))
+
+        # generic digital object should *NOT* get reverse rels
+        self.assertFalse(hasattr(models.DigitalObject, 'my_custom_rel'))
+        # related_name of + also means no reverse rel
+        self.assertFalse(hasattr(SiblingObject, 'relatorobject_set'))
 
 if __name__ == '__main__':
     main()
