@@ -49,9 +49,13 @@ class DatastreamObject(object):
         :param mimetype: default datastream mimetype
         :param versionable: default configuration for datastream versioning
         :param state: default configuration for datastream state
+        	(default: A [active])
         :param format: default configuration for datastream format URI
+        :param control_group: default configuration for datastream control group
+        	(default: M [managed])
         :param checksum: default configuration for datastream checksum
-        :param format: default configuration for datastream checksum type 
+        :param checksum_type: default configuration for datastream checksum type
+        	(default: MD5)
     """
     default_mimetype = "application/octet-stream"
     def __init__(self, obj, id, label, mimetype=None, versionable=False,
@@ -640,6 +644,9 @@ class FileDatastream(Datastream):
 
 ### Descriptors for dealing with object relations
 
+# TODO: Relation objects should probably have an intro section with a
+# more user-friendly introduction...
+
 # Relation  (list variant still TODO)
 # ReverseRelation 
 
@@ -660,7 +667,7 @@ class Relation(object):
     When a :class:`Relation` is created with a type that references a
     :class:`DigitalObject` subclass, a corresponding
     :class:`ReverseRelation` will automatically be added to the
-    related subclass.  For the example above, the fictonal ``Volume``
+    related subclass.  For the example above, the fictional ``Volume``
     class would automatically get a ``page_set`` attribute configured
     with the same URI and a class of ``Page``.  Reverse property names
     can be customized using the ``related_name`` parameter, which is
@@ -685,7 +692,33 @@ class Relation(object):
         
         MYNS = Namespace(URIRef("http://example.com/ns/2011/my-test-namespace/#"))
 
-        int = Relation(MYNS.count, ns_prefix={"my": MYNS}, rdf_type=XSD.int)
+    	class MyObj(DigitalObject):
+            total = Relation(MYNS.count, ns_prefix={"my": MYNS}, rdf_type=XSD.int)
+
+    This would allow us to access ``total`` as an integer on a MyObj
+    object, e.g.::
+
+        
+        myobj.total = 3
+        
+    and when the RELS-EXT is serialized it will use the
+    configured namespace prefix, e.g.:
+
+    .. code-block:: xml
+    
+	<rdf:RDF xmlns:my="xmlns:fedora-model="info:fedora/fedora-system:def/model#"
+          xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+	  <rdf:Description rdf:about="info:fedora/myobj:1">
+	    <my:count rdf:datatype="http://www.w3.org/2001/XMLSchema#int">3</my:count>
+	  </rdf:Description>
+	</rdf:RDF>
+
+    .. Note::
+        
+        If a namespace prefix is not specified, :mod:`rfdlib` will
+        automatically generate a namespace to produce valid output,
+        but it may be less readable than a custom namespace.
+        
 
 
     Initialization options:
@@ -729,6 +762,10 @@ class Relation(object):
         if uri_val and self.object_type:	# don't init new object if val is None
             # need get_object wrapper method on digital object
             return obj.get_object(uri_val, type=self.object_type)
+        # if the value has 'toPython' method (e.g., rdflib.Literal),
+        # return the result of that conversion
+        elif hasattr(uri_val, 'toPython'):
+             return uri_val.toPython()
         else:
             return uri_val
 
