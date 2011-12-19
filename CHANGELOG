@@ -10,6 +10,11 @@ any necessary information about installation or upgrade notes.
 
 * Exposed RIsearch ``count`` return option via
   :meth:`eulfedora.api.ResourceIndex.count_statements`
+* :class:`~eulfedora.models.DatastreamObject` now supports setting
+  datastream content by URI through the new
+  :attr:`~eulfedora.models.DatastreamObject.ds_location` attribute 
+  (this is  in addition to the previously-available
+  :attr:`~eulfedora.models.DatastreamObject.content` attribute).
 
 
 0.17.0

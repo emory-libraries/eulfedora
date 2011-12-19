@@ -51,9 +51,17 @@ class DatastreamObject(object):
         :param state: default configuration for datastream state
         :param format: default configuration for datastream format URI
         :param checksum: default configuration for datastream checksum
-        :param format: default configuration for datastream checksum type 
+        :param checksum_type: default configuration for datastream checksum type 
     """
     default_mimetype = "application/octet-stream"
+
+    ds_location = None
+    '''Datastream content location: set this attribute to a URI that
+    Fedora can resolve (e.g., http:// or file://) in order to add or
+    update datastream content from a known, accessible location,
+    rather than posting via :attr:`content`.  If :attr:`ds_location`
+    is set, it takes precedence over :attr:`content`.'''
+
     def __init__(self, obj, id, label, mimetype=None, versionable=False,
             state='A', format=None, control_group='M', checksum=None, checksum_type="MD5"):
                         
@@ -75,7 +83,8 @@ class DatastreamObject(object):
         }
         self._info = None
         self._content = None
-        # for unversioned datastreams, store a copy of data pulled from fedora in case undo save is required
+        # for unversioned datastreams, store a copy of data pulled
+        # from fedora in case undo save is required
         self._info_backup = None
         self._content_backup = None
 
@@ -136,7 +145,18 @@ class DatastreamObject(object):
             self._get_content()
         self._content = val
     content = property(_get_content, _set_content, None,
-        "contents of the datastream; only pulled from Fedora when accessed, cached after first access")
+        '''contents of the datastream; for existing datastreams,
+        content is only pulled from Fedora when first requested, and
+        cached after first access; can be used to set or update
+        datastream contents by means of text content or a file-like
+        object.  For example, if you have a :class:`DigitalObject`
+        subclass with a :class:`FileDatastream` defined as ``image``::
+
+            with open(filename) as imgfile:
+                myobj.image.content = imgfile
+
+        For an alternate method to set datastream content, see
+        :attr:`ds_location`.''')
 
     def _convert_content(self, data, url):
         # convert output of getDatastreamDissemination into the expected content type
@@ -259,33 +279,38 @@ class DatastreamObject(object):
 
         :rtype: boolean for success
         """
-        data = self._raw_content()
-
-        modify_opts = {}
+        save_opts = {}
         if self.info_modified:
             if self.label:
-                modify_opts['dsLabel'] = self.label
+                save_opts['dsLabel'] = self.label
             if self.mimetype:
-                modify_opts['mimeType'] = self.mimetype
+                save_opts['mimeType'] = self.mimetype
             if self.versionable is not None:
-                modify_opts['versionable'] = self.versionable
+                save_opts['versionable'] = self.versionable
             if self.state:
-                modify_opts['dsState'] = self.state
+                save_opts['dsState'] = self.state
             if self.format:
-                modify_opts['formatURI'] = self.format
+                save_opts['formatURI'] = self.format
             if self.checksum:
                 if(self.checksum_modified):
-                    modify_opts['checksum'] = self.checksum
+                    save_opts['checksum'] = self.checksum
             if self.checksum_type:
-                modify_opts['checksumType'] = self.checksum_type
+                save_opts['checksumType'] = self.checksum_type
             # FIXME: should be able to handle checksums
         # NOTE: as of Fedora 3.2, updating content without specifying mimetype fails (Fedora bug?)
-        if 'mimeType' not in modify_opts.keys():
+        if 'mimeType' not in save_opts.keys():
             # if datastreamProfile has not been pulled from fedora, use configured default mimetype
             if self._info is not None:
-                modify_opts['mimeType'] = self.mimetype
+                save_opts['mimeType'] = self.mimetype
             else:
-                modify_opts['mimeType'] = self.defaults['mimetype']
+                save_opts['mimeType'] = self.defaults['mimetype']
+
+        # if datastream location has been set, use that for content
+        # otherwise, use local content (if any)
+        if self.ds_location is not None:
+            save_opts['dsLocation'] = self.ds_location
+        else:
+            save_opts['content'] = self._raw_content()
 
         if self.exists:
             # if not versionable, make a backup to back out changes if object save fails
@@ -293,22 +318,22 @@ class DatastreamObject(object):
                 self._backup()
                 
             # if this datastream already exists, use modifyDatastream API call
-            success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id, content=data,
-                    logMessage=logmessage, **modify_opts)
+            success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id, 
+                    logMessage=logmessage, **save_opts)
         else:
             # if this datastream does not yet exist, add it
             success, msg = self.obj.api.addDatastream(self.obj.pid, self.id,
-                    controlGroup=self.defaults['control_group'], content=data,
-                    logMessage=logmessage, **modify_opts)
+                    controlGroup=self.defaults['control_group'],
+                    logMessage=logmessage, **save_opts)
 
             # clean-up required for object info after adding a new datastream
             if success:
-                # update exists flag - if add succeeded, the datastrea exists now
+                # update exists flag - if add succeeded, the datastream exists now
                 self.exists = True
                 # if the datastream content is a file-like object, clear it out
                 # (we don't want to attempt to save the current file contents again,
                 # particularly since the file is not guaranteed to still be open)
-                if hasattr(data, 'read'):
+                if 'content' in save_opts and hasattr(save_opts['content'], 'read'):
                     self._content = None
                     self._content_modified = False      
  
@@ -317,6 +342,8 @@ class DatastreamObject(object):
             self.info_modified = False
             self.checksum_modified = False
             self.digest = self._content_digest()
+            # clear out ds location
+            self.ds_location = None
             
         return success      # msg ?
 
@@ -1219,9 +1246,9 @@ class DigitalObject(object):
                 digest_xml.set('DIGEST', dsobj.checksum)
             ver_xml.append(digest_xml)
         elif hasattr(dsobj._raw_content(), 'read'):
-            #Content exists, but no checksum, so log a warning.
-            #FIXME: Only works if the audio has a read attribute currently.... need a better way to check this.
-            logging.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s." % (self.pid, dsid))
+            # Content exists, but no checksum, so log a warning.
+            # FIXME: probably need a better way to check this.
+            logging.warning("Datastream ingested without a passed checksum or checksum type: %s/%s." % (self.pid, dsid))
             
         ds_xml.append(ver_xml)
 
@@ -1238,14 +1265,25 @@ class DigitalObject(object):
         return content_container_xml
 
     def _build_foxml_managed_content(self, E, dsobj):
-        content_s = dsobj._raw_content()
-        if content_s is None:
+        content_uri = None
+        if dsobj.ds_location:
+            # if datastream has a location set, use that first
+            content_uri = dsobj.ds_location
+            uri_type = 'URL'
+        else:
+            # otherwise, check for local content and upload it
+            content_s = dsobj._raw_content()
+            if content_s is not None:
+                content_uri = self.api.upload(content_s)
+                uri_type = 'INTERNAL_ID'
+
+        # stop if no content was found in either location
+        if content_uri is None:
             return
 
-        upload_id = self.api.upload(content_s)
         content_location = E('contentLocation')
-        content_location.set('REF', upload_id)
-        content_location.set('TYPE', 'INTERNAL_ID')
+        content_location.set('REF', content_uri)
+        content_location.set('TYPE', uri_type)
         return content_location
 
     def _get_datastreams(self):

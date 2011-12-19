@@ -20,12 +20,14 @@ from datetime import datetime, timedelta
 from dateutil.tz import tzutc
 import logging
 from lxml import etree
+from mock import Mock, patch
 import os
 from rdflib import URIRef, Graph as RdfGraph, XSD, Literal
 from rdflib.namespace import Namespace
 import tempfile
 
 from eulfedora import models
+from eulfedora.api import ApiFacade
 from eulfedora.rdfns import relsext, model as modelns
 from eulfedora.util import RequestFailed, fedoratime_to_datetime
 from eulfedora.xml import ObjectDatastream, FEDORA_MANAGE_NS
@@ -144,7 +146,6 @@ class TestDatastreams(FedoraTestCase):
             self.assert_(abs(self.ingest_time - self.obj.text.created) < ONE_SEC)
 
 
-
     def test_savedatastream(self):
         new_text = "Here is some totally new text content."
         self.obj.text.content = new_text
@@ -172,6 +173,54 @@ class TestDatastreams(FedoraTestCase):
         self.assertTrue(saved, "saving DC datastream should return true")
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
         self.assert_("<dc:title>this is a new title</dc:title>" in data)
+
+    def test_save_by_location(self):
+        file_uri = 'file:///tmp/rsk-test.txt'
+
+        # since we can't put or guarantee a test file on the fedora server,
+        # patch the api with Mock to check api call
+        with patch.object(ApiFacade, 'modifyDatastream') as mock_mod_ds:
+            mock_mod_ds.return_value = (True, 'saved')
+            
+            self.obj.text.ds_location = file_uri
+            self.obj.text.content = 'this content should be ignored'
+            logmsg = 'text content from file uri'
+            saved = self.obj.text.save(logmsg)
+            self.assertTrue(saved)
+            mock_mod_ds.assert_called_with(self.obj.pid, self.obj.text.id,
+                                          mimeType='text/plain', dsLocation=file_uri,
+                                          logMessage=logmsg)
+            self.assertEqual(None, self.obj.text.ds_location,
+                             'ds_location should be None after successful save')
+
+            # simulate save failure (without an exception)
+            mock_mod_ds.return_value = (False, 'not saved')
+            self.obj.text.ds_location = file_uri
+            saved = self.obj.text.save(logmsg)
+            self.assertFalse(saved)
+            self.assertNotEqual(None, self.obj.text.ds_location,
+                             'ds_location should not be None after failed save')
+
+        # purge ds and test addDatastream
+        self.obj.api.purgeDatastream(self.obj.pid, self.obj.text.id)
+        # load a new version that knows text ds doesn't exist
+        obj = MyDigitalObject(self.api, self.pid)
+        
+        with patch.object(ApiFacade, 'addDatastream') as mock_add_ds:
+            mock_add_ds.return_value = (True, 'added')
+            
+            obj.text.ds_location = file_uri
+            obj.text.content = 'this content should be ignored'
+            logmsg = 'text content from file uri'
+            saved = obj.text.save(logmsg)
+            self.assertTrue(saved)
+            mock_add_ds.assert_called_with(self.obj.pid, self.obj.text.id,
+                                          mimeType='text/plain', dsLocation=file_uri,
+                                          logMessage=logmsg, controlGroup='M')
+            self.assertEqual(None, obj.text.ds_location,
+                             'ds_location should be None after successful save (add)')
+
+                    
 
     def test_ds_isModified(self):
         self.assertFalse(self.obj.text.isModified(), "isModified should return False for unchanged DC datastream")
@@ -306,6 +355,21 @@ class TestNewObject(FedoraTestCase):
         
         fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
         self.assertEqual(fetched.dc.content.identifier, obj.pid)
+
+    def test_ingest_content_uri(self):
+        obj = self.repo.get_object(type=MyDigitalObject)
+        obj.pid = 'test:1'
+        obj.text.ds_location = 'file:///tmp/some/local/file.txt'
+        # don't actually save, since we can't put a test file on the fedora test server
+        foxml = obj._build_foxml_doc()
+        # inspect TEXT datastream contentLocation in the generated foxml
+        text_dsloc = foxml.xpath('.//f:datastream[@ID="TEXT"]/' +
+                                 'f:datastreamVersion/f:contentLocation',
+                                 namespaces={'f': obj.FOXML_NS})[0]
+        
+        self.assertEqual(obj.text.ds_location, text_dsloc.get('REF'))
+        self.assertEqual('URL', text_dsloc.get('TYPE'))
+
 
     def test_modified_profile(self):
         obj = self.repo.get_object(type=MyDigitalObject)
