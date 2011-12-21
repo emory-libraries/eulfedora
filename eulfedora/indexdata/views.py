@@ -126,9 +126,17 @@ def index_data(request, id, repo=None):
         return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
 
     if repo is None:
-        repo = TypeInferringRepository()
+        repo_opts = {}
+        # if credentials are specified via Basic Auth, use them for Fedora access
+        auth_info = request.META.get('HTTP_AUTHORIZATION', None)
+        basic = 'Basic '
+        if auth_info and auth_info.startswith(basic):
+            basic_info = auth_info[len(basic):]
+            u, p = basic_info.decode('base64').split(':')
+            repo_opts.update({'username': u, 'password': p})
+            
+        repo = TypeInferringRepository(**repo_opts)
     try:
-        # TODO: need a generic method to init by cmodel using DigitalObject defined_types
         obj = repo.get_object(id)
         return HttpResponse(simplejson.dumps(obj.index_data()),
                             content_type='application/json')

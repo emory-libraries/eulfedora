@@ -16,6 +16,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+import base64
 from mock import Mock, patch
 import unittest
 import os
@@ -30,6 +31,7 @@ from django.utils import simplejson
 from eulfedora.indexdata.views import index_config, index_data
 from eulfedora.models import DigitalObject, Datastream, ContentModel
 from eulfedora.server import Repository
+from testcore import main
 
 TEST_PIDSPACE = getattr(settings, 'FEDORA_PIDSPACE', 'testme')
 
@@ -158,6 +160,20 @@ class IndexDataViewsTest(unittest.TestCase):
         response_data = simplejson.loads(response.content)
         self.assertEqual(testobj.index_data(), response_data,
              'Response content loaded from JSON should be equal to object indexdata')
+
+        # test with basic auth
+        testuser, testpass = 'testuser', 'testpass'
+        token = base64.b64encode('%s:%s' % (testuser, testpass))
+        self.request.META['HTTP_AUTHORIZATION'] = 'Basic %s' % token
+        with patch('eulfedora.indexdata.views.TypeInferringRepository') as typerepo:
+            typerepo.return_value.get_object.return_value.index_data.return_value = {}
+            index_data(self.request, testobj.pid)
+            typerepo.assert_called_with(username=testuser, password=testpass)
+            
         
         # non-existent pid should generate a 404
         self.assertRaises(Http404, index_data, self.request, 'bogus:testpid')
+
+
+if __name__ == '__main__':
+    main()
