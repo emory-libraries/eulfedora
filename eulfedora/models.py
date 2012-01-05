@@ -408,6 +408,16 @@ class DatastreamObject(object):
             yield chunk
 
 
+    def validate_checksum(self): # TODO: optional date-time?
+        '''Check if this datastream has a valid checksum in Fedora, by
+        running the :meth:`REST_API.compareDatastreamChecksum` API
+        call.  Returns a boolean based on the checksum valid
+        response from Fedora.'''
+        response, uri = self.obj.api.compareDatastreamChecksum(self.obj.pid, self.id)
+        dsprofile = parse_xml_object(DatastreamProfile, response, uri)
+        return dsprofile.checksum_valid
+
+
 class Datastream(object):
     """Datastream descriptor to simplify configuration and access to datastreams
     that belong to a particular :class:`DigitalObject`.
