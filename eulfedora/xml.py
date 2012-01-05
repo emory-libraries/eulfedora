@@ -161,6 +161,9 @@ class DatastreamProfile(_FedoraBase):
     "checksum for current datastream contents"
     checksum_type = xmlmap.StringField('m:dsChecksumType')
     "type of checksum"
+    checksum_valid = xmlmap.SimpleBooleanField('m:dsChecksumValid', 'true', 'false')
+    '''Boolean flag indicating if the current checksum is valid.  Only
+    present when profile is accessed via :meth:`REST_API.compareDatastreamChecksum`'''
 
 class NewPids(_FedoraBase):
     """:class:`~eulxml.xmlmap.XmlObject` for a list of pids as returned by
