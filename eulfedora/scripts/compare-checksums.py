@@ -17,6 +17,7 @@
 #   limitations under the License.
 
 import argparse
+import csv
 from collections import defaultdict
 from eulfedora.server import Repository
 from getpass import getpass
@@ -82,10 +83,16 @@ def main():
     #                      action=PasswordAction, default=None)
     parser.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
                         default=None, help='Password for the specified Fedora user')
+    parser.add_argument('--csv-file', dest='csv_file', default=None,
+                        help='Output results to the specified CSV file')
     args = parser.parse_args()
 
-    
     stats = defaultdict(int)
+
+    #if csv-file is specified create the file and write the header row
+    if args.csv_file:
+        csv_file = csv.writer(open(args.csv_file, 'wb'),  quoting=csv.QUOTE_ALL)
+        csv_file.writerow(['PID', 'DSID', 'CREATED', "STATUS"])
 
     repo = Repository(args.fedora_root, args.fedora_user, args.fedora_password)
 
@@ -101,15 +108,28 @@ def main():
             stats['ds'] += 1
             dsobj = obj.getDatastreamObject(dsid)
             if not dsobj.validate_checksum():
-                print "%s/%s has an invalid checksum" % (obj.pid, dsid)
-                stats['invalid_ds'] += 1
+                print "%s/%s has an invalid checksum (%s)" % (obj.pid, dsid, dsobj.created)
+                stats['invalid'] += 1
+                if args.csv_file:
+                    csv_file.writerow([obj.pid, dsid, dsobj.created, "INVALID"])
+            elif dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
+                print "%s/%s has no checksum (%s)" % (obj.pid, dsid, dsobj.created)
+                stats['missing'] += 1
+                if args.csv_file:
+                    csv_file.writerow([obj.pid, dsid, dsobj.created, "MISSING"])
 
-            # TODO: check if checksum type is DISABLED / checksum value none
-            
         stats['objects'] += 1
 
     print '\nTested %(ds)d datastream(s) on %(objects)d object(s)' % stats
-    print 'Found %(invalid_ds)d invalid checksum(s)' % stats
+    print 'Found %(invalid)d invalid checksum(s)' % stats
+    print 'Found %(missing)d datastream(s) with no checksum' % stats
+
+    if args.csv_file:
+        csv_file.writerow([]) # blank row
+        csv_file.writerow(['Tested %(ds)d datastream(s) on %(objects)d object(s)' % stats])
+        csv_file.writerow(['Found %(invalid)d invalid checksum(s)' % stats])
+        csv_file.writerow(['Found %(missing)d datastream(s) with no checksum' % stats])
+
 
 
 class PasswordAction(argparse.Action):
