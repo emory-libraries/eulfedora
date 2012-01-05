@@ -281,7 +281,7 @@ class REST_API(HTTP_API_Base):
     # addRelationship not implemented in REST API
 
     def compareDatastreamChecksum(self, pid, dsID, asOfDateTime=None): # date time
-        # specical case of getDatastream, with validateChecksum = true
+        # special case of getDatastream, with validateChecksum = true
         # currently returns datastream info returned by getDatastream...  what should it return?
         return self.getDatastream(pid, dsID, validateChecksum=True, asOfDateTime=asOfDateTime)
 
@@ -314,7 +314,8 @@ class REST_API(HTTP_API_Base):
         # /objects/{pid}/datastreams/{dsID} ? [asOfDateTime] [format] [validateChecksum]
         http_args = {}
         if validateChecksum:
-            http_args['validateChecksum'] = validateChecksum
+            # fedora only responds to lower-case validateChecksum option
+            http_args['validateChecksum'] = str(validateChecksum).lower()
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
         http_args.update(self.format_xml)        
