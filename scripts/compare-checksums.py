@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# file eulfedora/scripts/compare-checksums.py
+# file scripts/compare-checksums.py
 # 
 #   Copyright 2012 Emory University Libraries
 #
@@ -86,8 +86,8 @@ class ValidateChecksums(object):
     csv_file = None
     csv = None
 
-    #used to break the look when a signal is caught
-    interupted = False
+    # interrupt flag to exit the main processing loop when a signal is caught
+    interrupted = False
 
     #uri for object model
     object_model = 'info:fedora/fedora-system:FedoraObject-3.0'
@@ -118,8 +118,10 @@ class ValidateChecksums(object):
         parser.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
                         help='''Check all versions of datastreams
                         (by default, only current versions are checked)''')
-        parser.add_argument('--quiet', '-q', dest='quiet', default=None, action='store_true',
-                        help='Only outputs summary report')
+        parser.add_argument('--quiet', '-q', default=False, action='store_true',
+                        help='Quiet mode: only output summary report')
+        parser.add_argument('--max', '-m', type=int, metavar='N',
+                        help='Stop after processing the first N objects')
         self.args = parser.parse_args()
 
         # if csv-file is specified, create the file and write the header row
@@ -130,7 +132,9 @@ class ValidateChecksums(object):
             self.csv.writerow(['pid', 'datastream id', 'date created', 'status',
                                'mimetype', 'versioned'])
 
-        repo = Repository(self.args.fedora_root, self.args.fedora_user, self.args.fedora_password)
+        # TODO: needs fedora error handling (e.g., bad password)
+        repo = Repository(self.args.fedora_root,
+                          self.args.fedora_user, self.args.fedora_password)
 
         if self.args.pids:
             # if pids were specified on the command line, use those
@@ -171,14 +175,17 @@ class ValidateChecksums(object):
                     # current version only
                     self.check_datastream(dsobj)
                 
-
             self.stats['objects'] += 1
+            
             if pid_pbar:
                 pid_pbar.update(self.stats['objects'])
-            if self.interupted:
+
+            # if interrupted or at a specified max, quit
+            if self.interrupted or \
+                   self.args.max and self.stats['objects'] == self.args.max:
                 break
 
-        if pid_pbar and not self.interupted:
+        if pid_pbar and not self.interrupted:
            pid_pbar.finish()
 
         # summarize what was done
@@ -186,8 +193,8 @@ class ValidateChecksums(object):
         if self.args.all_versions:
             totals += ', %(ds_versions)d datastream version(s)' % self.stats
         print totals
-        print 'Found %(invalid)d invalid checksum(s)' % self.stats
-        print 'Found %(missing)d datastream(s) with no checksum' % self.stats
+        print '%(invalid)d invalid checksum(s)' % self.stats
+        print '%(missing)d datastream(s) with no checksum' % self.stats
 
         # if a csv file was opened, close it
         if self.csv_file:
@@ -240,9 +247,10 @@ class ValidateChecksums(object):
             # restore default signal handler so a second SIGINT can be used to quit
             signal.signal(signal.SIGINT, signal.SIG_DFL)
             # set interrupt flag so main loop knows to quit at a reasonable time
-            self.interupted = True
+            self.interrupted = True
             # report if script is in the middle of an object
-            print "Finishing the current object, hit <CTRL> + C again to quit immediately"
+            print 'Script will exit after all datastreams for the current object are checked.'
+            print '(Ctrl-C / Interrupt again to quit immediately)'
 
 
 class PasswordAction(argparse.Action):
