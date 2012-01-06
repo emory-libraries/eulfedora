@@ -79,19 +79,23 @@ class ValidateChecksums(object):
         ''')
         parser.add_argument('pids', metavar='PID', nargs='*',
                             help='list specific pids to be checked (optional)')
-        parser.add_argument('--fedora-root', dest='fedora_root', required=True,
+        # fedora connection args
+        repo_args = parser.add_argument_group('Fedora repository connection options')
+        repo_args.add_argument('--fedora-root', dest='fedora_root', required=True,
                             help='URL for accessing fedora, e.g. http://localhost:8080/fedora/')
-        parser.add_argument('--fedora-user', dest='fedora_user', default=None, 
+        repo_args.add_argument('--fedora-user', dest='fedora_user', default=None, 
                             help='Fedora username (requires permission to run compareDatastreamChecksum)')
-        parser.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
+        repo_args.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
                             default=None, action=PasswordAction,
                             help='Password for the specified Fedora user (leave blank to be prompted)')
+
+        # script options
         parser.add_argument('--csv-file', dest='csv_file', default=None,
                             help='Output results to the specified CSV file')
-        parser.add_argument('--all-versions', dest='all_versions', action='store_true',
+        parser.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
                         help='''Check all versions of datastreams
                         (by default, only current versions are checked)''')
-        parser.add_argument('--quiet', dest='quiet', default=None, action='store_true',
+        parser.add_argument('--quiet', '-q', dest='quiet', default=None, action='store_true',
                         help='Only outputs summary report')
         self.args = parser.parse_args()
 
@@ -100,8 +104,8 @@ class ValidateChecksums(object):
             # TODO: error handling for file open/write failure
             self.csv_file = open(self.args.csv_file, 'wb')
             self.csv = csv.writer(self.csv_file,  quoting=csv.QUOTE_ALL)
-            self.csv.writerow(['PID', 'DSID', 'CREATED', "STATUS"])
-            # TODO: include datastream mimetype 
+            self.csv.writerow(['pid', 'datastream id', 'date created', 'status',
+                               'mimetype', 'versioned'])
 
         repo = Repository(self.args.fedora_root, self.args.fedora_user, self.args.fedora_password)
 
@@ -145,7 +149,19 @@ class ValidateChecksums(object):
 
 
     def check_datastream(self, dsobj, date=None):
-        '''Check the validity of a particular datastream.'''
+        '''Check the validity of a particular datastream.  Checks for
+        invalid datastreams using
+        :meth:`~eulfedora.models.DatastreamObject.validate_checksum`,
+        and for no checksum (checksum type of ``DISABLED`` and
+        checksum value of ``none``).  Optionally reports on the status
+        and/or adds it to CSV file, depending on the arguments the
+        script was called with.
+        
+        :param dsobj: :class:`~eulfedora.models.DatastreamObject` to
+        be checked :param date: optional date/time for a particular
+        version of the datastream to be checked; when not specified,
+        the current version will be checked
+        '''
         if not dsobj.validate_checksum(date=date):
             status = 'invalid'
 
@@ -166,7 +182,8 @@ class ValidateChecksums(object):
                       (dsobj.obj.pid, dsobj.id, status, date or dsobj.created)
 
             if self.csv:
-                self.csv.writerow([dsobj.obj.pid, dsobj.id, dsobj.created, status])
+                self.csv.writerow([dsobj.obj.pid, dsobj.id, dsobj.created, status,
+                                   dsobj.mimetype, dsobj.versionable])
 
 
 class PasswordAction(argparse.Action):
