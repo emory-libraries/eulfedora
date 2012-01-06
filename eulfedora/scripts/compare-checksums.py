@@ -73,6 +73,7 @@ class ValidateChecksums(object):
     csv_file = None
     csv = None
 
+    #used to break the look when a signal is caught
     interupted = False
 
     def run(self):
@@ -188,7 +189,6 @@ class ValidateChecksums(object):
             # set interrupt flag so main loop knows to quit at a reasonable time
             self.interupted = True
             # report if script is in the middle of an object
-
             print "Finishing the current object, hit <CTRL> + C again to quit immediately"
 
 
