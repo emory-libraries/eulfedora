@@ -20,6 +20,7 @@ import argparse
 import csv
 from collections import defaultdict
 from eulfedora.server import Repository
+from eulfedora.rdfns import model as modelns
 from getpass import getpass
 import logging
 from logging import config
@@ -76,6 +77,9 @@ class ValidateChecksums(object):
     #used to break the look when a signal is caught
     interupted = False
 
+    #uri for object model
+    object_model = 'info:fedora/fedora-system:FedoraObject-3.0'
+
     def run(self):
         # bind a handler for interrupt signal
         signal.signal(signal.SIGINT, self.interrupt_handler)
@@ -118,12 +122,16 @@ class ValidateChecksums(object):
 
         if self.args.pids:
             # if pids were specified on the command line, use those
-            objects = (repo.get_object(pid) for pid in self.args.pids)
+            object_pids = (pid for pid in self.args.pids)
         else:
             # otherwise, process all find-able objects
-            objects = repo.find_objects()
-    
-        for obj in objects:
+            object_pids = list(repo.risearch.get_subjects(modelns.hasModel , self.object_model))
+
+        for pid in object_pids:
+            obj = repo.get_object(pid = pid)
+            if not obj.exists:
+                print "pid %s does not exist" % pid
+                continue
             for dsid in obj.ds_list.iterkeys():
                 dsobj = obj.getDatastreamObject(dsid)
                 self.stats['ds'] += 1
