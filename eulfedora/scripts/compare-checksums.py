@@ -65,84 +65,119 @@ LOGGING = {
 config.dictConfig(LOGGING)
 
 
-def main():
-
-    parser = argparse.ArgumentParser(description='''Validate datastream checksums
-    for Fedora repository content.  By default, iterates through all objects that
-    are findable by the findObjects REST API and checks all datastreams.
-    ''')
-    parser.add_argument('pids', metavar='PID', nargs='*',
-                        help='list specific pids to be checked (optional)')
-    parser.add_argument('--fedora-root', dest='fedora_root', required=True,
-                        help='URL for accessing fedora, e.g. http://localhost:8080/fedora/')
-    parser.add_argument('--fedora-user', dest='fedora_user', default=None, 
-                        help='Fedora username (requires permission to run compareDatastreamChecksum)')
-    # TODO: make both options available?
-    # prompt for password, but allow passing on command-line in dev/staging
-    # parser.add_argument('--fedora-password', dest='fedora_password',
-    #                      action=PasswordAction, default=None)
-    parser.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
-                        default=None, help='Password for the specified Fedora user')
-    parser.add_argument('--csv-file', dest='csv_file', default=None,
-                        help='Output results to the specified CSV file')
-    parser.add_argument('--quiet', dest='quiet', default=None, action='store_true',
-                        help='Only outputs summary report')
-
-    args = parser.parse_args()
+class ValidateChecksums(object):
 
     stats = defaultdict(int)
 
-    #if csv-file is specified create the file and write the header row
-    if args.csv_file:
-        csv_file = csv.writer(open(args.csv_file, 'wb'),  quoting=csv.QUOTE_ALL)
-        csv_file.writerow(['PID', 'DSID', 'CREATED', "STATUS"])
+    csv_file = None
+    csv = None
 
-    repo = Repository(args.fedora_root, args.fedora_user, args.fedora_password)
+    def run(self):
+        parser = argparse.ArgumentParser(description='''Validate datastream checksums
+        for Fedora repository content.  By default, iterates through all objects that
+        are findable by the findObjects REST API and checks all datastreams.
+        ''')
+        parser.add_argument('pids', metavar='PID', nargs='*',
+                            help='list specific pids to be checked (optional)')
+        parser.add_argument('--fedora-root', dest='fedora_root', required=True,
+                            help='URL for accessing fedora, e.g. http://localhost:8080/fedora/')
+        parser.add_argument('--fedora-user', dest='fedora_user', default=None, 
+                            help='Fedora username (requires permission to run compareDatastreamChecksum)')
+        parser.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
+                            default=None, action=PasswordAction,
+                            help='Password for the specified Fedora user (leave blank to be prompted)')
+        parser.add_argument('--csv-file', dest='csv_file', default=None,
+                            help='Output results to the specified CSV file')
+        parser.add_argument('--all-versions', dest='all_versions', action='store_true',
+                        help='''Check all versions of datastreams
+                        (by default, only current versions are checked)''')
+        parser.add_argument('--quiet', dest='quiet', default=None, action='store_true',
+                        help='Only outputs summary report')
+        self.args = parser.parse_args()
 
-    if args.pids:
-        # if pids were specified on the command line, use those
-        objects = (repo.get_object(pid) for pid in args.pids)
-    else:
-        # otherwise, process all find-able objects
-        objects = repo.find_objects()
+        # if csv-file is specified, create the file and write the header row
+        if self.args.csv_file:
+            # TODO: error handling for file open/write failure
+            self.csv_file = open(self.args.csv_file, 'wb')
+            self.csv = csv.writer(self.csv_file,  quoting=csv.QUOTE_ALL)
+            self.csv.writerow(['PID', 'DSID', 'CREATED', "STATUS"])
+            # TODO: include datastream mimetype 
+
+        repo = Repository(self.args.fedora_root, self.args.fedora_user, self.args.fedora_password)
+
+        if self.args.pids:
+            # if pids were specified on the command line, use those
+            objects = (repo.get_object(pid) for pid in self.args.pids)
+        else:
+            # otherwise, process all find-able objects
+            objects = repo.find_objects()
     
-    for obj in objects:
-        for dsid in obj.ds_list.iterkeys():
-            stats['ds'] += 1
-            dsobj = obj.getDatastreamObject(dsid)
-            if not dsobj.validate_checksum():
-                if not args.quiet:
-                    print "%s/%s has an invalid checksum (%s)" % (obj.pid, dsid, dsobj.created)
-                stats['invalid'] += 1
-                if args.csv_file:
-                    csv_file.writerow([obj.pid, dsid, dsobj.created, "INVALID"])
-            elif dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
-                if not args.quiet:
-                    print "%s/%s has no checksum (%s)" % (obj.pid, dsid, dsobj.created)
-                stats['missing'] += 1
-                if args.csv_file:
-                    csv_file.writerow([obj.pid, dsid, dsobj.created, "MISSING"])
+        for obj in objects:
+            for dsid in obj.ds_list.iterkeys():
+                dsobj = obj.getDatastreamObject(dsid)
+                self.stats['ds'] += 1
 
-        stats['objects'] += 1
+                if self.args.all_versions:
+                    # check every version of this datastream
+                    history = obj.api.getDatastreamHistory(obj.pid, dsid)
+                    for ds in history.datastreams:
+                        self.check_datastream(dsobj, ds.createDate)
+                        self.stats['ds_versions'] += 1
 
-    print '\nTested %(ds)d datastream(s) on %(objects)d object(s)' % stats
-    print 'Found %(invalid)d invalid checksum(s)' % stats
-    print 'Found %(missing)d datastream(s) with no checksum' % stats
+                else:
+                    # current version only
+                    self.check_datastream(dsobj)
+                
 
-    if args.csv_file:
-        csv_file.writerow([]) # blank row
-        csv_file.writerow(['Tested %(ds)d datastream(s) on %(objects)d object(s)' % stats])
-        csv_file.writerow(['Found %(invalid)d invalid checksum(s)' % stats])
-        csv_file.writerow(['Found %(missing)d datastream(s) with no checksum' % stats])
+            self.stats['objects'] += 1
 
+        # summarize what was done
+        totals = '\nTested %(objects)d object(s), %(ds)d datastream(s)' % self.stats
+        if self.args.all_versions:
+            totals += ', %(ds_versions)d datastream version(s)' % self.stats
+        print totals
+        print 'Found %(invalid)d invalid checksum(s)' % self.stats
+        print 'Found %(missing)d datastream(s) with no checksum' % self.stats
+
+        # if a csv file was opened, close it
+        if self.csv_file:
+            self.csv_file.close()
+
+
+    def check_datastream(self, dsobj, date=None):
+        '''Check the validity of a particular datastream.'''
+        if not dsobj.validate_checksum(date=date):
+            status = 'invalid'
+
+        # if the checksum in fedora is stored as DISABLED/none,
+        # validate_checksum will return True - but that may not be
+        # what we want, so report as missing.
+        elif dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
+            status = 'missing'
+            
+        else:
+            status = 'ok'
+            
+        self.stats[status] += 1
+
+        if status is not 'ok':
+            if not self.args.quiet:
+                print "%s/%s - %s checksum (%s)" % \
+                      (dsobj.obj.pid, dsobj.id, status, date or dsobj.created)
+
+            if self.csv:
+                self.csv.writerow([dsobj.obj.pid, dsobj.id, dsobj.created, status])
 
 
 class PasswordAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        setattr(namespace, self.dest, getpass())
-
-    
+    def __call__(self, parser, namespace, value, option_string=None):
+        # if a value was specified on the command-line, use that
+        if value:
+            setattr(namespace, self.dest, value)
+        # otherwise, use getpass to prompt for a password
+        else:
+            setattr(namespace, self.dest, getpass())
 
 
 if __name__ == '__main__':
-    main()
+    ValidateChecksums().run()
