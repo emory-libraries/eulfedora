@@ -23,6 +23,7 @@ from eulfedora.server import Repository
 from getpass import getpass
 import logging
 from logging import config
+import signal
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,12 @@ class ValidateChecksums(object):
     csv_file = None
     csv = None
 
+    interupted = False
+
     def run(self):
+        # bind a handler for interrupt signal
+        signal.signal(signal.SIGINT, self.interrupt_handler)
+
         parser = argparse.ArgumentParser(description='''Validate datastream checksums
         for Fedora repository content.  By default, iterates through all objects that
         are findable by the findObjects REST API and checks all datastreams.
@@ -130,6 +136,9 @@ class ValidateChecksums(object):
                 
 
             self.stats['objects'] += 1
+            if self.interupted:
+                break
+
 
         # summarize what was done
         totals = '\nTested %(objects)d object(s), %(ds)d datastream(s)' % self.stats
@@ -167,6 +176,20 @@ class ValidateChecksums(object):
 
             if self.csv:
                 self.csv.writerow([dsobj.obj.pid, dsobj.id, dsobj.created, status])
+
+    def interrupt_handler(self, signum, frame):
+        '''Gracefully handle a SIGINT, if possible. Sets a flag so main script
+        loop can exit cleanly, and restores the default SIGINT behavior,
+        so that a second interrupt will stop the script.
+        '''
+        if signum == signal.SIGINT:
+            # restore default signal handler so a second SIGINT can be used to quit
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            # set interrupt flag so main loop knows to quit at a reasonable time
+            self.interupted = True
+            # report if script is in the middle of an object
+
+            print "Finishing the current object, hit <CTRL> + C again to quit immediately"
 
 
 class PasswordAction(argparse.Action):
