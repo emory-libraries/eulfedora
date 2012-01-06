@@ -27,7 +27,13 @@ from eulfedora.rdfns import model as modelns
 from getpass import getpass
 import logging
 from logging import config
-from progressbar import ProgressBar, Bar, Percentage, ETA, Counter, Timer
+
+try:
+    from progressbar import ProgressBar, Bar, Percentage, ETA, Counter, Timer
+except ImportError:
+    ProgressBar = None
+
+
 import os
 import signal
 import sys
