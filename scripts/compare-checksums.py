@@ -15,18 +15,49 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-'''Validate datastream checksums for Fedora repository content.
-By default, iterates through all objects.  A list of pids can be optionally provided.
-If the progressbar package is installed, the output will display a progress bar.
+'''
+
+This is a command line script to validate datastream checksums for
+content stored in a Fedora Commons repository.
+
+The default behavior is to iterate through all objects and check each
+datastream, reporting on invalid or missing checksums.
+
+Running this script requires passing fedora connection information and
+credentials, for example::
+
+  $ compare-checksums.py --fedora-root=http://localhost:8080/fedora/ \
+  	--fedora-user=fedoraAdmin --fedora-password=fedoraAdmin
+
+.. Note::
+
+  The fedora user you specify must have permission to find objects,
+  access datastream profiles and history, and permission to run the
+  compareDatastreamChecksum API method.
+
+If you have specific objects you wish to check, you can run the script
+with a list of pids.  There are also options to output details to a
+CSV file for further investigation and to check all versions of each
+datastream (by default, only the current version will be checked).
+For more details, see the script usage::
+
+  $ compare-checksums.py --help
+
+
+If the python :mod:`progressbar` package is available, progress will
+be displayed as objects are checked; however, :mod:`progressbar` is
+not required to run this script.
+
 '''
 import argparse
-import csv
 from collections import defaultdict
+import csv
 from eulfedora.server import Repository
 from eulfedora.rdfns import model as modelns
 from getpass import getpass
-import logging
-from logging import config
+import os
+import signal
+import sys
 
 try:
     from progressbar import ProgressBar, Bar, Percentage, ETA, Counter, Timer
@@ -34,49 +65,6 @@ except ImportError:
     ProgressBar = None
 
 
-import os
-import signal
-import sys
-
-logger = logging.getLogger(__name__)
-
-
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'basic': {
-            'format': '[%(asctime)s] %(levelname)s:%(name)s::%(message)s',
-            'datefmt': '%d/%b/%Y %H:%M:%S',
-         },
-    },
-    'handlers': {
-        'console':{
-            'level':'DEBUG',
-            'class':'logging.StreamHandler',
-            'formatter': 'basic'
-        },
-    },
-    'loggers': {
-        'root': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
-            'propagate': True,
-        },
-        # 'eulfedora': {
-        #     'handlers': ['console'],
-        #     'level': 'DEBUG',
-        #     'propagate': True,
-        # },
-        # 'eulxml': {
-        #     'handlers': ['console'],
-        #     'level': 'DEBUG',
-        #     'propagate': True,
-        # },
-    }
-}
-
-config.dictConfig(LOGGING)
 
 
 class ValidateChecksums(object):
@@ -102,7 +90,7 @@ class ValidateChecksums(object):
         ''')
         parser.add_argument('pids', metavar='PID', nargs='*',
                             help='list specific pids to be checked (optional)')
-        # fedora connection args
+        # fedora connection options
         repo_args = parser.add_argument_group('Fedora repository connection options')
         repo_args.add_argument('--fedora-root', dest='fedora_root', required=True,
                             help='URL for accessing fedora, e.g. http://localhost:8080/fedora/')
@@ -111,8 +99,7 @@ class ValidateChecksums(object):
         repo_args.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
                             default=None, action=PasswordAction,
                             help='Password for the specified Fedora user (leave blank to be prompted)')
-
-        # script options
+        # general script options
         parser.add_argument('--csv-file', dest='csv_file', default=None,
                             help='Output results to the specified CSV file')
         parser.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
