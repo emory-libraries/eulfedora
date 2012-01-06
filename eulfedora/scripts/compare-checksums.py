@@ -85,6 +85,9 @@ def main():
                         default=None, help='Password for the specified Fedora user')
     parser.add_argument('--csv-file', dest='csv_file', default=None,
                         help='Output results to the specified CSV file')
+    parser.add_argument('--quiet', dest='quiet', default=None, action='store_true',
+                        help='Only outputs summary report')
+
     args = parser.parse_args()
 
     stats = defaultdict(int)
@@ -108,12 +111,14 @@ def main():
             stats['ds'] += 1
             dsobj = obj.getDatastreamObject(dsid)
             if not dsobj.validate_checksum():
-                print "%s/%s has an invalid checksum (%s)" % (obj.pid, dsid, dsobj.created)
+                if not args.quiet:
+                    print "%s/%s has an invalid checksum (%s)" % (obj.pid, dsid, dsobj.created)
                 stats['invalid'] += 1
                 if args.csv_file:
                     csv_file.writerow([obj.pid, dsid, dsobj.created, "INVALID"])
             elif dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
-                print "%s/%s has no checksum (%s)" % (obj.pid, dsid, dsobj.created)
+                if not args.quiet:
+                    print "%s/%s has no checksum (%s)" % (obj.pid, dsid, dsobj.created)
                 stats['missing'] += 1
                 if args.csv_file:
                     csv_file.writerow([obj.pid, dsid, dsobj.created, "MISSING"])
