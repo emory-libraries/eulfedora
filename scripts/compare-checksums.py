@@ -15,7 +15,10 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-
+'''Validate datastream checksums for Fedora repository content.
+By default, iterates through all objects.  A list of pids can be optionally provided.
+If the progressbar package is installed, the output will display a progress bar.
+'''
 import argparse
 import csv
 from collections import defaultdict
@@ -24,7 +27,10 @@ from eulfedora.rdfns import model as modelns
 from getpass import getpass
 import logging
 from logging import config
+from progressbar import ProgressBar, Bar, Percentage, ETA, Counter, Timer
+import os
 import signal
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -122,10 +128,22 @@ class ValidateChecksums(object):
 
         if self.args.pids:
             # if pids were specified on the command line, use those
-            object_pids = (pid for pid in self.args.pids)
+            object_pids = [pid for pid in self.args.pids]
         else:
             # otherwise, process all find-able objects
             object_pids = list(repo.risearch.get_subjects(modelns.hasModel , self.object_model))
+
+        #initalize progress bar
+        pid_pbar = None
+        total = len(object_pids)
+        if total >= 10 and ProgressBar and os.isatty(sys.stderr.fileno()):
+            # init progress bar if we're checking enough objects
+            widgets = ['Pids: ', ' ',
+                       Bar(), ' ',
+                       Percentage(),
+                       ' (', Counter() , ' of ', str(total), ')', ' ',
+                       ETA()]
+            pid_pbar = ProgressBar(widgets = widgets, maxval=total).start()
 
         for pid in object_pids:
             obj = repo.get_object(pid = pid)
@@ -149,9 +167,13 @@ class ValidateChecksums(object):
                 
 
             self.stats['objects'] += 1
+            if pid_pbar:
+                pid_pbar.update(self.stats['objects'])
             if self.interupted:
                 break
 
+        if pid_pbar and not self.interupted:
+           pid_pbar.finish()
 
         # summarize what was done
         totals = '\nTested %(objects)d object(s), %(ds)d datastream(s)' % self.stats
