@@ -63,7 +63,7 @@ class DatastreamObject(object):
     is set, it takes precedence over :attr:`content`.'''
 
     def __init__(self, obj, id, label, mimetype=None, versionable=False,
-            state='A', format=None, control_group='M', checksum=None, checksum_type="SHA-1"):
+            state='A', format=None, control_group='M', checksum=None, checksum_type="MD5"):
                         
         self.obj = obj
         self.id = id
