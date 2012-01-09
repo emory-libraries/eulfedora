@@ -54,7 +54,7 @@ class MyDigitalObject(models.DigitalObject):
             'versionable': True,
         })
     image = models.FileDatastream('IMAGE', 'managed binary image datastream', defaults={
-                'mimetype': 'image/png'
+            'mimetype': 'image/png',
         })
 
 class SimpleDigitalObject(models.DigitalObject):
@@ -145,6 +145,14 @@ class TestDatastreams(FedoraTestCase):
             # delta keyword unavailable before python 2.7
             self.assert_(abs(self.ingest_time - self.obj.text.created) < ONE_SEC)
 
+        # bootstrap info from defaults for a new object
+        newobj = MyDigitalObject(self.api)
+        self.assertEqual('Text datastream', newobj.text.label,
+             'default label should be set on new datastream')
+        self.assertEqual('text/plain', newobj.text.mimetype,
+             'default label should be set on new datastream')
+        self.assertEqual('MD5', newobj.text.checksum_type,
+             'default checksum type should be set on new datastream')
 
     def test_savedatastream(self):
         new_text = "Here is some totally new text content."
