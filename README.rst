@@ -17,7 +17,7 @@ Repository or with individual objects and datastreams.
 
 **eulfedora.indexdata** provides a webservice that returns data for
 fedora objects in JSON form, which can be used in conjunction with a
-service for updating an index, such as :mod:`eulindexer`.
+service for updating an index, such as `eulindexer`.
 
 When used with `Django <https://www.djangoproject.com/>`_,
 **eulfedora** can pull the Repository connection configuration from
