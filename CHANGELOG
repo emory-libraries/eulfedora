@@ -5,6 +5,18 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+0.18.1
+------
+
+* Bugfix: Default checksum type for
+  :class:`~eulfedora.models.DatastreamObject` was previously ignored
+  when creating a new datastream from scratch (e.g., when ingesting a
+  new object).  In certain versions of Fedora, this could result in
+  datastreams with missing checksums (checksum type of 'DISABLED',
+  checksum value of 'none').
+
+
+
 0.18.0
 ------
 
