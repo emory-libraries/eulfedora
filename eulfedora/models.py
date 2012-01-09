@@ -63,7 +63,7 @@ class DatastreamObject(object):
     is set, it takes precedence over :attr:`content`.'''
 
     def __init__(self, obj, id, label, mimetype=None, versionable=False,
-            state='A', format=None, control_group='M', checksum=None, checksum_type="MD5"):
+            state='A', format=None, control_group='M', checksum=None, checksum_type="SHA-1"):
                         
         self.obj = obj
         self.id = id
@@ -92,10 +92,13 @@ class DatastreamObject(object):
         self.digest = None
         self.checksum_modified = False
         
-        #Indicates whether the datastream exists in fedora.
-	self.exists = False      
-        #If this is an object with a real pid, then check if the datastream is actually there. If it does, exists should be true.
-	if not self.obj._create:
+        # Flag to indicate whether this datastream exists in fedora.
+        # Assume false until/unless we can confirm otherwise.
+	self.exists = False
+        
+        if not self.obj._create:
+            # If this datastream belongs to an existing object, check 
+            # to see if the datastream actually exists.
             if self.obj.ds_list.has_key(id):
                 self.exists = True
     
@@ -115,6 +118,7 @@ class DatastreamObject(object):
         profile.mimetype = self.defaults['mimetype']
         profile.control_group = self.defaults['control_group']
         profile.versionable = self.defaults['versionable']
+        profile.checksum_type = self.defaults['checksumType']
         if self.defaults.get('label', None):
             profile.label = self.defaults['label']
         if self.defaults.get('format', None):
