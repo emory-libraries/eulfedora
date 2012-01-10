@@ -130,9 +130,9 @@ class ValidateChecksums(object):
             # otherwise, process all find-able objects
             object_pids = list(repo.risearch.get_subjects(modelns.hasModel , self.object_model))
 
-        #initalize progress bar
+        # initalize progress bar
         pid_pbar = None
-        total = len(object_pids)
+        total = self.args.max or len(object_pids)
         if total >= 10 and ProgressBar and os.isatty(sys.stderr.fileno()):
             # init progress bar if we're checking enough objects
             widgets = [Percentage(), ' (', Counter() , ' of %s)' % total,
