@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# file scripts/compare-checksums.py
+# file scripts/fedora-checksums
 # 
 #   Copyright 2012 Emory University Libraries
 #
@@ -17,36 +17,60 @@
 #   limitations under the License.
 '''
 
-This is a command line script to validate datastream checksums for
-content stored in a Fedora Commons repository.
+This is a command line utility script to validate or repair datastream
+checksums for content stored in a Fedora Commons repository.
 
-The default behavior is to iterate through all objects and check each
-datastream, reporting on invalid or missing checksums.
+.. Note::
 
-Running this script requires passing fedora connection information and
-credentials, for example::
+   Requires Python2.7.
 
-  $ compare-checksums.py --fedora-root=http://localhost:8080/fedora/ \
+The script has two basic modes: **validate** and **repair**.
+
+In **validate** mode, the script will iterate through all objects and
+validate the checksum for each datastream (or optionally each version
+of any versioned datastream), reporting on invalid or missing
+checksums.
+
+In **repair** mode, the script will iterate through all objects
+looking for datastreams with a checksum type of ``DISABLED`` and a
+checksum value of ``none``; any such datastreams will be updated in
+Fedora with a new checksum type (either as specified via script
+argument ``--checksum-type`` or using the Fedora configured default),
+prompting Fedora to calculate and save a new checksum.
+
+Running this script in either mode requires passing Fedora connection
+information and credentials, for example::
+
+  $ fedora-checksums validate --fedora-root=http://localhost:8080/fedora/ \
   	--fedora-user=fedoraAdmin --fedora-password=fedoraAdmin
+
+If you prefer not to specify your fedora password on the command line,
+specify the ``--fedora-password`` option with an empty value and you
+will be prompted::
+
+  $ fedora-checksums validate --fedora-root=http://localhost:8080/fedora/ \
+  	--fedora-user=fedoraAdmin --fedora-password=
 
 .. Note::
 
   The fedora user you specify must have permission to find objects,
-  access datastream profiles and history, and permission to run the
-  compareDatastreamChecksum API method.
+  access datastream profiles and history, have permission to run the
+  compareDatastreamChecksum API method (when validating), and
+  permission to modify datastreams (when repairing).
 
-If you have specific objects you wish to check, you can run the script
-with a list of pids.  There are also options to output details to a
-CSV file for further investigation and to check all versions of each
-datastream (by default, only the current version will be checked).
-For more details, see the script usage::
+If you have specific objects you wish to check or repair, you can run
+the script with a list of pids.  When validating, there is also an
+option to output details to a CSV file for further investigation.  For
+more details, see the script usage for the appropriate mode::
 
-  $ compare-checksums.py --help
+  $ fedora-checksums validate --help
+  $ fedora-checksums repair --help
 
+.. Note::
 
-If the python :mod:`progressbar` package is available, progress will
-be displayed as objects are checked; however, :mod:`progressbar` is
-not required to run this script.
+  If the python :mod:`progressbar` package is available, progress will
+  be displayed as objects are checked; however, :mod:`progressbar` is
+  not required to run this script.
 
 '''
 import argparse
@@ -60,7 +84,7 @@ import signal
 import sys
 
 try:
-    from progressbar import ProgressBar, Bar, Percentage, ETA, Counter, Timer
+    from progressbar import ProgressBar, Bar, Percentage, ETA, SimpleProgress, Timer
 except ImportError:
     ProgressBar = None
 
@@ -77,49 +101,77 @@ class ValidateChecksums(object):
     # interrupt flag to exit the main processing loop when a signal is caught
     interrupted = False
 
-    #uri for object model
+    # URI for Fedora object content model
     object_model = 'info:fedora/fedora-system:FedoraObject-3.0'
+
+
+    def config_arg_parser(self):
+        # configure argument parser
+        
+        # common args for either mode
+        common_args = argparse.ArgumentParser(add_help=False)
+        # fedora connection options
+        repo_args = common_args.add_argument_group('Fedora repository connection options')
+        repo_args.add_argument('--fedora-root', dest='fedora_root', required=True,
+                               help='URL for accessing fedora, e.g. http://localhost:8080/fedora/')
+        repo_args.add_argument('--fedora-user', dest='fedora_user', default=None, 
+                               help='Fedora username')
+        repo_args.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
+                               default=None, action=PasswordAction,
+                               help='Password for the specified Fedora user (leave blank to be prompted)')
+        # general script options
+        common_args.add_argument('--quiet', '-q', default=False, action='store_true',
+                                 help='Quiet mode: only output summary report')
+        common_args.add_argument('--max', '-m', type=int, metavar='N',
+                                 help='Stop after processing the first %(metavar)s objects')
+
+        common_args.add_argument('pids', metavar='PID', nargs='*',
+                                 help='list specific pids to be checked (optional)')
+
+        # actual main argument parser
+        self.parser = argparse.ArgumentParser(description='''Validate or repair datastream
+        checksums for Fedora repository content.  By default, iterates through all content
+        objects that are findable via RIsearch and checks or repairs all datastreams.
+        ''')
+
+        # add subcommands for script modes
+        subparsers = self.parser.add_subparsers(dest='mode', title='subcommands')
+        # validate
+        v_parser = subparsers.add_parser('validate',
+                                         help='check for invalid and missing checksums',
+                                         parents=[common_args])
+        v_parser.add_argument('--csv-file', dest='csv_file', default=None,
+                              help='Output results to the specified CSV file')
+        v_parser.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
+                              help='''Check all versions of datastreams
+                              (by default, only current versions are checked)''')
+        # repair
+        r_parser = subparsers.add_parser('repair',
+                                         help='repair missing checksums',
+                                         parents=[common_args])
+        r_parser.add_argument('--checksum-type', dest='checksum_type', default='DEFAULT',
+                              help='''Checksum type to use; if not specified,
+                              will prompt Fedora to use the configured default checksum type''')
+
 
     def run(self):
         # bind a handler for interrupt signal
         signal.signal(signal.SIGINT, self.interrupt_handler)
 
-        parser = argparse.ArgumentParser(description='''Validate datastream checksums
-        for Fedora repository content.  By default, iterates through all objects that
-        are findable by the findObjects REST API and checks all datastreams.
-        ''')
-        parser.add_argument('pids', metavar='PID', nargs='*',
-                            help='list specific pids to be checked (optional)')
-        # fedora connection options
-        repo_args = parser.add_argument_group('Fedora repository connection options')
-        repo_args.add_argument('--fedora-root', dest='fedora_root', required=True,
-                            help='URL for accessing fedora, e.g. http://localhost:8080/fedora/')
-        repo_args.add_argument('--fedora-user', dest='fedora_user', default=None, 
-                            help='Fedora username (requires permission to run compareDatastreamChecksum)')
-        repo_args.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
-                            default=None, action=PasswordAction,
-                            help='Password for the specified Fedora user (leave blank to be prompted)')
-        # general script options
-        parser.add_argument('--csv-file', dest='csv_file', default=None,
-                            help='Output results to the specified CSV file')
-        parser.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
-                        help='''Check all versions of datastreams
-                        (by default, only current versions are checked)''')
-        parser.add_argument('--quiet', '-q', default=False, action='store_true',
-                        help='Quiet mode: only output summary report')
-        parser.add_argument('--max', '-m', type=int, metavar='N',
-                        help='Stop after processing the first N objects')
-        self.args = parser.parse_args()
+        self.config_arg_parser()
+        self.args = self.parser.parse_args()
 
-        # if csv-file is specified, create the file and write the header row
-        if self.args.csv_file:
+
+        # if in validation mode and csv-file is specified, open the
+        # file and write the header row
+        if self.args.mode == 'validate' and self.args.csv_file:
             # TODO: error handling for file open/write failure
             self.csv_file = open(self.args.csv_file, 'wb')
             self.csv = csv.writer(self.csv_file,  quoting=csv.QUOTE_ALL)
             self.csv.writerow(['pid', 'datastream id', 'date created', 'status',
                                'mimetype', 'versioned'])
 
-        # TODO: needs fedora error handling (e.g., bad password)
+        # TODO: needs fedora error handling (e.g., bad password, hostname, etc)
         repo = Repository(self.args.fedora_root,
                           self.args.fedora_user, self.args.fedora_password)
 
@@ -133,9 +185,9 @@ class ValidateChecksums(object):
         # initalize progress bar
         pid_pbar = None
         total = self.args.max or len(object_pids)
+        # init progress bar if available and we're checking enough objects
         if total >= 10 and ProgressBar and os.isatty(sys.stderr.fileno()):
-            # init progress bar if we're checking enough objects
-            widgets = [Percentage(), ' (', Counter() , ' of %s)' % total,
+            widgets = [Percentage(), ' (', SimpleProgress(), ')',
                        Bar(), ETA()]
             pid_pbar = ProgressBar(widgets = widgets, maxval=total).start()
 
@@ -149,16 +201,11 @@ class ValidateChecksums(object):
                 dsobj = obj.getDatastreamObject(dsid)
                 self.stats['ds'] += 1
 
-                if self.args.all_versions:
-                    # check every version of this datastream
-                    history = obj.api.getDatastreamHistory(obj.pid, dsid)
-                    for ds in history.datastreams:
-                        self.check_datastream(dsobj, ds.createDate)
-                        self.stats['ds_versions'] += 1
-
-                else:
-                    # current version only
-                    self.check_datastream(dsobj)
+                if self.args.mode == 'validate':
+                    self.validate_datastream(dsobj)
+                    
+                elif self.args.mode == 'repair':
+                    self.repair_datastream(dsobj)
                 
             self.stats['objects'] += 1
             
@@ -174,17 +221,27 @@ class ValidateChecksums(object):
            pid_pbar.finish()
 
         # summarize what was done
-        totals = '\nTested %(objects)d object(s), %(ds)d datastream(s)' % self.stats
-        if self.args.all_versions:
-            totals += ', %(ds_versions)d datastream version(s)' % self.stats
-        print totals
-        print '%(invalid)d invalid checksum(s)' % self.stats
-        print '%(missing)d datastream(s) with no checksum' % self.stats
+        if self.args.mode == 'validate':
+            self.validation_summary()
+        elif self.args.mode == 'repair':
+            self.repair_summary()
 
         # if a csv file was opened, close it
         if self.csv_file:
             self.csv_file.close()
 
+
+    def validate_datastream(self, dsobj):
+        if self.args.all_versions:
+            # check every version of this datastream
+            history = dsobj.obj.api.getDatastreamHistory(dsobj.obj.pid, dsobj.id)
+            for ds in history.datastreams:
+                self.check_datastream(dsobj, ds.createDate)
+                self.stats['ds_versions'] += 1
+
+        else:
+            # current version only
+            self.check_datastream(dsobj)
 
     def check_datastream(self, dsobj, date=None):
         '''Check the validity of a particular datastream.  Checks for
@@ -223,6 +280,46 @@ class ValidateChecksums(object):
                 self.csv.writerow([dsobj.obj.pid, dsobj.id, dsobj.created, status,
                                    dsobj.mimetype, dsobj.versionable])
 
+    def validation_summary(self):
+        '''Summarize what was done when the script was run in
+        **validation** mode.'''
+        totals = '\nTested %(objects)d object(s), %(ds)d datastream(s)' % self.stats
+        if self.args.all_versions:
+            totals += ', %(ds_versions)d datastream version(s)' % self.stats
+        print totals
+        print '%(invalid)d invalid checksum(s)' % self.stats
+        print '%(missing)d datastream(s) with no checksum' % self.stats
+
+
+    def repair_datastream(self, dsobj):
+        '''Check for and repair a missing checksum on a single
+        datastream.  If checksum type is ``DISABLED`` and checksum
+        value is ``none``, update the checksum type and save the
+        datastream, prompting Fedora to calculate a new checksum of
+        the requested type.
+
+        :param dsobj: :class:`~eulfedora.models.DatastreamObject`
+        '''
+        if dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
+            dsobj.checksum_type = self.args.checksum_type
+            try:
+                saved = dsobj.save('updating missing checksum')
+                if saved:
+                    self.stats['ds_updated'] += 1
+            except Exception as e:
+                print 'Error saving %s/%s : %s' % \
+                      (dsobj.obj.pid, dsobj.id, e)
+                self.stats['ds_err'] += 1
+
+    def repair_summary(self):
+        '''Summarize what was done when the script was run in
+        **repair** mode.'''
+        
+        print '\nChecked %(objects)d object(s), updated %(ds_updated)d datastream(s)' % \
+              self.stats
+        if self.stats['ds_err']:
+            print 'Error saving %(ds_err)d datastream(s)' % self.stats
+
     def interrupt_handler(self, signum, frame):
         '''Gracefully handle a SIGINT, if possible. Sets a flag so main script
         loop can exit cleanly, and restores the default SIGINT behavior,
@@ -234,7 +331,7 @@ class ValidateChecksums(object):
             # set interrupt flag so main loop knows to quit at a reasonable time
             self.interrupted = True
             # report if script is in the middle of an object
-            print 'Script will exit after all datastreams for the current object are checked.'
+            print 'Script will exit after processing the current object.'
             print '(Ctrl-C / Interrupt again to quit immediately)'
 
 
