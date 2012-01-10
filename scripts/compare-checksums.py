@@ -135,18 +135,16 @@ class ValidateChecksums(object):
         total = len(object_pids)
         if total >= 10 and ProgressBar and os.isatty(sys.stderr.fileno()):
             # init progress bar if we're checking enough objects
-            widgets = ['Pids: ', ' ',
-                       Bar(), ' ',
-                       Percentage(),
-                       ' (', Counter() , ' of ', str(total), ')', ' ',
-                       ETA()]
+            widgets = [Percentage(), ' (', Counter() , ' of %s)' % total,
+                       Bar(), ETA()]
             pid_pbar = ProgressBar(widgets = widgets, maxval=total).start()
 
         for pid in object_pids:
             obj = repo.get_object(pid = pid)
             if not obj.exists:
-                print "pid %s does not exist" % pid
+                print "Error: %s does not exist or is inaccessible" % pid
                 continue
+            
             for dsid in obj.ds_list.iterkeys():
                 dsobj = obj.getDatastreamObject(dsid)
                 self.stats['ds'] += 1
