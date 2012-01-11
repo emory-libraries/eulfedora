@@ -15,64 +15,11 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-'''
 
-This is a command line utility script to validate or repair datastream
-checksums for content stored in a Fedora Commons repository.
 
-.. Note::
+# NOTE: more detailed documentation & usage examples are included in
+# scripts/__init__.py for inclusion in sphinx docs.
 
-   Requires Python2.7.
-
-The script has two basic modes: **validate** and **repair**.
-
-In **validate** mode, the script will iterate through all objects and
-validate the checksum for each datastream (or optionally each version
-of any versioned datastream), reporting on invalid or missing
-checksums.
-
-In **repair** mode, the script will iterate through all objects
-looking for datastreams with a checksum type of ``DISABLED`` and a
-checksum value of ``none``; any such datastreams will be updated in
-Fedora with a new checksum type (either as specified via script
-argument ``--checksum-type`` or using the Fedora configured default),
-prompting Fedora to calculate and save a new checksum.
-
-Running this script in either mode requires passing Fedora connection
-information and credentials, for example::
-
-  $ fedora-checksums validate --fedora-root=http://localhost:8080/fedora/ \
-  	--fedora-user=fedoraAdmin --fedora-password=fedoraAdmin
-
-If you prefer not to specify your fedora password on the command line,
-specify the ``--fedora-password`` option with an empty value and you
-will be prompted::
-
-  $ fedora-checksums validate --fedora-root=http://localhost:8080/fedora/ \
-  	--fedora-user=fedoraAdmin --fedora-password=
-
-.. Note::
-
-  The fedora user you specify must have permission to find objects,
-  access datastream profiles and history, have permission to run the
-  compareDatastreamChecksum API method (when validating), and
-  permission to modify datastreams (when repairing).
-
-If you have specific objects you wish to check or repair, you can run
-the script with a list of pids.  When validating, there is also an
-option to output details to a CSV file for further investigation.  For
-more details, see the script usage for the appropriate mode::
-
-  $ fedora-checksums validate --help
-  $ fedora-checksums repair --help
-
-.. Note::
-
-  If the python :mod:`progressbar` package is available, progress will
-  be displayed as objects are checked; however, :mod:`progressbar` is
-  not required to run this script.
-
-'''
 import argparse
 from collections import defaultdict
 import csv
@@ -89,9 +36,7 @@ except ImportError:
     ProgressBar = None
 
 
-
-
-class ValidateChecksums(object):
+class FedoraChecksums(object):
 
     stats = defaultdict(int)
 
@@ -336,6 +281,8 @@ class ValidateChecksums(object):
 
 
 class PasswordAction(argparse.Action):
+    '''Use :meth:`getpass.getpass` to prompt for a password for a
+    command-line argument.'''
     def __call__(self, parser, namespace, value, option_string=None):
         # if a value was specified on the command-line, use that
         if value:
@@ -346,4 +293,4 @@ class PasswordAction(argparse.Action):
 
 
 if __name__ == '__main__':
-    ValidateChecksums().run()
+    FedoraChecksums().run()

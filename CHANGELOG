@@ -7,9 +7,10 @@ any necessary information about installation or upgrade notes.
 
 0.19 (dev)
 ----------
-* added ``scripts/compare-checksums.py`` which validates and reports on datastream checksums.
-  It has optional options such as CSV output.  Also it will display a progress bar if
-  the progressbar python package is installed.
+
+* New command-line script ``fedora-checksums`` for datastream
+  checksums validation and repair.  See :doc:`scripts` for more
+  details.
 
 0.18 (preliminary)
 ------------------
