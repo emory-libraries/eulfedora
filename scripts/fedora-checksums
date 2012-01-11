@@ -122,7 +122,8 @@ class FedoraChecksums(object):
 
         if self.args.pids:
             # if pids were specified on the command line, use those
-            object_pids = [pid for pid in self.args.pids]
+            # get distinct pid list (only process each object once)
+            object_pids = set(pid for pid in self.args.pids)
         else:
             # otherwise, process all find-able objects
             object_pids = list(repo.risearch.get_subjects(modelns.hasModel , self.object_model))
