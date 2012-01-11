@@ -415,7 +415,7 @@ class DatastreamObject(object):
         response from Fedora.
 
         :param date: (optional) check the datastream validity at a
-        particular date/time (e.g., for versionable datastreams)
+		particular date/time (e.g., for versionable datastreams)
         '''
         response, uri = self.obj.api.compareDatastreamChecksum(self.obj.pid, self.id,
                                                                asOfDateTime=date)
