@@ -277,7 +277,7 @@ class ValidateChecksums(object):
                       (dsobj.obj.pid, dsobj.id, status, date or dsobj.created)
 
             if self.csv:
-                self.csv.writerow([dsobj.obj.pid, dsobj.id, dsobj.created, status,
+                self.csv.writerow([dsobj.obj.pid, dsobj.id, date or dsobj.created, status,
                                    dsobj.mimetype, dsobj.versionable])
 
     def validation_summary(self):
