@@ -1,0 +1,5 @@
+Scripts
+=======
+
+.. automodule:: scripts
+

@@ -27,6 +27,7 @@ Contents
    tutorials/fedora
    tutorials/examples
    fedora
+   scripts
    changelog
    readme
 
