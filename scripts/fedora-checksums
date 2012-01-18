@@ -90,6 +90,8 @@ class FedoraChecksums(object):
         v_parser.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
                               help='''Check all versions of datastreams
                               (by default, only current versions are checked)''')
+        v_parser.add_argument('--missing-only', dest='missing_only', action='store_true',
+                              help='''Only check for datastreams with no checksum''')
         # repair
         r_parser = subparsers.add_parser('repair',
                                          help='repair missing checksums',
@@ -203,12 +205,15 @@ class FedoraChecksums(object):
         version of the datastream to be checked; when not specified,
         the current version will be checked
         '''
-        if not dsobj.validate_checksum(date=date):
+
+        if not self.args.missing_only and not dsobj.validate_checksum(date=date):
             status = 'invalid'
 
         # if the checksum in fedora is stored as DISABLED/none,
         # validate_checksum will return True - but that may not be
         # what we want, so report as missing.
+
+        # NOTE: this ignores date param (probably ok, but should document/clarify)
         elif dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
             status = 'missing'
             
@@ -233,7 +238,8 @@ class FedoraChecksums(object):
         if self.args.all_versions:
             totals += ', %(ds_versions)d datastream version(s)' % self.stats
         print totals
-        print '%(invalid)d invalid checksum(s)' % self.stats
+        if not self.args.missing_only:
+            print '%(invalid)d invalid checksum(s)' % self.stats
         print '%(missing)d datastream(s) with no checksum' % self.stats
 
 
