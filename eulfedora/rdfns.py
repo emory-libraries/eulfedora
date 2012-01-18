@@ -14,6 +14,27 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+
+'''
+Predefined RDF namespaces for convenience, for use with
+:class:`~eulfedora.models.RdfDatastream` objects, in
+:class:`~eulfedora.api.ResourceIndex` queries, for defining a
+:class:`eulfedora.models.Relation`, for adding relationships via
+:meth:`eulfedora.models.DigitalObject.add_relationship`, or anywhere
+else that Fedora-related :class:`rdflib.term.URIRef` objects might
+come in handy.
+
+Example usage::
+
+  from eulfedora.models import DigitalObject, Relation
+  from eulfedora.rdfns import relsext as relsextns
+
+  class Item(DigitalObject):
+    collection = Relation(relsextns.isMemberOfCollection)
+
+----
+'''
+
 from rdflib import URIRef
 from rdflib.namespace import ClosedNamespace
 
@@ -46,12 +67,19 @@ fedora_rels = [
 
 relsext = ClosedNamespace('info:fedora/fedora-system:def/relations-external#',
                           fedora_rels)
+''':class:`rdflib.namespace.ClosedNamespace` for the `Fedora external
+relations ontology
+<http://www.fedora.info/definitions/1/0/fedora-relsext-ontology.rdfs>`_.
+'''
 
 # TODO: find and catalog full namespace. currently this is just a list of
 # names we use in this ns.
 model = ClosedNamespace('info:fedora/fedora-system:def/model#', [
     'hasModel',
 ])
+''':class:`rdflib.namespace.ClosedNamespace` for the Fedora model
+namespace (currently only includes ``hasModel``).'''
+
 
 
 # these are the OAI terms used with the PROAI OAI provider commonly used with Fedora
@@ -62,3 +90,6 @@ oai = ClosedNamespace(
         "itemID", "setSpec", "setName"
         ]
     )
+''':class:`rdflib.namespace.ClosedNamespace` for the OAI relations
+commonly used with Fedora and the PROAI OAI provider.  Available URIs
+are: ``itemID``, ``setSpec``, and ``setName``.'''

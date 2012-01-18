@@ -14,7 +14,7 @@ Server objects
 ---------------
 
 Repository
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^
 
 .. automodule:: eulfedora.server
    
@@ -27,6 +27,13 @@ Resource Index
 
 .. autoclass:: eulfedora.api.ResourceIndex
     :members:
+
+
+RDF Namespaces
+--------------
+
+.. automodule:: eulfedora.rdfns
+   :members:
 
 
 Django integration
