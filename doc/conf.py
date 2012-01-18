@@ -32,4 +32,5 @@ intersphinx_mapping = {
     'eulcommon': ('http://eulcommon.readthedocs.org/en/latest/', None),
     'eulxml': ('http://eulxml.readthedocs.org/en/latest/', None),
     'python': ('http://docs.python.org/', None),
+    'rdflib': ('http://rdflib.readthedocs.org/en/latest/', None),
 }
