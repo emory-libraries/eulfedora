@@ -31,7 +31,7 @@ from eulfedora.util import RequestFailed, PermissionDenied
 from eulfedora.models import DigitalObject, Datastream, FileDatastream
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.views import raw_datastream, login_and_store_credentials_in_session, \
-     datastream_etag
+     datastream_etag, raw_audit_trail
 from eulfedora import cryptutil
 
 from testcore import main
@@ -175,7 +175,34 @@ class FedoraViewsTest(unittest.TestCase):
 
         # bogus dsid should not error
         etag = datastream_etag(rqst, self.obj.pid, 'bogus-datastream-id')
-        self.assertEqual(None, etag)        
+        self.assertEqual(None, etag)
+
+
+    def test_raw_audit_trail(self):
+        rqst = Mock()
+        rqst.method = 'GET'
+
+        # created with no ingest message = no audit trail
+        self.assertRaises(Http404, raw_audit_trail, rqst, self.obj.pid)
+
+        # modify object so it will have an audit trail
+        self.obj.dc.content.title = 'audit this!'
+        changelog = 'I just changed the title'
+        self.obj.save(changelog)
+        response = raw_audit_trail(rqst, self.obj.pid)
+        expected, got = 200, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for raw_audit_trail' \
+                % (expected, got))
+        expected, got = 'text/xml', response['Content-Type']
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for mimetype on raw_audit_trail' \
+                % (expected, got))
+        self.assert_('<audit:auditTrail' in response.content)
+        self.assert_('<audit:justification>%s</audit:justification>' % changelog
+                     in response.content)
+        self.assert_('Last-Modified' in response)
+
 
     def test_login_and_store_credentials_in_session(self):
         # only testing custom logic, which happens on POST

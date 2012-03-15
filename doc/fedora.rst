@@ -43,8 +43,11 @@ Django integration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: eulfedora.views
+   :members:
 
    .. automethod:: eulfedora.views.raw_datastream
+
+.. FIXME: raw_ds docs seem to be broken because of django decorators (?)
 
 
 :mod:`~eulfedora.indexdata` Fedora Indexing

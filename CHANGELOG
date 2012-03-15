@@ -13,7 +13,10 @@ any necessary information about installation or upgrade notes.
   details.
 * :class:`eulfedora.models.DigitalObject` now provides access to the
   Fedora built-in audit trail; see
-  :attr:`eulfedora.models.DigitalObject.audit_trail` 
+  :attr:`eulfedora.models.DigitalObject.audit_trail`.  Also provides a
+  new a Django view (:meth:`eulfedora.views.raw_audit_trail`) to serve
+  out audit trail XML, comparable to :meth:`eulfedora.views.raw_datastream`.
+
 
 0.18.1
 ------
