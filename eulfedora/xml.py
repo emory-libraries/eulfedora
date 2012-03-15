@@ -58,6 +58,7 @@ FEDORA_MANAGE_NS = 'http://www.fedora.info/definitions/1/0/management/'
 FEDORA_ACCESS_NS = 'http://www.fedora.info/definitions/1/0/access/'
 FEDORA_DATASTREAM_NS = 'info:fedora/fedora-system:def/dsCompositeModel#'
 FEDORA_TYPES_NS = 'http://www.fedora.info/definitions/1/0/types/'
+FEDORA_AUDIT_NS = 'info:fedora/fedora-system:def/audit#'
 
 
 class _FedoraBase(xmlmap.XmlObject):
@@ -67,6 +68,7 @@ class _FedoraBase(xmlmap.XmlObject):
         'a' : FEDORA_ACCESS_NS,
         'ds': FEDORA_DATASTREAM_NS,
         't': FEDORA_TYPES_NS,
+        'audit': FEDORA_AUDIT_NS
     }
 
 class ObjectDatastream(_FedoraBase):
@@ -269,3 +271,39 @@ class DsCompositeModel(xmlmap.XmlObject):
             context = { 'namespaces': DS_NAMESPACES,
                         'dsid': dsid }
             return field.get_for_node(self.node, context)
+
+
+class AuditTrailRecord(_FedoraBase):
+    ''':class:`~eulxml.xmlmap.XmlObject` for a single audit entry in
+    an :class:`AuditTrail`.
+    '''
+    id = xmlmap.StringField('@ID')
+    'id for this audit trail record'
+    process_type = xmlmap.StringField('audit:process/@type')
+    'type of modification, e.g. `Fedora API-M`'
+    action = xmlmap.StringField('audit:action')
+    'the particular action taken, e.g. `addDatastream`'
+    component = xmlmap.StringField('audit:componentID')
+    'the component that was modified, e.g. a datastream ID such as `DC` or `RELS-EXT`'
+    user = xmlmap.StringField('audit:responsibility')
+    'the user or account responsible for the change (e.g., `fedoraAdmin`)'
+    date = FedoraDateField('audit:date')
+    'date the change was made, as :class:`datetime.datetime`'
+    message = xmlmap.StringField('audit:justification')
+    'justification for the change, if any (i.e., log message passed to save method)'
+
+class AuditTrail(_FedoraBase):
+    ''':class:`~eulxml.xmlmap.XmlObject` for the Fedora built-in audit trail
+    that is automatically populated from any modifications made to an object.
+    '''
+    records = xmlmap.NodeListField('audit:record', AuditTrailRecord)
+    'list of :class:`AuditTrailRecord` entries'
+
+class FoxmlDigitalObject(_FedoraBase):
+    '''Minimal :class:`~eulxml.xmlmap.XmlObject` for Foxml
+    DigitalObject as returned by :meth:`REST_API.getObjectXML`, to
+    provide access to the Fedora audit trail.
+    '''
+    audit_trail = xmlmap.NodeField('foxml:datastream[@ID="AUDIT"]/foxml:datastreamVersion/foxml:xmlContent/audit:auditTrail', AuditTrail)
+    'Fedora audit trail, as instance of :class:`AuditTrail`'
+    

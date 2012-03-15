@@ -11,6 +11,9 @@ any necessary information about installation or upgrade notes.
 * New command-line script ``fedora-checksums`` for datastream
   checksums validation and repair.  See :doc:`scripts` for more
   details.
+* :class:`eulfedora.models.DigitalObject` now provides access to the
+  Fedora built-in audit trail; see
+  :attr:`eulfedora.models.DigitalObject.audit_trail` 
 
 0.18.1
 ------
