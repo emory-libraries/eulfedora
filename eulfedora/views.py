@@ -21,10 +21,11 @@ Intended to be analogous to `Django's generic views
 Using these views (in the simpler cases) should be as easy as::
 
     from django.conf.urls.defaults import *
-    from eulfedora.views import raw_datastream
+    from eulfedora.views import raw_datastream, raw_audit_trail
 
     urlpatterns = patterns('',
         url(r'^(?P<pid>[^/]+)/(?P<dsid>(MODS|RELS-EXT|DC))/$', raw_datastream),
+        url(r'^(?P<pid>[^/]+)/AUDIT/$', raw_audit_trail),
     )
 
 '''
@@ -151,6 +152,55 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
 
         # for anything else, re-raise & let Django's default 500 logic handle it
         raise
+
+
+@require_http_methods(['GET'])
+def raw_audit_trail(request, pid, type=None, repo=None):
+    '''View to display the raw xml audit trail for a Fedora Object.
+    Returns an :class:`~django.http.HttpResponse` with the response content
+    populated with the content of the audit trial. 
+
+    If the object is not found or does not have an audit trail, raises
+    an :class:`~django.http.Http404` .  For any other errors (e.g.,
+    permission denied by Fedora), the exception is not caught and
+    should be handled elsewhere.
+    
+    :param request: HttpRequest
+    :param pid: Fedora object PID
+    :param repo: :class:`~eulcore.django.fedora.server.Repository` instance to use,
+        in case your application requires custom repository initialization (optional)
+
+
+    .. Note::
+
+      Fedora does not make checksums, size, or other attributes
+      available for the audit trail (since it is internal and not a
+      true datastream), so the additional headers included in
+      :meth:`raw_datastream` cannot be added here.
+      
+    '''
+    
+    if repo is None:
+        repo = Repository()
+    # no special options are *needed* to access audit trail, since it
+    # is available on any DigitalObject; but a particular view may be
+    # restricted to a certain type of object
+    get_obj_opts = {}
+    if type is not None:
+        get_obj_opts['type'] = type
+    obj = repo.get_object(pid, **get_obj_opts)
+    # object exists and has a non-empty audit trail
+    if obj.exists and obj.has_requisite_content_models and obj.audit_trail:
+        response = HttpResponse(obj.audit_trail.serialize(),
+                            mimetype='text/xml')
+        # audit trail is updated every time the object gets modified
+        response['Last-Modified'] = obj.modified
+        return response
+        
+    else:
+        raise Http404
+
+    # any other errors should be caught elsewhere
 
 
 def login_and_store_credentials_in_session(request, *args, **kwargs):
