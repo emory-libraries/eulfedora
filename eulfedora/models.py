@@ -1027,8 +1027,10 @@ class DigitalObject(object):
                 self.default_pidspace = default_pidspace
             except AttributeError:
                 # allow extending classes to make default_pidspace a custom property,
-                # but warn in case of conflict
-                logger.warn("Failed to set requested default_pidspace %s" % default_pidspace)
+                # but warn if there is case of conflict 
+                if default_pidspace != getattr(self, 'default_pidspace', None):
+                    logger.warn("Failed to set requested default_pidspace %s (using %s instead)" \
+                                % (default_pidspace, self.default_pidspace))
         # cache object profile, track if it is modified and needs to be saved
         self._info = None
         self.info_modified = False
