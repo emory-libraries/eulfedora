@@ -757,6 +757,26 @@ class TestDigitalObject(FedoraTestCase):
         newobj = MyDigitalObject(self.api)
         self.assertEqual(None, newobj.audit_trail)
 
+        # test audit-trail derived properties
+        # no ingest message set, therefore no ingest user in audit trail
+        self.assertEqual(None, self.obj.ingest_user)
+        self.assertEqual(set(['fedoraAdmin']), self.obj.audit_trail_users)
+
+        # tweak xml in the audit trail to test
+        self.obj.audit_trail.records[0].action = 'ingest'
+        self.obj.audit_trail.records.extend([AuditTrailRecord(user='editor'),
+                                             AuditTrailRecord(user='manager'),
+                                             AuditTrailRecord(user='editor')])
+
+        self.assertEqual('fedoraAdmin', self.obj.ingest_user)
+        self.assertEqual(set(['fedoraAdmin', 'editor', 'manager']),
+                         self.obj.audit_trail_users)
+
+        # should not error when audit trail is not available
+        newobj = MyDigitalObject(self.api)
+        self.assertEqual(None, newobj.ingest_user)
+        self.assertEqual(set(), newobj.audit_trail_users)
+
     def test_methods(self):
         methods = self.obj.methods
         self.assert_('fedora-system:3' in methods)      # standard system sdef

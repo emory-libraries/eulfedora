@@ -1309,11 +1309,11 @@ class DigitalObject(object):
 
         .. Note::
 
-          Since current versions of Fedora do not make the audit trail
-          available via the API calls or as a datastream, accessing
-          the audit trail requires loading the foxml for the object.
-          If an object has large, versioned XML datastreams this may
-          be slow.
+          Since Fedora (as of 3.5) does not make the audit trail
+          available via an API call or as a datastream, accessing the
+          audit trail requires loading the foxml for the object.  If
+          an object has large, versioned XML datastreams this may be
+          slow.
         '''
         # NOTE: It would be nice to expose the audit trail so that it
         # looks and behaves a bit more like other datastreams (pseudo
@@ -1323,6 +1323,24 @@ class DigitalObject(object):
         #   https://jira.duraspace.org/browse/FCREPO-635
         if self.object_xml:
             return self.object_xml.audit_trail
+
+    @property
+    def ingest_user(self):
+        '''Username responsible for ingesting this object into the repository,
+        as recorded in the :attr:`audit_trail`, if available.'''
+        # if there is an audit trail and it has records and the first
+        # action is ingest, return the user
+        if self.audit_trail and self.audit_trail.records \
+           and self.audit_trail.records[0].action == 'ingest':
+            return self.audit_trail.records[0].user
+
+    @property
+    def audit_trail_users(self):
+        '''A set of all usernames recorded in the :attr:`audit_trail`,
+        if available.'''
+        if self.audit_trail:
+            return set([r.user for r in self.audit_trail.records])
+        return set()
 
     def getProfile(self):    
         """Get information about this object (label, owner, date created, etc.).

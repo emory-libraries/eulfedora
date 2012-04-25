@@ -277,6 +277,9 @@ class AuditTrailRecord(_FedoraBase):
     ''':class:`~eulxml.xmlmap.XmlObject` for a single audit entry in
     an :class:`AuditTrail`.
     '''
+    ROOT_NAME = 'record'
+    ROOT_NS = FEDORA_AUDIT_NS
+    
     id = xmlmap.StringField('@ID')
     'id for this audit trail record'
     process_type = xmlmap.StringField('audit:process/@type')
