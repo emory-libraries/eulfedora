@@ -771,8 +771,11 @@ class Relation(object):
 
     :param relation: the RDF predicate URI as a :class:`rdflib.URIRef`
     
-    :param type: optional :class:`~eulfedora.models.DigitalObject` subclass
-    	to initialize (for object relations)
+    :param type: optional :class:`~eulfedora.models.DigitalObject`
+    	subclass to initialize (for object relations); use
+    	``type="self"`` to specify that the current DigitalObject
+    	class should be used (currently no reverse relation will be
+    	created for recursive relations).
         
     :param ns_prefix: optional dictionary to configure namespace
     	prefixes to be used for serialization; key should be the
@@ -806,6 +809,11 @@ class Relation(object):
         uri_val = obj.rels_ext.content.value(subject=obj.uriref,
                                          predicate=self.relation)
         if uri_val and self.object_type:	# don't init new object if val is None
+            # special case: if object_type is the string 'self',
+            # use the parent object class (save after the first check)
+            if self.object_type == 'self':
+                self.object_type = obj.__class__
+                
             # need get_object wrapper method on digital object
             return obj.get_object(uri_val, type=self.object_type)
         # if the value has 'toPython' method (e.g., rdflib.Literal),
@@ -953,6 +961,12 @@ class DigitalObjectType(type):
         # the current class
         # for now, assume all reverse relations are multiple
         for rel_name, rel in reverse_rels.iteritems():
+            # don't reverse self-relations for now
+            if isinstance(rel.object_type, basestring):
+                continue
+            # TODO: look into handling this the way django handles
+            # recursive relationships
+            
             # use related name if one has been specified
             if rel.related_name is not None:
                 reverse_name = rel.related_name

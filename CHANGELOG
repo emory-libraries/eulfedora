@@ -26,6 +26,8 @@ any necessary information about installation or upgrade notes.
     :attr:`~eulfedora.models.DigitalObject.ingest_user`: username
     responsible for ingesting the object into Fedora if ingest is
     listed in the audit trail
+* :class:`~eulfedora.models.Relation` now supports recursive relations
+  via the option ``type="self"``. 
 
 0.18.1
 ------

@@ -971,6 +971,8 @@ class RelatorObject(MyDigitalObject):
     dctitle = models.Relation(DCNS.title)
     # literal with explicit type and namespace prefix
     dcid = models.Relation(DCNS.identifier, ns_prefix={'dcns': DCNS}, rdf_type=XSD.int)
+    # type of "self"
+    recursive_rel = models.Relation(relsext.isMemberOf, type='self')
 
     # test variant options for automatic reverse relations
     other = models.Relation(relsext.isMemberOfCollection, type=SimpleDigitalObject,
@@ -978,7 +980,9 @@ class RelatorObject(MyDigitalObject):
     parent1 = models.Relation(relsext.isMemberOfCollection, type=models.DigitalObject,
                               related_name='my_custom_rel')
     sib = models.Relation(relsext.isMemberOf, type=SiblingObject,
-                                 related_name='+') 
+                                 related_name='+')
+
+
 
 class ReverseRelator(MyDigitalObject):
     member = models.ReverseRelation(relsext.isMemberOfCollection, type=RelatorObject)
@@ -1024,6 +1028,17 @@ class TestRelation(FedoraTestCase):
         self.assertEqual(None, self.obj.rels_ext.content.value(subject=self.obj.uriref,
                                                                predicate=relsext.isMemberOfCollection),
                          'isMemberOfCollection should not be set in rels-ext after delete')
+
+    def test_recursive_relation(self):
+        self.assertEqual(None, self.obj.recursive_rel)
+
+        # set via descriptor
+        newobj = models.DigitalObject(self.api)
+        newobj.pid = 'foo:3'	# test pid for convenience/distinguish temp pids
+        self.obj.recursive_rel = newobj
+
+        # access to check type 
+        self.assert_(isinstance(self.obj.recursive_rel, RelatorObject))
         
     def test_literal_relation(self):
         # get - not set
