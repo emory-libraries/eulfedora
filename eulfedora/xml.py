@@ -242,6 +242,19 @@ class SearchResults(_FedoraBase):
     "search results - list of :class:`SearchResult`"
 
 
+class DatastreamHistory(_FedoraBase):
+    """:class:`~eulxml.xmlmap.XmlObject` for datastream history
+    information returned by :meth:`REST_API.getDatastreamHistory`."""
+    # default namespace is fedora manage
+    ROOT_NAME = 'datastreamHistory'    
+    pid = xmlmap.StringField('@pid')
+    "pid"
+    dsid = xmlmap.StringField('@dsID')
+    "datastream id"
+    versions = xmlmap.NodeListField('m:datastreamProfile', DatastreamProfile)
+    'list of :class:`DatastreamProfile` objects for each version'
+
+
 DS_NAMESPACES = {'ds': FEDORA_DATASTREAM_NS }
 
 class DsTypeModel(xmlmap.XmlObject):

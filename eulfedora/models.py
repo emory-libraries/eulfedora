@@ -28,7 +28,8 @@ from eulfedora.api import ResourceIndex
 from eulfedora.rdfns import model as modelns, relsext as relsextns, fedora_rels
 from eulfedora.util import parse_xml_object, parse_rdf, RequestFailed, datetime_to_fedoratime
 from eulfedora.xml import ObjectDatastreams, ObjectProfile, DatastreamProfile, \
-    NewPids, ObjectHistory, ObjectMethods, DsCompositeModel, FoxmlDigitalObject
+    NewPids, ObjectHistory, ObjectMethods, DsCompositeModel, FoxmlDigitalObject, \
+    DatastreamHistory
 from eulxml.xmlmap.dc import DublinCore
 
 logger = logging.getLogger(__name__)
@@ -276,10 +277,19 @@ class DatastreamObject(object):
         return self.info.modified
 
     def last_modified(self):
+        # NOTE: last_modified may actually be the 'created' date for
+        # the current version of the datastream.
+        
         # FIXME: **preliminary** actual last-modified, since the above does not
         # actually work - should probably cache ds history...
-        history = self.obj.api.getDatastreamHistory(self.obj.pid, self.id)
-        return history.datastreams[0].createDate # fedora returns with most recent first
+        return self.history().versions[0].created # fedora returns most recent first
+
+    def history(self):
+        '''Get history/version information for this datastream and
+        return as an instance of
+        :class:`~eulfedora.xml.DatastreamHistory`.'''
+        data, url = self.obj.api.getDatastreamHistory(self.obj.pid, self.id, format='xml')
+        return parse_xml_object(DatastreamHistory, data, url)
 
     def save(self, logmessage=None):
         """Save datastream content and any changed datastream profile
@@ -382,9 +392,8 @@ class DatastreamObject(object):
 
         if self.versionable:
             # if this is a versioned datastream, get datastream history
-            # and purge the most recent version 
-            history = self.obj.api.getDatastreamHistory(self.obj.pid, self.id)
-            last_save = history.datastreams[0].createDate   # fedora returns with most recent first
+            # and purge the most recent version
+            last_save = self.history().versions[0].created # fedora returns most recent first
             success, timestamps = self.obj.api.purgeDatastream(self.obj.pid, self.id,
                                                 datetime_to_fedoratime(last_save),
                                                 logMessage=logMessage)
@@ -1733,7 +1742,7 @@ class DigitalObject(object):
             del self.dscache['RELS-EXT']
         self._ds_list = None
 
-        return self.api.addRelationship(self.pid, rel_uri, object, obj_is_literal)
+        return self.api.addRelationship(self.pid, self.uri, rel_uri, object, obj_is_literal)
 
     def has_model(self, model):
         """
