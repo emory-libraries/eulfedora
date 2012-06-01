@@ -37,7 +37,6 @@ setup(
         'python-dateutil',
 	'poster',
         'pycrypto',
-        'soaplib==0.8.1',
     ],
 
     # indexdata utils are optional. They include things like PDF text stripping (pyPdf).
