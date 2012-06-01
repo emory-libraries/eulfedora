@@ -28,7 +28,7 @@ import warnings
 
 from test_fedora.base import FedoraTestCase, load_fixture_data, FEDORA_ROOT_NONSSL,\
                 FEDORA_USER, FEDORA_PASSWORD, FEDORA_PIDSPACE
-from eulfedora.api import REST_API, API_A_LITE, API_M_LITE, API_M, ResourceIndex, \
+from eulfedora.api import REST_API, API_A_LITE, API_M, ResourceIndex, \
      UnrecognizedQueryLanguage
 from eulfedora.models import DigitalObject
 from eulfedora.rdfns import model as modelns
@@ -524,6 +524,27 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assertRaises(RequestFailed, self.rest_api.setDatastreamVersionable,
                           "bogus:pid", "DC", True)
 
+    # utility methods
+
+    def test_upload_string(self):
+        data = "Here is some temporary content to upload to fedora."
+        upload_id = self.rest_api.upload(data)
+        # current format looks like uploaded://####
+        pattern = re.compile('uploaded://[0-9]+')
+        self.assert_(pattern.match(upload_id))
+
+    def test_upload_file(self):
+        FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
+        FILE.write("Here is some temporary content to upload to fedora.")
+        FILE.flush()
+
+        with open(FILE.name, 'rb') as f:
+            upload_id = self.rest_api.upload(f)
+        # current format looks like uploaded://####
+        pattern = re.compile('uploaded://[0-9]+')
+        self.assert_(pattern.match(upload_id))
+        
+
 
 class TestAPI_A_LITE(FedoraTestCase):
     fixtures = ['object-with-pid.foxml']
@@ -542,32 +563,6 @@ class TestAPI_A_LITE(FedoraTestCase):
         self.assert_('<adminEmail>' in desc)
 
 
-class TestAPI_M_LITE(FedoraTestCase):
-    fixtures = ['object-with-pid.foxml']
-    pidspace = FEDORA_PIDSPACE
-
-    def setUp(self):
-        super(TestAPI_M_LITE, self).setUp()
-        self.pid = self.fedora_fixtures_ingested[0]
-        self.api_m = API_M_LITE(self.opener)
-
-    def testUploadString(self):
-        data = "Here is some temporary content to upload to fedora."
-        upload_id = self.api_m.upload(data)
-        # current format looks like uploaded://####
-        pattern = re.compile('uploaded://[0-9]+')
-        self.assert_(pattern.match(upload_id))
-
-    def testUploadFile(self):
-        FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
-        FILE.write("Here is some temporary content to upload to fedora.")
-        FILE.flush()
-
-        with open(FILE.name, 'rb') as f:
-            upload_id = self.api_m.upload(f)
-        # current format looks like uploaded://####
-        pattern = re.compile('uploaded://[0-9]+')
-        self.assert_(pattern.match(upload_id))
 
 
 # NOTE: to debug soap, uncomment these lines

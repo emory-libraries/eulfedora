@@ -532,6 +532,34 @@ class REST_API(HTTP_API_Base):
             return response.status == 200
 
 
+
+    ### utility methods
+
+        
+    def upload(self, data):
+        '''
+        Upload a multi-part file for content to ingest.  Returns a
+        temporary upload id that can be used as a datstream location.
+        '''
+        
+        url = 'upload'
+
+        # use poster multi-part encode to build the headers and a generator
+        # for body content, in order to handle posting large files that
+        # can't be read into memory all at once. use _NamedMultipartParam to
+        # force a filename as described above.
+        post_params = _NamedMultipartParam.from_params({'file':data})
+        body, headers = multipart_encode(post_params)
+
+        with self.open('POST', url, body, headers=headers) as response:
+            # returns 202 Accepted on success
+            # return response.status == 202 
+            # content of response should be upload id, if successful
+            resp_data = response.read()
+            return resp_data.strip()
+
+
+
 # NOTE: the "LITE" APIs are planned to be phased out; when that happens, these functions
 # (or their equivalents) should be available in the REST API
 
@@ -561,25 +589,6 @@ class _NamedMultipartParam(MultipartParam):
 
         super_init = super(_NamedMultipartParam, self).__init__
         super_init(name, value, filename, *args, **kwargs)
-
-
-class API_M_LITE(HTTP_API_Base):
-    def upload(self, data):
-        url = 'management/upload'
-
-        # use poster multi-part encode to build the headers and a generator
-        # for body content, in order to handle posting large files that
-        # can't be read into memory all at once. use _NamedMultipartParam to
-        # force a filename as described above.
-        post_params = _NamedMultipartParam.from_params({'file':data})
-        body, headers = multipart_encode(post_params)
-
-        with self.open('POST', url, body, headers=headers) as response:
-            # returns 201 Created on success
-            # return response.status == 201
-            # content of response should be upload id, if successful
-            resp_data = response.read()
-            return resp_data.strip()
 
 
 # return object for getRelationships soap call
@@ -709,7 +718,7 @@ class API_M(ServiceClient):
                 urlparts.scheme, self.auth_headers))
 
 
-class ApiFacade(REST_API, API_A_LITE, API_M_LITE, API_M): # there is no API_A today
+class ApiFacade(REST_API, API_A_LITE, API_M): # there is no API_A today
     """Pull together all Fedora APIs into one place."""
     def __init__(self, opener):
         HTTP_API_Base.__init__(self, opener)
