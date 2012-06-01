@@ -28,6 +28,10 @@ any necessary information about installation or upgrade notes.
     listed in the audit trail
 * :class:`~eulfedora.models.Relation` now supports recursive relations
   via the option ``type="self"``. 
+* API wrappers have been updated to take advantage of all methods
+  available in the REST API as of Fedora 3.4 which were unavailable in
+  3.2.  This removes the need for any SOAP-based APIs and the
+  dependency on :mod:`soaplib`.
 
 0.18.1
 ------
