@@ -315,8 +315,8 @@ class TestDatastreams(FedoraTestCase):
         self.obj.text.save()
         self.append_test_pid(self.obj.pid)
         self.assertTrue(self.obj.text.undo_last_save())
-        history = self.obj.api.getDatastreamHistory(self.obj.pid, self.obj.text.id)
-        self.assertEqual("text datastream", history.datastreams[0].label)
+        history = self.obj.text.history()
+        self.assertEqual("text datastream", history.versions[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
         self.assertEqual(TEXT_CONTENT, data)
         
@@ -325,9 +325,9 @@ class TestDatastreams(FedoraTestCase):
         self.obj.dc.title = "my new DC"
         self.obj.dc.save()
         self.assertTrue(self.obj.dc.undo_last_save())
-        history = self.obj.api.getDatastreamHistory(self.obj.pid, self.obj.dc.id)
-        self.assertEqual(1, len(history.datastreams))  # new datastream added, then removed - back to 1 version
-        self.assertEqual("Dublin Core", history.datastreams[0].label)
+        history = self.obj.dc.history()
+        self.assertEqual(1, len(history.versions))  # new datastream added, then removed - back to 1 version
+        self.assertEqual("Dublin Core", history.versions[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
         self.assert_('<dc:title>A partially-prepared test object</dc:title>' in data)
 
@@ -336,8 +336,8 @@ class TestDatastreams(FedoraTestCase):
         self.obj.text.label = "totally new label"
         self.obj.text.save()
         self.assertTrue(self.obj.text.undo_last_save())
-        history = self.obj.api.getDatastreamHistory(self.obj.pid, self.obj.text.id)
-        self.assertEqual("text datastream", history.datastreams[0].label)
+        history = self.obj.text.history()
+        self.assertEqual("text datastream", history.versions[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
         self.assertEqual(TEXT_CONTENT, data)
 
