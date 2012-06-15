@@ -170,8 +170,10 @@ class DatastreamProfile(_FedoraBase):
 class NewPids(_FedoraBase):
     """:class:`~eulxml.xmlmap.XmlObject` for a list of pids as returned by
     :meth:`REST_API.getNextPID`."""
-     # NOTE: default namespace as of 3.4 *should* be fedora manage, but does not appear to be
-    pids = xmlmap.StringListField('pid')
+    # NOTE: default namespace as of should be manage, but the
+    # namespace was missing until Fedora 3.5.  Match with or without a
+    # namespace, to support Fedora 3.5 as well as older versions.
+    pids = xmlmap.StringListField('pid|m:pid')
 
 
 class RepositoryDescriptionPid(_FedoraBase):
