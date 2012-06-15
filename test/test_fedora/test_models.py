@@ -1078,6 +1078,7 @@ class TestRelation(FedoraTestCase):
                          'dc:identifier should not be set in rels-ext after delete')
         
     def test_reverse_relation(self):
+        # NOTE: this test depends on syncUpdates being set to true in Fedora
         rev = ReverseRelator(self.api, 'foo:1')
         # add a relation to the object and save so we can query risearch
         self.obj.parent = rev

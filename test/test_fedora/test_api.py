@@ -91,7 +91,8 @@ Hey, nonny-nonny."""
 
         # search for everything - get enough results to get a session token
         # - note that current test fedora includes a number of control objects
-        found, url = self.rest_api.findObjects("title~*")
+        # - using smaller chunk size to ensure pagination
+        found, url = self.rest_api.findObjects("title~*", chunksize=2)
         self.assert_('<listSession>' in found)
         self.assert_('<token>' in found)
 
@@ -607,11 +608,15 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         
 
     def test_setDatastreamState(self):
-        set_state = self.rest_api.setDatastreamState(self.pid, "DC", "I")
+        # in Fedora 3.5, Fedora returns a BadRequest when we attempt to
+        # mark DC as inactive (probably reasonable); testing on a
+        # non-required datastream instead.
+        (added, dsprofile), ds = self._add_text_datastream()
+        set_state = self.rest_api.setDatastreamState(self.pid, "TEXT", "I")
         self.assertTrue(set_state)
 
         # get datastream to confirm change
-        ds_profile, url = self.rest_api.getDatastream(self.pid, "DC")
+        ds_profile, url = self.rest_api.getDatastream(self.pid, "TEXT")
         self.assert_('<dsState>I</dsState>' in ds_profile)
 
         # bad datastream id
@@ -623,11 +628,15 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
                           "bogus:pid", "DC", "D")
 
     def test_setDatastreamVersionable(self):
-        set_versioned = self.rest_api.setDatastreamVersionable(self.pid, "DC", False)
+        # In Fedora 3.5, Fedora returns a BadRequest when we attempt
+        # to change DC versionable (reasonable?); testing on a
+        # non-required datastream instead.
+        (added, dsprofile), ds = self._add_text_datastream()
+        set_versioned = self.rest_api.setDatastreamVersionable(self.pid, "TEXT", False)
         self.assertTrue(set_versioned)
 
         # get datastream profile to confirm change
-        ds_profile, url = self.rest_api.getDatastream(self.pid, "DC")
+        ds_profile, url = self.rest_api.getDatastream(self.pid, "TEXT")
         self.assert_('<dsVersionable>false</dsVersionable>' in ds_profile)
 
         # bad datastream id
