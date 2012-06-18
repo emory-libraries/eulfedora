@@ -32,6 +32,8 @@ any necessary information about installation or upgrade notes.
   available in the REST API as of Fedora 3.4 which were unavailable in
   3.2.  This removes the need for any SOAP-based APIs and the
   dependency on :mod:`soaplib`.
+* Minor API / unit test updates to support Fedora 3.5 in addition to
+  3.4.x.
 
 0.18.1
 ------
