@@ -15,15 +15,12 @@
 #   limitations under the License.
 
 from eulxml import xmlmap
-
-# FIXME: DateField still needs significant improvements before we can make
-# it part of the real xmlmap interface.
-from eulxml.xmlmap.fields import DateField
-from eulxml.xmlmap.fields import Field, SingleNodeManager, NodeMapper
+from eulxml.xmlmap.fields import Field, SingleNodeManager, NodeMapper, \
+                                 DateTimeField
 
 from eulfedora.util import datetime_to_fedoratime, fedoratime_to_datetime
 
-class FedoraDateMapper(xmlmap.fields.DateMapper):
+class FedoraDateMapper(xmlmap.fields.DateTimeMapper):
     def to_python(self, node):
         rep = self.XPATH(node)
         return fedoratime_to_datetime(rep)
@@ -238,7 +235,7 @@ class SearchResults(_FedoraBase):
     "session token"
     cursor = xmlmap.IntegerField('t:listSession/t:cursor')
     "session cursor"
-    expiration_date = DateField('t:listSession/t:expirationDate')
+    expiration_date = DateTimeField('t:listSession/t:expirationDate')
     "session experation date"
     results = xmlmap.NodeListField('t:resultList/t:objectFields', SearchResult)
     "search results - list of :class:`SearchResult`"
