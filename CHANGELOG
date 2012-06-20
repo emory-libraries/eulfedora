@@ -5,8 +5,8 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
-0.19 (dev)
-----------
+0.19.0
+------
 
 * New command-line script ``fedora-checksums`` for datastream
   checksums validation and repair.  See :doc:`scripts` for more
