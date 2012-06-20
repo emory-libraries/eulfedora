@@ -3,9 +3,9 @@ README
 
 EULfedora is a `Python <http://www.python.org/>`_ module that provides
 utilities, API wrappers, and classes for interacting with the
-`Fedora-Commons Repository <http://fedora-commons.org/>`_ (version
-3.4.x) in a pythonic, object-oriented way, with optional `Django
-<https://www.djangoproject.com/>`_ integration.
+`Fedora-Commons Repository <http://fedora-commons.org/>`_ (versions
+3.4.x and 3.5) in a pythonic, object-oriented way, with optional
+`Django <https://www.djangoproject.com/>`_ integration.
 
 **eulfedora.api** provides complete access to the Fedora API,
 primarily making use of Fedora's 

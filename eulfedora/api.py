@@ -22,12 +22,6 @@ from urlparse import urlsplit
 import time
 import warnings
 
-from soaplib.serializers import primitive as soap_types
-from soaplib.serializers.clazz import ClassSerializer
-from soaplib.service import soapmethod
-from soaplib.client import ServiceClient, SimpleSoapClient
-from soaplib.wsgi_soap import SimpleWSGISoapApp
-
 from poster.encode import multipart_encode, MultipartParam
 
 from eulfedora.util import auth_headers, datetime_to_fedoratime, \
@@ -277,11 +271,33 @@ class REST_API(HTTP_API_Base):
             # return success/failure and any additional information
             return (response.status == 201, response.read())
 
+    def addRelationship(self, pid, subject, predicate, object, isLiteral=False,
+                        datatype=None):
+        """
+        Wrapper function for `Fedora REST API addRelationsphi <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-addRelationship>`_
 
-    # addRelationship not implemented in REST API
+        :param pid: persistent id for the object to add the new relationship to
+        :param subject: subject of the relationship; object or datastream URI
+        :param predicate: predicate of the new relationship
+        :param object: object of the relationship
+        :param isLiteral: true if object is literal, false if it is a URI;
+            Fedora has no default; this method defaults to False
+        :param datatype: optional datatype for literal objects
+        
+        :returns: boolean success
+        """
+
+        http_args = {'subject': subject, 'predicate': predicate,
+                     'object': object, 'isLiteral': isLiteral}
+        if datatype is not None:
+            http_args['datatype'] = datatype
+        
+        url = 'objects/%s/relationships/new?' % (pid, ) + _safe_urlencode(http_args)
+        with self.open('POST', url, None, {}) as response:
+            return response.status == 200
 
     def compareDatastreamChecksum(self, pid, dsID, asOfDateTime=None): # date time
-        # specical case of getDatastream, with validateChecksum = true
+        # special case of getDatastream, with validateChecksum = true
         # currently returns datastream info returned by getDatastream...  what should it return?
         return self.getDatastream(pid, dsID, validateChecksum=True, asOfDateTime=asOfDateTime)
 
@@ -314,14 +330,27 @@ class REST_API(HTTP_API_Base):
         # /objects/{pid}/datastreams/{dsID} ? [asOfDateTime] [format] [validateChecksum]
         http_args = {}
         if validateChecksum:
-            http_args['validateChecksum'] = validateChecksum
+            # fedora only responds to lower-case validateChecksum option
+            http_args['validateChecksum'] = str(validateChecksum).lower()
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
         http_args.update(self.format_xml)        
-        uri = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
+        uri = 'objects/%s/datastreams/%s' % (pid, dsID)
+        if http_args:
+            uri += '?' + _safe_urlencode(http_args)
         return self.read(uri)
 
-    # getDatastreamHistory not implemented in REST API
+    def getDatastreamHistory(self, pid, dsid, format=None):
+        http_args = {}
+        if format is not None:
+            http_args['format'] = format
+        # Fedora docs say the url should be:
+        #   /objects/{pid}/datastreams/{dsid}/versions
+        # In Fedora 3.4.3, that 404s but /history does not
+        uri = 'objects/%s/datastreams/%s/history' % (pid, dsid)
+        if http_args:
+            uri += '?' +  _safe_urlencode(http_args)
+        return self.read(uri)
 
     # getDatastreams not implemented in REST API
 
@@ -355,7 +384,25 @@ class REST_API(HTTP_API_Base):
         # /objects/{pid}/objectXML
         return self.read('objects/%s/objectXML' % (pid,))
 
-    # getRelationships not implemented in REST API
+    def getRelationships(self, pid, subject=None, predicate=None, format=None):
+        '''
+        Get information about relationships on an object.
+
+        Wrapper function for `Fedora REST API getRelationships <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-getRelationships>`_
+        
+        '''
+        http_args = {}
+        if subject is not None:
+            http_args['subject'] = subject
+        if predicate is not None:
+            http_args['predicate'] = predicate
+        if format is not None:
+            http_args['format'] = format
+        
+        url = 'objects/%s/relationships?' % (pid, ) + _safe_urlencode(http_args)
+        return self.read(url)
+
+
 
     def ingest(self, text, logMessage=None):
         """
@@ -512,8 +559,30 @@ class REST_API(HTTP_API_Base):
             # as of Fedora 3.4, returns 200 on success; response content is timestamp
             return response.status == 200, response.read()
 
-    # purgeRelationship not implemented in REST API
+    def purgeRelationship(self, pid, subject, predicate, object, isLiteral=False,
+                        datatype=None):
+        '''
+        Remove a relationship from an object.
 
+        Wrapper function for `Fedora REST API purgeRelationship <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-purgeRelationship>`_
+
+        :returns: boolean; indicates whether or not a relationship was
+            removed
+        
+        '''
+
+        http_args = {'subject': subject, 'predicate': predicate,
+                     'object': object, 'isLiteral': isLiteral}
+        if datatype is not None:
+            http_args['datatype'] = datatype
+        
+        url = 'objects/%s/relationships?' % (pid, ) + _safe_urlencode(http_args)
+        with self.open('DELETE', url, None, {}) as response:
+            # should have a status code of 200;
+            # response body text indicates if a relationship was purged or not
+            return response.status == 200 and response.read() == 'true'
+
+        
     def setDatastreamState(self, pid, dsID, dsState):
         # /objects/{pid}/datastreams/{dsID} ? [dsState]
         http_args = { 'dsState' : dsState }
@@ -529,6 +598,34 @@ class REST_API(HTTP_API_Base):
         with self.open('PUT', url, '', {}) as response:
             # returns response code 200 on success
             return response.status == 200
+
+
+
+    ### utility methods
+
+        
+    def upload(self, data):
+        '''
+        Upload a multi-part file for content to ingest.  Returns a
+        temporary upload id that can be used as a datstream location.
+        '''
+        
+        url = 'upload'
+
+        # use poster multi-part encode to build the headers and a generator
+        # for body content, in order to handle posting large files that
+        # can't be read into memory all at once. use _NamedMultipartParam to
+        # force a filename as described above.
+        post_params = _NamedMultipartParam.from_params({'file':data})
+        body, headers = multipart_encode(post_params)
+
+        with self.open('POST', url, body, headers=headers) as response:
+            # returns 202 Accepted on success
+            # return response.status == 202 
+            # content of response should be upload id, if successful
+            resp_data = response.read()
+            return resp_data.strip()
+
 
 
 # NOTE: the "LITE" APIs are planned to be phased out; when that happens, these functions
@@ -562,157 +659,11 @@ class _NamedMultipartParam(MultipartParam):
         super_init(name, value, filename, *args, **kwargs)
 
 
-class API_M_LITE(HTTP_API_Base):
-    def upload(self, data):
-        url = 'management/upload'
-
-        # use poster multi-part encode to build the headers and a generator
-        # for body content, in order to handle posting large files that
-        # can't be read into memory all at once. use _NamedMultipartParam to
-        # force a filename as described above.
-        post_params = _NamedMultipartParam.from_params({'file':data})
-        body, headers = multipart_encode(post_params)
-
-        with self.open('POST', url, body, headers=headers) as response:
-            # returns 201 Created on success
-            # return response.status == 201
-            # content of response should be upload id, if successful
-            resp_data = response.read()
-            return resp_data.strip()
-
-
-# return object for getRelationships soap call
-class GetRelationshipResponse:
-    def __init__(self, relationships):
-        self.relationships = relationships
-
-    @staticmethod
-    def from_xml(*elements):
-        return GetRelationshipResponse([RelationshipTuple.from_xml(el)
-                                        for el in elements])
-
-    
-class RelationshipTuple(ClassSerializer):
-    class types:
-        subject = soap_types.String
-        predicate = soap_types.String
-        object = soap_types.String
-        isLiteral = soap_types.Boolean
-        datatype = soap_types.String
-
-class GetDatastreamHistoryResponse:
-    def __init__(self, datastreams):
-        self.datastreams = datastreams
-
-    @staticmethod
-    def from_xml(*elements):
-        return GetDatastreamHistoryResponse([Datastream.from_xml(el)
-                                             for el in elements])
-
-class Datastream(ClassSerializer):
-    # soap datastream response used by getDatastreamHistory and getDatastream
-    class types:
-        controlGroup = soap_types.String
-        ID = soap_types.String
-        versionID = soap_types.String
-        altIDs = soap_types.String   # according to Fedora docs this should be array, but that doesn't work
-        label = soap_types.String
-        versionable = soap_types.Boolean
-        MIMEType = soap_types.String
-        formatURI = soap_types.String
-        createDate = soap_types.DateTime
-        size = soap_types.Integer   # Long ?
-        state = soap_types.String
-        location = soap_types.String
-        checksumType = soap_types.String
-        checksum = soap_types.String
-    
-# service class stub for soap method definitions
-class API_M_Service(SimpleWSGISoapApp):
-    """
-       Python object for accessing `Fedora's SOAP API-M <http://fedora-commons.org/confluence/display/FCR30/API-M>`_.
-    """
-    # FIXME: also accepts an optional String datatype
-    @soapmethod(
-            soap_types.String,  # pid       NOTE: fedora docs say URI, but at least in 3.2 it's really pid
-            soap_types.String,  # relationship
-            soap_types.String,  # object
-            soap_types.Boolean, # isLiteral
-            _outVariableName='added',
-            _returns = soap_types.Boolean)
-    def addRelationship(self, pid, relationship, object, isLiteral):
-        """
-        Add a new relationship to an object's RELS-EXT datastream.
-
-        Wrapper function for `API-M addRelationship <http://fedora-commons.org/confluence/display/FCR30/API-M#API-M-addRelationship>`_
-
-        :param pid: object pid
-        :param relationship: relationship to be added
-        :param object: URI or string for related object
-        :param isLiteral: boolean, is the related object a literal or an rdf resource
-        """
-        pass
-
-    @soapmethod(
-            soap_types.String,  # subject (fedora object or datastream URI) 
-            soap_types.String,  # relationship
-            _outVariableName='relationships',
-            _returns = GetRelationshipResponse)   # custom class for complex soap type
-    def getRelationships(self, subject=None, relationship=None):
-        pass
-
-    @soapmethod(
-            soap_types.String,  # pid
-            soap_types.String,  # relationship; null matches all
-            soap_types.String,  # object; null matches all
-            soap_types.Boolean, # isLiteral     # optional literal datatype ?
-            _returns = soap_types.Boolean,
-            _outVariableName='purged',)
-    def purgeRelationship(self, pid, relationship=None, object=None, isLiteral=False):
-        pass
-
-    @soapmethod(
-            soap_types.String,  #pid
-            soap_types.String,  #dsID
-            _returns = GetDatastreamHistoryResponse,
-            _outVariableName="datastream")
-    def getDatastreamHistory(self, pid, dsID):
-        pass
-
-
-# extend SimpleSoapClient to accept auth headers and pass them to any soap call that is made
-class AuthSoapClient(SimpleSoapClient):
-    def __init__(self, host, path, descriptor, scheme="http", auth_headers={}):
-        self.auth_headers = auth_headers
-        return super(AuthSoapClient, self).__init__(host, path, descriptor, scheme)
-
-    def __call__(self, *args, **kwargs):
-        kwargs.update(self.auth_headers)
-        return super(AuthSoapClient, self).__call__(*args, **kwargs)
-
-
-class API_M(ServiceClient):
-    def __init__(self, opener):
-        self.auth_headers = auth_headers(opener.username, opener.password)
-        urlparts = urlsplit(opener.base_url)
-        hostname = urlparts.hostname
-        api_path = urlparts.path + 'services/management'
-        if urlparts.port:
-            hostname += ':%s' % urlparts.port
-
-        # this is basically equivalent to calling make_service_client or ServiceClient init
-        # - using custom AuthSoapClient and passing auth headers
-        self.server = API_M_Service()
-        for method in self.server.methods():
-            setattr(self, method.name, AuthSoapClient(hostname, api_path, method,
-                urlparts.scheme, self.auth_headers))
-
-
-class ApiFacade(REST_API, API_A_LITE, API_M_LITE, API_M): # there is no API_A today
+class ApiFacade(REST_API, API_A_LITE): 
     """Pull together all Fedora APIs into one place."""
+    # as of 3.4, REST API covers everything except describeRepository
     def __init__(self, opener):
         HTTP_API_Base.__init__(self, opener)
-        API_M.__init__(self, opener)
 
 
 

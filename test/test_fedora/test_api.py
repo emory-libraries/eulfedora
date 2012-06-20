@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta
 from dateutil.tz import tzutc
 import httplib
 from lxml import etree
+from rdflib import URIRef
 import re
 from time import sleep
 import tempfile
@@ -28,12 +29,12 @@ import warnings
 
 from test_fedora.base import FedoraTestCase, load_fixture_data, FEDORA_ROOT_NONSSL,\
                 FEDORA_USER, FEDORA_PASSWORD, FEDORA_PIDSPACE
-from eulfedora.api import REST_API, API_A_LITE, API_M_LITE, API_M, ResourceIndex, \
+from eulfedora.api import REST_API, API_A_LITE, ResourceIndex, \
      UnrecognizedQueryLanguage
 from eulfedora.models import DigitalObject
 from eulfedora.rdfns import model as modelns
 from eulfedora.util import AuthorizingServerConnection, fedoratime_to_datetime, \
-     datetime_to_fedoratime, RequestFailed, ChecksumMismatch
+     datetime_to_fedoratime, RequestFailed, ChecksumMismatch, parse_rdf
 from eulfedora.xml import FEDORA_MANAGE_NS, FEDORA_ACCESS_NS
 from testcore import main
 
@@ -90,7 +91,8 @@ Hey, nonny-nonny."""
 
         # search for everything - get enough results to get a session token
         # - note that current test fedora includes a number of control objects
-        found, url = self.rest_api.findObjects("title~*")
+        # - using smaller chunk size to ensure pagination
+        found, url = self.rest_api.findObjects("title~*", chunksize=2)
         self.assert_('<listSession>' in found)
         self.assert_('<token>' in found)
 
@@ -259,6 +261,62 @@ Hey, nonny-nonny."""
                           controlGroup='M', filename=FILE.name)
         FILE.close()
 
+    # relationship predicates for testing
+    rel_isMemberOf = "info:fedora/fedora-system:def/relations-external#isMemberOf"
+    rel_owner = "info:fedora/fedora-system:def/relations-external#owner"
+
+    def test_addRelationship(self):
+        # rel to resource
+        added = self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
+                                              unicode(modelns.hasModel),
+                                              'info:fedora/pid:123', False)
+        self.assertTrue(added)
+        rels, url = self.rest_api.getDatastreamDissemination(self.pid, 'RELS-EXT')
+        self.assert_('<hasModel' in rels)
+        self.assert_('rdf:resource="info:fedora/pid:123"' in rels)
+
+        # literal
+        added = self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
+                                              self.rel_owner, "johndoe", True)
+        self.assertTrue(added)
+        rels, url = self.rest_api.getDatastreamDissemination(self.pid, 'RELS-EXT')
+        self.assert_('<owner' in rels)
+        self.assert_('>johndoe<' in rels)
+
+        # bogus pid
+        self.assertRaises(RequestFailed, self.rest_api.addRelationship,
+            'bogus:pid', 'info:fedora/bogus:pid', self.rel_owner, 'johndoe', True)
+
+
+    def test_getRelationships(self):
+        # add relations to retrieve
+        self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
+                                   unicode(modelns.hasModel), "info:fedora/pid:123", False)
+        self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
+                                   self.rel_owner, "johndoe", True)
+
+        data, url = self.rest_api.getRelationships(self.pid)
+        graph = parse_rdf(data, url)
+
+        # check total number: fedora-system cmodel + two just added
+        self.assertEqual(3, len(list(graph)))
+        # newly added triples should be included in the graph
+        self.assert_((URIRef('info:fedora/%s' % self.pid),
+                      modelns.hasModel,
+                      URIRef('info:fedora/pid:123')) in graph)
+
+        self.assertEqual('johndoe', graph.value(subject=URIRef('info:fedora/%s' % self.pid),
+                                                predicate=URIRef(self.rel_owner)))
+
+        # get rels for a single predicate
+        data, url = self.rest_api.getRelationships(self.pid, predicate=self.rel_owner)
+        graph = parse_rdf(data, url)
+        # should include just the one we asked for
+        self.assertEqual(1, len(list(graph)))
+
+        self.assertEqual('johndoe', graph.value(subject=URIRef('info:fedora/%s' % self.pid),
+                                                predicate=URIRef(self.rel_owner)))
+
     def test_compareDatastreamChecksum(self):
         # create datastream with checksum
         (added, ds) = self._add_text_datastream()        
@@ -319,6 +377,42 @@ Hey, nonny-nonny."""
 
         # bogus pid
         self.assertRaises(Exception, self.rest_api.getDatastream, "bogus:pid", "DC")
+
+        
+    def test_getDatastreamHistory(self):
+        data, url = self.rest_api.getDatastreamHistory(self.pid, "DC")
+        # default format is html
+        self.assert_('<h3>Datastream History View</h3>' in data)
+        data, url = self.rest_api.getDatastreamHistory(self.pid, "DC", format='xml')
+        # check various pieces of datastream info
+        self.assert_('<dsVersionID>DC.0</dsVersionID>' in data)
+        self.assert_('<dsControlGroup>X</dsControlGroup>' in data)
+        self.assert_('<dsLabel>Dublin Core</dsLabel>' in data)
+        self.assert_('<dsVersionable>true</dsVersionable>' in data)
+        self.assert_('<dsMIME>text/xml</dsMIME>' in data)
+        self.assert_('<dsState>A</dsState>' in data)
+        
+        # modify DC so there are multiple versions        
+        new_dc = """<oai_dc:dc
+            xmlns:dc='http://purl.org/dc/elements/1.1/'
+            xmlns:oai_dc='http://www.openarchives.org/OAI/2.0/oai_dc/'>
+          <dc:title>Test-Object</dc:title>
+          <dc:description>modified!</dc:description>
+        </oai_dc:dc>"""
+        self.rest_api.modifyDatastream(self.pid, "DC", "DCv2Dublin Core",
+            mimeType="text/xml", logMessage="updating DC", content=new_dc)
+        data, url = self.rest_api.getDatastreamHistory(self.pid, 'DC', format='xml')
+        # should include both versions
+        self.assert_('<dsVersionID>DC.0</dsVersionID>' in data)
+        self.assert_('<dsVersionID>DC.1</dsVersionID>' in data)
+
+        # bogus datastream
+        self.assertRaises(RequestFailed, self.rest_api.getDatastreamHistory,
+                          self.pid, "BOGUS")
+        # bogus pid
+        self.assertRaises(RequestFailed, self.rest_api.getDatastreamHistory,
+                          "bogus:pid", "DC")
+        
         
     def test_getNextPID(self):
         pids, url = self.rest_api.getNextPID()
@@ -492,12 +586,37 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         # bad pid
         self.assertRaises(RequestFailed, self.rest_api.purgeObject, "bogus:pid")
 
+    def test_purgeRelationship(self):
+        # add relation to purg
+        self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
+                                      predicate=unicode(modelns.hasModel),
+                                      object='info:fedora/pid:123')
+        
+        purged = self.rest_api.purgeRelationship(self.pid, 'info:fedora/%s' % self.pid,
+                                                 unicode(modelns.hasModel),
+                                                 'info:fedora/pid:123')
+        self.assertEqual(purged, True)
+
+        # purge non-existent rel on valid pid
+        purged = self.rest_api.purgeRelationship(self.pid, 'info:fedora/%s' % self.pid,
+                                                 self.rel_owner, 'johndoe', isLiteral=True)
+        self.assertFalse(purged)
+
+        # bogus pid
+        self.assertRaises(RequestFailed, self.rest_api.purgeRelationship, "bogus:pid",
+                          'info:fedora/bogus:pid', self.rel_owner, "johndoe", True)        
+        
+
     def test_setDatastreamState(self):
-        set_state = self.rest_api.setDatastreamState(self.pid, "DC", "I")
+        # in Fedora 3.5, Fedora returns a BadRequest when we attempt to
+        # mark DC as inactive (probably reasonable); testing on a
+        # non-required datastream instead.
+        (added, dsprofile), ds = self._add_text_datastream()
+        set_state = self.rest_api.setDatastreamState(self.pid, "TEXT", "I")
         self.assertTrue(set_state)
 
         # get datastream to confirm change
-        ds_profile, url = self.rest_api.getDatastream(self.pid, "DC")
+        ds_profile, url = self.rest_api.getDatastream(self.pid, "TEXT")
         self.assert_('<dsState>I</dsState>' in ds_profile)
 
         # bad datastream id
@@ -509,11 +628,15 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
                           "bogus:pid", "DC", "D")
 
     def test_setDatastreamVersionable(self):
-        set_versioned = self.rest_api.setDatastreamVersionable(self.pid, "DC", False)
+        # In Fedora 3.5, Fedora returns a BadRequest when we attempt
+        # to change DC versionable (reasonable?); testing on a
+        # non-required datastream instead.
+        (added, dsprofile), ds = self._add_text_datastream()
+        set_versioned = self.rest_api.setDatastreamVersionable(self.pid, "TEXT", False)
         self.assertTrue(set_versioned)
 
         # get datastream profile to confirm change
-        ds_profile, url = self.rest_api.getDatastream(self.pid, "DC")
+        ds_profile, url = self.rest_api.getDatastream(self.pid, "TEXT")
         self.assert_('<dsVersionable>false</dsVersionable>' in ds_profile)
 
         # bad datastream id
@@ -523,6 +646,27 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         # non-existent pid
         self.assertRaises(RequestFailed, self.rest_api.setDatastreamVersionable,
                           "bogus:pid", "DC", True)
+
+    # utility methods
+
+    def test_upload_string(self):
+        data = "Here is some temporary content to upload to fedora."
+        upload_id = self.rest_api.upload(data)
+        # current format looks like uploaded://####
+        pattern = re.compile('uploaded://[0-9]+')
+        self.assert_(pattern.match(upload_id))
+
+    def test_upload_file(self):
+        FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
+        FILE.write("Here is some temporary content to upload to fedora.")
+        FILE.flush()
+
+        with open(FILE.name, 'rb') as f:
+            upload_id = self.rest_api.upload(f)
+        # current format looks like uploaded://####
+        pattern = re.compile('uploaded://[0-9]+')
+        self.assert_(pattern.match(upload_id))
+        
 
 
 class TestAPI_A_LITE(FedoraTestCase):
@@ -540,154 +684,6 @@ class TestAPI_A_LITE(FedoraTestCase):
         self.assert_('<repositoryName>' in desc)
         self.assert_('<repositoryVersion>' in desc)
         self.assert_('<adminEmail>' in desc)
-
-
-class TestAPI_M_LITE(FedoraTestCase):
-    fixtures = ['object-with-pid.foxml']
-    pidspace = FEDORA_PIDSPACE
-
-    def setUp(self):
-        super(TestAPI_M_LITE, self).setUp()
-        self.pid = self.fedora_fixtures_ingested[0]
-        self.api_m = API_M_LITE(self.opener)
-
-    def testUploadString(self):
-        data = "Here is some temporary content to upload to fedora."
-        upload_id = self.api_m.upload(data)
-        # current format looks like uploaded://####
-        pattern = re.compile('uploaded://[0-9]+')
-        self.assert_(pattern.match(upload_id))
-
-    def testUploadFile(self):
-        FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
-        FILE.write("Here is some temporary content to upload to fedora.")
-        FILE.flush()
-
-        with open(FILE.name, 'rb') as f:
-            upload_id = self.api_m.upload(f)
-        # current format looks like uploaded://####
-        pattern = re.compile('uploaded://[0-9]+')
-        self.assert_(pattern.match(upload_id))
-
-
-# NOTE: to debug soap, uncomment these lines
-#from soaplib.client import debug
-#debug(True)
-
-class TestAPI_M(FedoraTestCase):
-    fixtures = ['object-with-pid.foxml']
-    pidspace = FEDORA_PIDSPACE
-
-    # relationship predicates for testing
-    rel_isMemberOf = "info:fedora/fedora-system:def/relations-external#isMemberOf"
-    rel_owner = "info:fedora/fedora-system:def/relations-external#owner"
-
-    def setUp(self):
-        super(TestAPI_M, self).setUp()
-        self.pid = self.fedora_fixtures_ingested[0]
-        self.api_m = API_M(self.opener)
-        self.opener = AuthorizingServerConnection(FEDORA_ROOT_NONSSL, FEDORA_USER, FEDORA_PASSWORD)
-        self.rest_api = REST_API(self.opener)
-
-        # get fixture ingest time from the server the hard way for testing
-        dsprofile_data, url = self.rest_api.getDatastream(self.pid, "DC")
-        dsprofile_node = etree.fromstring(dsprofile_data, base_url=url)
-        created_s = dsprofile_node.xpath('string(m:dsCreateDate)',
-                                         namespaces={'m': FEDORA_MANAGE_NS})
-        self.ingest_time = fedoratime_to_datetime(created_s)
-        
-    def test_addRelationship(self):
-        # rel to resource
-        added = self.api_m.addRelationship(self.pid, unicode(modelns.hasModel), "info:fedora/pid:123", False)
-        self.assertTrue(added)
-        rels, url = self.rest_api.getDatastreamDissemination(self.pid, "RELS-EXT")
-        self.assert_('<hasModel' in rels)
-        self.assert_('rdf:resource="info:fedora/pid:123"' in rels)
-
-        # literal
-        added = self.api_m.addRelationship(self.pid, self.rel_owner, "johndoe", True)
-        self.assertTrue(added)
-        rels, url = self.rest_api.getDatastreamDissemination(self.pid, "RELS-EXT")
-        self.assert_('<owner' in rels)
-        self.assert_('>johndoe<' in rels)
-
-        # bogus pid
-        self.assertRaises(Exception, self.api_m.addRelationship,
-            "bogus:pid", self.rel_owner, "johndoe", True)
-
-    def test_getRelationships(self):
-        # add relations
-        self.api_m.addRelationship(self.pid, unicode(modelns.hasModel), "info:fedora/pid:123", False)
-        self.api_m.addRelationship(self.pid, self.rel_owner, "johndoe", True)
-
-        response = self.api_m.getRelationships(self.pid, unicode(modelns.hasModel))
-        rels = response.relationships
-
-        self.assertEqual(2, len(rels))  # includes fedora-system cmodel
-        self.assertEqual(rels[0].subject, 'info:fedora/' + self.pid)
-        self.assertEqual(rels[0].predicate, unicode(modelns.hasModel))
-        cmodels = [rels[0].object, rels[1].object]
-        self.assert_('info:fedora/fedora-system:FedoraObject-3.0' in cmodels)
-        self.assert_('info:fedora/pid:123' in cmodels)
-
-        response = self.api_m.getRelationships(self.pid, self.rel_owner)
-        rels = response.relationships
-        self.assertEqual(1, len(rels))
-        self.assertEqual(rels[0].subject, 'info:fedora/' + self.pid)
-        self.assertEqual(rels[0].predicate, self.rel_owner)
-        self.assertEqual(rels[0].object, "johndoe")
-
-    def test_purgeRelationship(self):
-        # add relation to purge
-        self.api_m.addRelationship(self.pid, unicode(modelns.hasModel), "info:fedora/pid:123", False)
-        
-        purged = self.api_m.purgeRelationship(self.pid, unicode(modelns.hasModel), "info:fedora/pid:123", False)
-        self.assertEqual(purged, True)
-
-        # purge non-existent rel on valid pid
-        purged = self.api_m.purgeRelationship(self.pid, self.rel_owner, "johndoe", True)
-        self.assertFalse(purged)
-
-        # bogus pid
-        self.assertRaises(Exception, self.api_m.purgeRelationship, "bogus:pid",
-            self.rel_owner, "johndoe", True)        
-
-    def test_getDatastreamHistory(self):
-        history = self.api_m.getDatastreamHistory(self.pid, "DC")
-        self.assertEqual(1, len(history.datastreams))
-        dc_info = history.datastreams[0]
-        self.assertEqual('X', dc_info.controlGroup)
-        self.assertEqual('DC', dc_info.ID)
-        self.assertEqual('DC.0', dc_info.versionID)
-         # altIDs unused
-        self.assertEqual('Dublin Core', dc_info.label)
-        self.assertTrue(dc_info.versionable)
-        self.assertEqual("text/xml", dc_info.MIMEType)
-        # formatURI not set in test fixture
-        self.assertEqual(self.ingest_time, dc_info.createDate) 
-        self.assert_(dc_info.size) # size should be non-zero - number comparison not reliable
-        self.assertEqual('A', dc_info.state) 
-        # location, checksumType, and checksum not set in current fixture
-        
-        # modify DC so there are multiple versions        
-        new_dc = """<oai_dc:dc
-            xmlns:dc='http://purl.org/dc/elements/1.1/'
-            xmlns:oai_dc='http://www.openarchives.org/OAI/2.0/oai_dc/'>
-          <dc:title>Test-Object</dc:title>
-          <dc:description>modified!</dc:description>
-        </oai_dc:dc>"""
-        self.rest_api.modifyDatastream(self.pid, "DC", "DCv2Dublin Core",
-            mimeType="text/xml", logMessage="updating DC", content=new_dc)
-        history = self.api_m.getDatastreamHistory(self.pid, "DC")
-        self.assertEqual(2, len(history.datastreams))
-        self.assertEqual('DC.1', history.datastreams[0].versionID)      # newest version is first
-        self.assertNotEqual(history.datastreams[0].createDate, history.datastreams[1].createDate)
-
-        # bogus datastream
-        self.assertEqual(None, self.api_m.getDatastreamHistory(self.pid, "BOGUS"))
-
-        # bogus pid
-        self.assertRaises(Exception, self.api_m.getDatastreamHistory, "bogus:pid", "DC")
 
 
 class TestResourceIndex(FedoraTestCase):

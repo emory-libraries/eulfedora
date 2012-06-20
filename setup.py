@@ -37,7 +37,6 @@ setup(
         'python-dateutil',
 	'poster',
         'pycrypto',
-        'soaplib==0.8.1',
     ],
 
     # indexdata utils are optional. They include things like PDF text stripping (pyPdf).
@@ -50,4 +49,5 @@ setup(
     description='Idiomatic access to digital objects in a Fedora Commons repository',
     long_description=LONG_DESCRIPTION,
     classifiers=CLASSIFIERS,
+    scripts=['scripts/fedora-checksums',],
 )

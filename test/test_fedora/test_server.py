@@ -18,7 +18,8 @@
 
 from datetime import date
 
-from test_fedora.base import FedoraTestCase, load_fixture_data, FEDORA_ROOT_NONSSL, FEDORA_PIDSPACE
+from test_fedora.base import FedoraTestCase, load_fixture_data, \
+     FEDORA_ROOT_NONSSL, FEDORA_PIDSPACE, FEDORA_USER, FEDORA_PASSWORD
 from eulfedora.rdfns import model as modelns
 from eulfedora.models import DigitalObject
 from eulfedora.server import Repository
@@ -181,7 +182,7 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
     def test_nonssl(self):
         self.ingestFixture('object-with-pid.foxml')
         pid = self.fedora_fixtures_ingested[0]
-        repo = Repository(FEDORA_ROOT_NONSSL)
+        repo = Repository(FEDORA_ROOT_NONSSL, FEDORA_USER, FEDORA_PASSWORD)
         found = list(repo.find_objects(pid=pid))
         self.assertEqual(1, len(found))
 

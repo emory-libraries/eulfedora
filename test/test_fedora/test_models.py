@@ -30,7 +30,8 @@ from eulfedora import models
 from eulfedora.api import ApiFacade
 from eulfedora.rdfns import relsext, model as modelns
 from eulfedora.util import RequestFailed, fedoratime_to_datetime
-from eulfedora.xml import ObjectDatastream, FEDORA_MANAGE_NS
+from eulfedora.xml import ObjectDatastream, FEDORA_MANAGE_NS, FoxmlDigitalObject, \
+     AuditTrail, AuditTrailRecord
 from eulxml.xmlmap.dc import DublinCore
 
 from test_fedora.base import FedoraTestCase, FEDORA_PIDSPACE, FIXTURE_ROOT
@@ -39,6 +40,7 @@ from testcore import main
 logger = logging.getLogger(__name__)
 
 ONE_SEC = timedelta(seconds=1)
+TWO_SECS = timedelta(seconds=2)
 
 class MyDigitalObject(models.DigitalObject):
     CONTENT_MODELS = ['info:fedora/%s:ExampleCModel' % FEDORA_PIDSPACE,
@@ -122,13 +124,13 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.dc.control_group, "X")
         # there may be micro-second variation between these two
         # ingest/creation times, but they should probably be less than
-        # a second apart
+        # a second or two apart
         try:
             self.assertAlmostEqual(self.ingest_time, self.obj.dc.created,
-                                   delta=ONE_SEC)
+                                   delta=TWO_SECS)
         except TypeError:
             # delta keyword unavailable before python 2.7
-            self.assert_(abs(self.ingest_time - self.obj.dc.created) < ONE_SEC)
+            self.assert_(abs(self.ingest_time - self.obj.dc.created) < TWO_SECS)
 
         # short-cut to datastream size
         self.assertEqual(self.obj.dc.info.size, self.obj.dc.size)
@@ -140,10 +142,10 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.text.control_group, "M")
         try:
             self.assertAlmostEqual(self.ingest_time, self.obj.text.created,
-                                   delta=ONE_SEC)
+                                   delta=TWO_SECS)
         except TypeError:
             # delta keyword unavailable before python 2.7
-            self.assert_(abs(self.ingest_time - self.obj.text.created) < ONE_SEC)
+            self.assert_(abs(self.ingest_time - self.obj.text.created) < TWO_SECS)
 
         # bootstrap info from defaults for a new object
         newobj = MyDigitalObject(self.api)
@@ -313,8 +315,8 @@ class TestDatastreams(FedoraTestCase):
         self.obj.text.save()
         self.append_test_pid(self.obj.pid)
         self.assertTrue(self.obj.text.undo_last_save())
-        history = self.obj.api.getDatastreamHistory(self.obj.pid, self.obj.text.id)
-        self.assertEqual("text datastream", history.datastreams[0].label)
+        history = self.obj.text.history()
+        self.assertEqual("text datastream", history.versions[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
         self.assertEqual(TEXT_CONTENT, data)
         
@@ -323,9 +325,9 @@ class TestDatastreams(FedoraTestCase):
         self.obj.dc.title = "my new DC"
         self.obj.dc.save()
         self.assertTrue(self.obj.dc.undo_last_save())
-        history = self.obj.api.getDatastreamHistory(self.obj.pid, self.obj.dc.id)
-        self.assertEqual(1, len(history.datastreams))  # new datastream added, then removed - back to 1 version
-        self.assertEqual("Dublin Core", history.datastreams[0].label)
+        history = self.obj.dc.history()
+        self.assertEqual(1, len(history.versions))  # new datastream added, then removed - back to 1 version
+        self.assertEqual("Dublin Core", history.versions[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
         self.assert_('<dc:title>A partially-prepared test object</dc:title>' in data)
 
@@ -334,8 +336,8 @@ class TestDatastreams(FedoraTestCase):
         self.obj.text.label = "totally new label"
         self.obj.text.save()
         self.assertTrue(self.obj.text.undo_last_save())
-        history = self.obj.api.getDatastreamHistory(self.obj.pid, self.obj.text.id)
-        self.assertEqual("text datastream", history.datastreams[0].label)
+        history = self.obj.text.history()
+        self.assertEqual("text datastream", history.versions[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
         self.assertEqual(TEXT_CONTENT, data)
 
@@ -731,6 +733,50 @@ class TestDigitalObject(FedoraTestCase):
         self.assert_(isinstance(self.obj.history[0], datetime))
         self.assertEqual(self.ingest_time, self.obj.history[0])
 
+    def test_object_xml(self):
+        self.assert_(isinstance(self.obj.object_xml, FoxmlDigitalObject))
+
+        # uningested object has none
+        newobj = MyDigitalObject(self.api)
+        self.assertEqual(None, newobj.object_xml)
+
+    def test_audit_trail(self):
+        self.assert_(isinstance(self.obj.audit_trail, AuditTrail))
+        self.assert_(isinstance(self.obj.audit_trail.records[0], AuditTrailRecord))
+        # inspect the audit trail by adding text datastream in setup
+        audit = self.obj.audit_trail.records[0]
+        self.assertEqual('AUDREC1', audit.id)
+        self.assertEqual('Fedora API-M', audit.process_type)
+        self.assertEqual('addDatastream', audit.action)
+        self.assertEqual('TEXT', audit.component)
+        self.assertEqual('fedoraAdmin', audit.user)
+        self.assert_(isinstance(audit.date, datetime))
+        self.assertEqual('creating new datastream', audit.message)
+
+        # uningested object has none
+        newobj = MyDigitalObject(self.api)
+        self.assertEqual(None, newobj.audit_trail)
+
+        # test audit-trail derived properties
+        # no ingest message set, therefore no ingest user in audit trail
+        self.assertEqual(None, self.obj.ingest_user)
+        self.assertEqual(set(['fedoraAdmin']), self.obj.audit_trail_users)
+
+        # tweak xml in the audit trail to test
+        self.obj.audit_trail.records[0].action = 'ingest'
+        self.obj.audit_trail.records.extend([AuditTrailRecord(user='editor'),
+                                             AuditTrailRecord(user='manager'),
+                                             AuditTrailRecord(user='editor')])
+
+        self.assertEqual('fedoraAdmin', self.obj.ingest_user)
+        self.assertEqual(set(['fedoraAdmin', 'editor', 'manager']),
+                         self.obj.audit_trail_users)
+
+        # should not error when audit trail is not available
+        newobj = MyDigitalObject(self.api)
+        self.assertEqual(None, newobj.ingest_user)
+        self.assertEqual(set(), newobj.audit_trail_users)
+
     def test_methods(self):
         methods = self.obj.methods
         self.assert_('fedora-system:3' in methods)      # standard system sdef
@@ -913,7 +959,10 @@ class TestContentModel(FedoraTestCase):
 
 
 # using DC namespace to test RDF literal values
-DCNS = Namespace(URIRef('http://purl.org/dc/elements/1.1/'))        
+DCNS = Namespace(URIRef('http://purl.org/dc/elements/1.1/'))
+
+class SiblingObject(models.DigitalObject):
+    pass
 
 class RelatorObject(MyDigitalObject):
     # related object
@@ -922,6 +971,17 @@ class RelatorObject(MyDigitalObject):
     dctitle = models.Relation(DCNS.title)
     # literal with explicit type and namespace prefix
     dcid = models.Relation(DCNS.identifier, ns_prefix={'dcns': DCNS}, rdf_type=XSD.int)
+    # type of "self"
+    recursive_rel = models.Relation(relsext.isMemberOf, type='self')
+
+    # test variant options for automatic reverse relations
+    other = models.Relation(relsext.isMemberOfCollection, type=SimpleDigitalObject,
+                                 related_name='related_items')
+    parent1 = models.Relation(relsext.isMemberOfCollection, type=models.DigitalObject,
+                              related_name='my_custom_rel')
+    sib = models.Relation(relsext.isMemberOf, type=SiblingObject,
+                                 related_name='+')
+
 
 
 class ReverseRelator(MyDigitalObject):
@@ -968,6 +1028,17 @@ class TestRelation(FedoraTestCase):
         self.assertEqual(None, self.obj.rels_ext.content.value(subject=self.obj.uriref,
                                                                predicate=relsext.isMemberOfCollection),
                          'isMemberOfCollection should not be set in rels-ext after delete')
+
+    def test_recursive_relation(self):
+        self.assertEqual(None, self.obj.recursive_rel)
+
+        # set via descriptor
+        newobj = models.DigitalObject(self.api)
+        newobj.pid = 'foo:3'	# test pid for convenience/distinguish temp pids
+        self.obj.recursive_rel = newobj
+
+        # access to check type 
+        self.assert_(isinstance(self.obj.recursive_rel, RelatorObject))
         
     def test_literal_relation(self):
         # get - not set
@@ -992,7 +1063,6 @@ class TestRelation(FedoraTestCase):
             in self.obj.rels_ext.content,
             'literal value should be set in RELS-EXT after updating via descriptor')
         self.assertEqual('foo', self.obj.dctitle)
-        
 
         # get
         self.assertEqual(1234, self.obj.dcid)
@@ -1008,6 +1078,7 @@ class TestRelation(FedoraTestCase):
                          'dc:identifier should not be set in rels-ext after delete')
         
     def test_reverse_relation(self):
+        # NOTE: this test depends on syncUpdates being set to true in Fedora
         rev = ReverseRelator(self.api, 'foo:1')
         # add a relation to the object and save so we can query risearch
         self.obj.parent = rev
@@ -1025,10 +1096,27 @@ class TestRelation(FedoraTestCase):
         self.assert_(isinstance(rev.members[0], RelatorObject),
             'ReverseRelation list items initialized as correct object type')
         
-        
-       
 
+    def test_auto_reverse_relation(self):
+        # default reverse name based on classname
+        self.assert_(hasattr(SimpleDigitalObject, 'relatorobject_set'))
+        self.assert_(isinstance(SimpleDigitalObject.relatorobject_set,
+                                models.ReverseRelation))
+        # check reverse-rel is configured correctly
+        self.assertEqual(relsext.isMemberOfCollection,
+                         SimpleDigitalObject.relatorobject_set.relation)
+        self.assertEqual(RelatorObject,
+                         SimpleDigitalObject.relatorobject_set.object_type)
+        self.assertEqual(True,
+                         SimpleDigitalObject.relatorobject_set.multiple)
 
+        # explicitly named reverse rel
+        self.assert_(hasattr(SimpleDigitalObject, 'related_items'))
+
+        # generic digital object should *NOT* get reverse rels
+        self.assertFalse(hasattr(models.DigitalObject, 'my_custom_rel'))
+        # related_name of + also means no reverse rel
+        self.assertFalse(hasattr(SiblingObject, 'relatorobject_set'))
 
 if __name__ == '__main__':
     main()

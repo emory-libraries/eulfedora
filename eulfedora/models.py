@@ -28,7 +28,8 @@ from eulfedora.api import ResourceIndex
 from eulfedora.rdfns import model as modelns, relsext as relsextns, fedora_rels
 from eulfedora.util import parse_xml_object, parse_rdf, RequestFailed, datetime_to_fedoratime
 from eulfedora.xml import ObjectDatastreams, ObjectProfile, DatastreamProfile, \
-    NewPids, ObjectHistory, ObjectMethods, DsCompositeModel
+    NewPids, ObjectHistory, ObjectMethods, DsCompositeModel, FoxmlDigitalObject, \
+    DatastreamHistory
 from eulxml.xmlmap.dc import DublinCore
 
 logger = logging.getLogger(__name__)
@@ -49,9 +50,13 @@ class DatastreamObject(object):
         :param mimetype: default datastream mimetype
         :param versionable: default configuration for datastream versioning
         :param state: default configuration for datastream state
+        	(default: A [active])
         :param format: default configuration for datastream format URI
+        :param control_group: default configuration for datastream control group
+        	(default: M [managed])
         :param checksum: default configuration for datastream checksum
         :param checksum_type: default configuration for datastream checksum type 
+        	(default: MD5)
     """
     default_mimetype = "application/octet-stream"
 
@@ -272,10 +277,19 @@ class DatastreamObject(object):
         return self.info.modified
 
     def last_modified(self):
+        # NOTE: last_modified may actually be the 'created' date for
+        # the current version of the datastream.
+        
         # FIXME: **preliminary** actual last-modified, since the above does not
         # actually work - should probably cache ds history...
-        history = self.obj.api.getDatastreamHistory(self.obj.pid, self.id)
-        return history.datastreams[0].createDate # fedora returns with most recent first
+        return self.history().versions[0].created # fedora returns most recent first
+
+    def history(self):
+        '''Get history/version information for this datastream and
+        return as an instance of
+        :class:`~eulfedora.xml.DatastreamHistory`.'''
+        data, url = self.obj.api.getDatastreamHistory(self.obj.pid, self.id, format='xml')
+        return parse_xml_object(DatastreamHistory, data, url)
 
     def save(self, logmessage=None):
         """Save datastream content and any changed datastream profile
@@ -378,9 +392,8 @@ class DatastreamObject(object):
 
         if self.versionable:
             # if this is a versioned datastream, get datastream history
-            # and purge the most recent version 
-            history = self.obj.api.getDatastreamHistory(self.obj.pid, self.id)
-            last_save = history.datastreams[0].createDate   # fedora returns with most recent first
+            # and purge the most recent version
+            last_save = self.history().versions[0].created # fedora returns most recent first
             success, timestamps = self.obj.api.purgeDatastream(self.obj.pid, self.id,
                                                 datetime_to_fedoratime(last_save),
                                                 logMessage=logMessage)
@@ -410,6 +423,21 @@ class DatastreamObject(object):
             if not chunk:
                 return
             yield chunk
+
+
+    def validate_checksum(self, date=None): 
+        '''Check if this datastream has a valid checksum in Fedora, by
+        running the :meth:`REST_API.compareDatastreamChecksum` API
+        call.  Returns a boolean based on the checksum valid
+        response from Fedora.
+
+        :param date: (optional) check the datastream validity at a
+		particular date/time (e.g., for versionable datastreams)
+        '''
+        response, uri = self.obj.api.compareDatastreamChecksum(self.obj.pid, self.id,
+                                                               asOfDateTime=date)
+        dsprofile = parse_xml_object(DatastreamProfile, response, uri)
+        return dsprofile.checksum_valid
 
 
 class Datastream(object):
@@ -669,6 +697,228 @@ class FileDatastream(Datastream):
     _datastreamClass = FileDatastreamObject
 
 
+### Descriptors for dealing with object relations
+
+# TODO: Relation objects should probably have an intro section with a
+# more user-friendly introduction...
+
+# Relation  (list variant still TODO)
+# ReverseRelation 
+
+class Relation(object):
+    '''This descriptor is intended for use with
+    :class:`~eulfedora.models.DigitalObject` RELS-EXT relations, and
+    provides get, set, and delete functionality for a single related
+    :class:`DigitalObject` instance or literal value in the RELS-EXT
+    of an individual object.
+    
+    Example use for a related object: a :class:`Relation` should be
+    initialized with a predicate URI and optionally a subclass of
+    :class:`~eulfedora.models.DigitalObject` that should be returned::
+
+    	class Page(DigitalObject):
+            volume = Relation(relsext.isConstituentOf, type=Volume)
+
+    When a :class:`Relation` is created with a type that references a
+    :class:`DigitalObject` subclass, a corresponding
+    :class:`ReverseRelation` will automatically be added to the
+    related subclass.  For the example above, the fictional ``Volume``
+    class would automatically get a ``page_set`` attribute configured
+    with the same URI and a class of ``Page``.  Reverse property names
+    can be customized using the ``related_name`` parameter, which is
+    documented below and follows the basic conventions of Django\'s
+    :class:`~django.db.models.ForeignKey` model field (to which
+    :class:`Relation` is roughly analogous).
+
+    .. Note::
+
+        Currently, auto-generated :class:`ReverseRelation` properties
+        will always be initialized with ``multiple=True``, since that
+        is the most common pattern for Fedora object relations (one to
+        many).  Other variants may be added later, if and when use
+        cases arise.
+
+    :class:`~eulfedora.models.Relation` also supports configuring the
+    RDF type and namespace prefixes that should be used for
+    serialization; for example::
+        
+        from rdflib import XSD, URIRef
+        from rdflib.namespace import Namespace
+        
+        MYNS = Namespace(URIRef("http://example.com/ns/2011/my-test-namespace/#"))
+
+    	class MyObj(DigitalObject):
+            total = Relation(MYNS.count, ns_prefix={"my": MYNS}, rdf_type=XSD.int)
+
+    This would allow us to access ``total`` as an integer on a MyObj
+    object, e.g.::
+
+        
+        myobj.total = 3
+        
+    and when the RELS-EXT is serialized it will use the
+    configured namespace prefix, e.g.:
+
+    .. code-block:: xml
+    
+	<rdf:RDF xmlns:my="xmlns:fedora-model="info:fedora/fedora-system:def/model#"
+          xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+	  <rdf:Description rdf:about="info:fedora/myobj:1">
+	    <my:count rdf:datatype="http://www.w3.org/2001/XMLSchema#int">3</my:count>
+	  </rdf:Description>
+	</rdf:RDF>
+
+    .. Note::
+        
+        If a namespace prefix is not specified, :mod:`rfdlib` will
+        automatically generate a namespace to produce valid output,
+        but it may be less readable than a custom namespace.
+        
+
+
+    Initialization options:
+
+    :param relation: the RDF predicate URI as a :class:`rdflib.URIRef`
+    
+    :param type: optional :class:`~eulfedora.models.DigitalObject`
+    	subclass to initialize (for object relations); use
+    	``type="self"`` to specify that the current DigitalObject
+    	class should be used (currently no reverse relation will be
+    	created for recursive relations).
+        
+    :param ns_prefix: optional dictionary to configure namespace
+    	prefixes to be used for serialization; key should be the
+        desired prefix, value should be an instance of
+        :class:`rdflib.namespace.Namespace`
+        
+    :param rdf_type: optional rdf type for literal values (passed
+        to :class:`rdflib.Literal` as the datatype option)
+    
+    :param related_name: optional name for the auto-generated
+    	:class:`ReverseRelation` property, when the relation is to a
+    	subclass of :class:`DigitalObject`; if not specified, the
+    	related name will be ``classname_set``; a value of ``+``
+    	indicates no :class:`ReverseRelation` should be created
+        
+    '''
+    
+    def __init__(self, relation, type=None, ns_prefix={}, rdf_type=None,
+                 related_name=None):
+        self.relation = relation
+        self.object_type = type
+        self.ns_prefix = ns_prefix
+        self.rdf_type = rdf_type
+        self.related_name = related_name
+
+    def __get__(self, obj, objtype):
+        if obj is None:
+            return self
+
+        # no caching on related objects for now
+        uri_val = obj.rels_ext.content.value(subject=obj.uriref,
+                                         predicate=self.relation)
+        if uri_val and self.object_type:	# don't init new object if val is None
+            # special case: if object_type is the string 'self',
+            # use the parent object class (save after the first check)
+            if self.object_type == 'self':
+                self.object_type = obj.__class__
+                
+            # need get_object wrapper method on digital object
+            return obj.get_object(uri_val, type=self.object_type)
+        # if the value has 'toPython' method (e.g., rdflib.Literal),
+        # return the result of that conversion
+        elif hasattr(uri_val, 'toPython'):
+             return uri_val.toPython()
+        else:
+            return uri_val
+
+    def __set__(self, obj, subject):
+        # if any namespace prefixes were specified, bind them before adding the tuple
+        for prefix, ns in self.ns_prefix.iteritems():
+            obj.rels_ext.content.bind(prefix, ns)
+
+        # TODO: do we need to check that subject matches self.object_type (if any)?
+
+        if isinstance(subject, URIRef):
+            subject_uri = subject
+        elif hasattr(subject, 'uriref'):
+            subject_uri = subject.uriref
+        elif self.rdf_type:
+            subject_uri = Literal(subject, datatype=self.rdf_type)
+        else:
+            subject_uri = Literal(subject)
+        
+        # set the property in the rels-ext, removing any existing
+        # value for that property (single-value relation only, for now)
+        obj.rels_ext.content.set((
+            obj.uriref,
+            self.relation,
+            subject_uri
+        ))
+
+    def __delete__(self, obj):
+        # find the subject uri and remove from rels-ext
+        uris = list(obj.rels_ext.content.objects(obj.uriref, self.relation))
+        if uris:
+            obj.rels_ext.content.remove((
+                obj.uriref,
+                self.relation,
+                uris[0]
+            ))
+
+
+class ReverseRelation(object):
+    '''Descriptor for use with
+    :class:`~eulfedora.models.DigitalObject` RELS-EXT reverse
+    relations, where the owning object is the RDF **object** of the
+    predicate and the related object is the RDF **subject**.  This
+    descriptor will query the Fedora
+    :class:`~eulfedora.api.ResourceIndex` for the requested subjects,
+    based on the configured predicate, and return resulting items.
+
+    This descriptor *only* provides read access; there is no
+    functionality for setting or deleting reverse-related objects.
+
+    It is highly recommended to use :class:`Relation` and let the
+    corresponding :class:`ReverseRelation` be automatically generated
+    for you.
+    
+    .. Note::
+    
+       There is currently no support for sorting when multiple items
+       are returned; items are currently returned in whatever order
+       the :class:`~eulfedora.api.ResourceIndex` returns them.
+    
+    Example use::
+
+    	class Volume(DigitalObject):
+            pages = ReverseRelation(relsext.isConstituentOf, type=Page, multiple=True)
+            
+    '''
+    def __init__(self, relation, type=None, multiple=False):
+        self.relation = relation
+        self.object_type = type
+        self.multiple = multiple
+
+    def __get__(self, obj, objtype):
+        if obj is None:
+            return self
+        # query RIsearch for subjects based on configured relation and current object
+        uris = list(obj.risearch.get_subjects(self.relation, obj.uriref))
+        if self.multiple:
+            return [self._init_val(obj, uri) for uri in uris]
+        elif uris:
+                return self._init_val(obj, uris[0])
+
+    def _init_val(self, obj, val):
+        # initialize the desired return type, based on configuration
+        # would any reverse relation not be an object?
+        if self.object_type:
+            return obj.get_object(val, type=self.object_type)
+        else:
+            return val
+
+
 class DigitalObjectType(type):
     """A metaclass for :class:`DigitalObject`.
     
@@ -685,6 +935,7 @@ class DigitalObjectType(type):
         datastreams = {}
         local_datastreams = {}
         use_attrs = defined_attrs.copy()
+        reverse_rels = {}
 
         for base in bases:
             base_ds = getattr(base, '_defined_datastreams', None)
@@ -694,6 +945,15 @@ class DigitalObjectType(type):
         for attr_name, attr_val in defined_attrs.items():
             if isinstance(attr_val, Datastream):
                 local_datastreams[attr_name] = attr_val
+            elif isinstance(attr_val, Relation):
+                # collect Relations in order to add reverse relations
+                # after the class has been created
+                # - only relations to subclasses of DigitalObject need reversing
+                if attr_val.object_type and attr_val.object_type != DigitalObject\
+                       and attr_val.related_name != '+':
+                    # as in Django, related_name=+ is special case
+                    # used to indicate no reverse relation should be created
+                    reverse_rels[attr_name] = attr_val
 
         use_attrs['_local_datastreams'] = local_datastreams
 
@@ -706,6 +966,27 @@ class DigitalObjectType(type):
         new_class_name = '%s.%s' % (new_class.__module__, new_class.__name__)
         DigitalObjectType._registry[new_class_name] = new_class
 
+        # create any ReverseRelations corresponding to Relations on
+        # the current class
+        # for now, assume all reverse relations are multiple
+        for rel_name, rel in reverse_rels.iteritems():
+            # don't reverse self-relations for now
+            if isinstance(rel.object_type, basestring):
+                continue
+            # TODO: look into handling this the way django handles
+            # recursive relationships
+            
+            # use related name if one has been specified
+            if rel.related_name is not None:
+                reverse_name = rel.related_name
+            # otherwise, follow Django convention and use classname_set
+            else:
+                reverse_name = '%s_set' % new_class.__name__.lower()
+            # add the reverse relation to the other class
+            setattr(rel.object_type, reverse_name,
+                    ReverseRelation(rel.relation, type=new_class,
+                                    multiple=True))
+            
         return new_class
 
     @property
@@ -769,8 +1050,10 @@ class DigitalObject(object):
                 self.default_pidspace = default_pidspace
             except AttributeError:
                 # allow extending classes to make default_pidspace a custom property,
-                # but warn in case of conflict
-                logger.warn("Failed to set requested default_pidspace %s" % default_pidspace)
+                # but warn if there is case of conflict 
+                if default_pidspace != getattr(self, 'default_pidspace', None):
+                    logger.warn("Failed to set requested default_pidspace %s (using %s instead)" \
+                                % (default_pidspace, self.default_pidspace))
         # cache object profile, track if it is modified and needs to be saved
         self._info = None
         self.info_modified = False
@@ -781,6 +1064,8 @@ class DigitalObject(object):
         # object history
         self._history = None
         self._methods = None
+        # object foxml
+        self._object_xml = None
 
         # pid = None signals to create a new object, using a default pid
         # generation function.
@@ -907,7 +1192,7 @@ class DigitalObject(object):
 
     @property
     def uriref(self):
-        "Fedora URI for this object, as an rdflib URI object"
+        "Fedora URI for this object, as an :class:`rdflib.URIRef` URI object"
         return URIRef(self.uri)
 
     @property
@@ -1024,6 +1309,62 @@ class DigitalObject(object):
         self._history = [c for c in history.changed]
         return history
 
+    @property
+    def object_xml(self):
+        '''Fedora object XML as an instance of :class:`FoxmlDigitalObject`.
+        (via :meth:`REST_API. getObjectXML`).
+        '''
+        if self._object_xml is None:
+            self.getObjectXml()
+        return self._object_xml
+    
+    def getObjectXml(self):
+        if self._create:
+            return None
+        else:
+            data, url = self.api.getObjectXML(self.pid)
+            self._object_xml = parse_xml_object(FoxmlDigitalObject, data, url)
+            return self._object_xml
+        
+    @property
+    def audit_trail(self):
+        '''Fedora audit trail as an instance of :class:`eulfedora.xml.AuditTrail`
+
+        .. Note::
+
+          Since Fedora (as of 3.5) does not make the audit trail
+          available via an API call or as a datastream, accessing the
+          audit trail requires loading the foxml for the object.  If
+          an object has large, versioned XML datastreams this may be
+          slow.
+        '''
+        # NOTE: It would be nice to expose the audit trail so that it
+        # looks and behaves a bit more like other datastreams (pseudo
+        # or read-only DatastreamObject?).  At the moment, the overhead
+        # for that doesn't seem worth the possible benefits.
+        # Fedora may eventually expose the AUDIT info more directly:
+        #   https://jira.duraspace.org/browse/FCREPO-635
+        if self.object_xml:
+            return self.object_xml.audit_trail
+
+    @property
+    def ingest_user(self):
+        '''Username responsible for ingesting this object into the repository,
+        as recorded in the :attr:`audit_trail`, if available.'''
+        # if there is an audit trail and it has records and the first
+        # action is ingest, return the user
+        if self.audit_trail and self.audit_trail.records \
+           and self.audit_trail.records[0].action == 'ingest':
+            return self.audit_trail.records[0].user
+
+    @property
+    def audit_trail_users(self):
+        '''A set of all usernames recorded in the :attr:`audit_trail`,
+        if available.'''
+        if self.audit_trail:
+            return set([r.user for r in self.audit_trail.records])
+        return set()
+
     def getProfile(self):    
         """Get information about this object (label, owner, date created, etc.).
 
@@ -1116,6 +1457,13 @@ class DigitalObject(object):
             if not profile_saved:
                 cleaned = self._undo_save(saved, "failed to save object profile, rolling back changes")
                 raise DigitalObjectSaveFailure(self.pid, "object profile", to_save, saved, cleaned)
+
+            
+        if saved or (self.info_modified and profile_saved):
+            # clear out any cached object info that is now out of date
+            self._history = None
+            self._object_xml = None
+            
             
 
     def _undo_save(self, datastreams, logMessage=None):
@@ -1394,7 +1742,7 @@ class DigitalObject(object):
             del self.dscache['RELS-EXT']
         self._ds_list = None
 
-        return self.api.addRelationship(self.pid, rel_uri, object, obj_is_literal)
+        return self.api.addRelationship(self.pid, self.uri, rel_uri, object, obj_is_literal)
 
     def has_model(self, model):
         """
@@ -1589,144 +1937,3 @@ class DigitalObjectSaveFailure(StandardError):
         return "Error saving %s - failed to save %s; saved %s; successfully backed out %s" \
                 % (self.obj_pid, self.failure, ', '.join(self.saved), ', '.join(self.cleaned))
 
-### Descriptors for dealing with object relations
-
-# Relation
-# ReverseRelation 
-# single/multiple variants  (TODO)
-
-class Relation(object):
-    '''Descriptor for use with
-    :class:`~eulfedora.models.DigitalObject` RELS-EXT relations.
-    Allows getting, setting, and removing related DigitalObjects and
-    literals in the RELS-EXT of the object.
-    
-    Example use for a related object.  The Relation should be defined
-    something like this, passing in the predicate URI and optionally
-    the subclass of :class:`~eulfedora.models.DigitalObject` that
-    should be returned::
-
-    	class Page(DigitalObject):
-            volume = Relation(relsext.isConstituentOf, type=Volume)
-
-
-    :class:`~eulfedora.models.Relation` also supports configuring the
-    RDF type and namespace prefixes that should be used for
-    serialization; for example::
-        
-        from rdflib import XSD, URIRef
-        from rdflib.namespace import Namespace
-        
-        MYNS = Namespace(URIRef("http://example.com/ns/2011/my-test-namespace/#"))
-
-        int = Relation(MYNS.count, ns_prefix={"my": MYNS}, rdf_type=XSD.int)
-
-
-    Initialization options:
-
-    :param relation: the RDF predicate URI
-    :param type: optional :class:`~eulfedora.models.DigitalObject` subclass
-    	to initialize (for object relations)
-    :param ns_prefix: optional dictionary to configure namespace
-    	prefixes to be used for serialization; key should be the
-        desired prefix, value should be an instance of
-        :class:`rdflib.namespace.Namespace`
-    :param rdf_type: optional rdf type for literal values (passed
-        to :class:`rdflib.Literal` as the datatype option)
-    '''
-    
-    def __init__(self, relation, type=None, ns_prefix={}, rdf_type=None):
-        self.relation = relation
-        self.object_type = type
-        self.ns_prefix = ns_prefix
-        self.rdf_type = rdf_type
-
-    def __get__(self, obj, objtype):
-        # no caching on related objects for now
-        uri_val = obj.rels_ext.content.value(subject=obj.uriref,
-                                         predicate=self.relation)
-        if uri_val and self.object_type:	# don't init new object if val is None
-            # need get_object wrapper method on digital object
-            return obj.get_object(uri_val, type=self.object_type)
-        else:
-            return uri_val
-
-    def __set__(self, obj, subject):
-        # if any namespace prefixes were specified, bind them before adding the tuple
-        for prefix, ns in self.ns_prefix.iteritems():
-            obj.rels_ext.content.bind(prefix, ns)
-
-        # TODO: do we need to check that subject matches self.object_type (if any)?
-
-        if isinstance(subject, URIRef):
-            subject_uri = subject
-        elif hasattr(subject, 'uriref'):
-            subject_uri = subject.uriref
-        elif self.rdf_type:
-            subject_uri = Literal(subject, datatype=self.rdf_type)
-        else:
-            subject_uri = Literal(subject)
-        
-        # set the property in the rels-ext, removing any existing
-        # value for that property (single-value relation only, for now)
-        obj.rels_ext.content.set((
-            obj.uriref,
-            self.relation,
-            subject_uri
-        ))
-
-    def __delete__(self, obj):
-        # find the subject uri and remove from rels-ext
-        uris = list(obj.rels_ext.content.objects(obj.uriref, self.relation))
-        if uris:
-            obj.rels_ext.content.remove((
-                obj.uriref,
-                self.relation,
-                uris[0]
-            ))
-
-
-class ReverseRelation(object):
-    '''Descriptor for use with
-    :class:`~eulfedora.models.DigitalObject` RELS-EXT reverse
-    relations, where the owning object is the RDF **object** of the
-    predicate and the related object is the RDF **subject**.  This
-    descriptor will query the Fedora
-    :class:`~eulfedora.api.ResourceIndex` for the requested subjects,
-    based on the configured predicate, and return resulting items.
-
-    Currently only supports get (no set or delete).
-    
-    .. Note::
-    
-       Currently has no support for sorting when multiple items are
-       returned; items will be returned in whatever order the
-       :class:`~eulfedora.api.ResourceIndex` returns them.
-    
-    Example use::
-
-    	class Volume(DigitalObject):
-            pages = ReverseRelation(relsext.isConstituentOf, type=Page, multiple=True)
-            
-    '''
-    def __init__(self, relation, type=None, multiple=False):
-        self.relation = relation
-        self.object_type = type
-        self.multiple = multiple
-
-    def __get__(self, obj, objtype):
-        # query RIsearch for subjects based on configured relation and current object
-        uris = list(obj.risearch.get_subjects(self.relation, obj.uriref))
-        if uris:
-            if self.multiple:
-                return [self._init_val(obj, uri) for uri in uris]
-            else:
-                return self._init_val(obj, uris[0])
-
-    def _init_val(self, obj, val):
-        # initialize the desired return type, based on configuration
-        # would any reverse relation not be an object?
-        if self.object_type:
-            return obj.get_object(val, type=self.object_type)
-        else:
-            return val

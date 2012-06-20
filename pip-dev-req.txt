@@ -5,3 +5,4 @@ django
 mock
 unittest2
 pyPdf
+progressbar
