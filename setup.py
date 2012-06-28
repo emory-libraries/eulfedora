@@ -32,7 +32,7 @@ setup(
     packages=find_packages(),
 
     install_requires=[
-        'eulxml',
+        'eulxml>=0.18.0',
         'rdflib>=3.0',
         'python-dateutil',
 	'poster',
