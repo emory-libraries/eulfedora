@@ -21,6 +21,9 @@ Repository
 .. autoclass:: Repository
     :members:
 
+.. autoclass:: TypeInferringRepository
+    :members:
+
 
 Resource Index
 ^^^^^^^^^^^^^^
