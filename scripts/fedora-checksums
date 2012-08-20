@@ -182,9 +182,8 @@ class FedoraChecksums(object):
     def validate_datastream(self, dsobj):
         if self.args.all_versions:
             # check every version of this datastream
-            history = dsobj.obj.api.getDatastreamHistory(dsobj.obj.pid, dsobj.id)
-            for ds in history.datastreams:
-                self.check_datastream(dsobj, ds.createDate)
+            for ds in dsobj.history().versions:
+                self.check_datastream(dsobj, ds.created)
                 self.stats['ds_versions'] += 1
 
         else:
