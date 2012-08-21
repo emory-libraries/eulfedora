@@ -99,6 +99,8 @@ class FedoraChecksums(object):
         r_parser.add_argument('--checksum-type', dest='checksum_type', default='DEFAULT',
                               help='''Checksum type to use; if not specified,
                               will prompt Fedora to use the configured default checksum type''')
+        r_parser.add_argument('--repair-existing', dest='repair_exisiting', default=False, 
+                              help='''Forces checksums to be repaired even if they already exist''')
 
 
     def run(self):
@@ -265,7 +267,7 @@ class FedoraChecksums(object):
     def repair_summary(self):
         '''Summarize what was done when the script was run in
         **repair** mode.'''
-        
+        pring "--repair-existing = %s" % self.args.repair_exisiting
         print '\nChecked %(objects)d object(s), updated %(ds_updated)d datastream(s)' % \
               self.stats
         if self.stats['ds_err']:
