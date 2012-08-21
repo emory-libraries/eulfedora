@@ -255,7 +255,6 @@ class FedoraChecksums(object):
         :param dsobj: :class:`~eulfedora.models.DatastreamObject`
         '''
 
-        # TODO: can we just add or self.args.repair_existing?
         if dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none' or dsobj.id in self.args.force_ds_ids:
             dsobj.checksum_type = self.args.checksum_type
             try:
