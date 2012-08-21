@@ -267,7 +267,7 @@ class FedoraChecksums(object):
     def repair_summary(self):
         '''Summarize what was done when the script was run in
         **repair** mode.'''
-        pring "--repair-existing = %s" % self.args.repair_exisiting
+        print "--repair-existing = %s" % self.args.repair_exisiting
         print '\nChecked %(objects)d object(s), updated %(ds_updated)d datastream(s)' % \
               self.stats
         if self.stats['ds_err']:
