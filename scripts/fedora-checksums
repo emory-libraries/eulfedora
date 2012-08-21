@@ -100,7 +100,7 @@ class FedoraChecksums(object):
                               help='''Checksum type to use; if not specified,
                               will prompt Fedora to use the configured default checksum type''')
 
-        r_parser.add_argument('--force', dest='force_ds_ids', type=CSVAction,
+        r_parser.add_argument('--force', dest='force_ds_ids', action=CSVAction,
                               help='''A comma separated list of datastream IDs to repair even if checksum is present''')
 
 
