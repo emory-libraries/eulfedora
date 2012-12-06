@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # file test_fedora/test_models.py
-# 
+#
 #   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +25,7 @@ import os
 from rdflib import URIRef, Graph as RdfGraph, XSD, Literal
 from rdflib.namespace import Namespace
 import tempfile
+from time import sleep
 
 from eulfedora import models
 from eulfedora.api import ApiFacade
@@ -70,7 +71,7 @@ class SimpleDigitalObject(models.DigitalObject):
 
 
 TEXT_CONTENT = "Here is some text content for a non-xml datastream."
-def _add_text_datastream(obj):    
+def _add_text_datastream(obj):
     # add a text datastream to the current test object
     FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
     FILE.write(TEXT_CONTENT)
@@ -83,7 +84,7 @@ def _add_text_datastream(obj):
         ds['mimeType'], ds['logMessage'], ds['controlGroup'], filename=FILE.name,
         checksumType=ds['checksumType'], versionable=ds['versionable'])
     FILE.close()
-    
+
 
 
 class TestDatastreams(FedoraTestCase):
@@ -120,7 +121,7 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.dc.label, "Dublin Core")
         self.assertEqual(self.obj.dc.mimetype, "text/xml")
         self.assertEqual(self.obj.dc.state, "A")
-        self.assertEqual(self.obj.dc.versionable, True) 
+        self.assertEqual(self.obj.dc.versionable, True)
         self.assertEqual(self.obj.dc.control_group, "X")
         # there may be micro-second variation between these two
         # ingest/creation times, but they should probably be less than
@@ -191,7 +192,7 @@ class TestDatastreams(FedoraTestCase):
         # patch the api with Mock to check api call
         with patch.object(ApiFacade, 'modifyDatastream') as mock_mod_ds:
             mock_mod_ds.return_value = (True, 'saved')
-            
+
             self.obj.text.ds_location = file_uri
             self.obj.text.content = 'this content should be ignored'
             logmsg = 'text content from file uri'
@@ -215,10 +216,10 @@ class TestDatastreams(FedoraTestCase):
         self.obj.api.purgeDatastream(self.obj.pid, self.obj.text.id)
         # load a new version that knows text ds doesn't exist
         obj = MyDigitalObject(self.api, self.pid)
-        
+
         with patch.object(ApiFacade, 'addDatastream') as mock_add_ds:
             mock_add_ds.return_value = (True, 'added')
-            
+
             obj.text.ds_location = file_uri
             obj.text.content = 'this content should be ignored'
             logmsg = 'text content from file uri'
@@ -230,7 +231,7 @@ class TestDatastreams(FedoraTestCase):
             self.assertEqual(None, obj.text.ds_location,
                              'ds_location should be None after successful save (add)')
 
-                    
+
 
     def test_ds_isModified(self):
         self.assertFalse(self.obj.text.isModified(), "isModified should return False for unchanged DC datastream")
@@ -248,10 +249,10 @@ class TestDatastreams(FedoraTestCase):
         self.assertFalse(self.obj.dc.isModified(), "isModified should return False after DC datastream has been saved")
 
     def test_rdf_datastream(self):
-        # add a relationship to test RELS-EXT/rdf datastreams        
+        # add a relationship to test RELS-EXT/rdf datastreams
         foo123 = "info:fedora/foo:123"
         self.obj.add_relationship(relsext.isMemberOf, foo123)
-        
+
         self.assert_(isinstance(self.obj.rels_ext, models.RdfDatastreamObject))
         self.assert_(isinstance(self.obj.rels_ext.content, RdfGraph))
         self.assert_((self.obj.uriref, relsext.isMemberOf, URIRef(foo123)) in
@@ -274,7 +275,7 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(None, self.obj.image._raw_content())
         self.assertFalse(self.obj.image.isModified(),
                          "isModified should return False for image datastream after it has been saved")
-        
+
         # access via file datastream descriptor
         self.assert_(isinstance(self.obj.image, models.FileDatastreamObject))
         self.assertEqual(self.obj.image.content.read(), open(filename).read())
@@ -284,7 +285,7 @@ class TestDatastreams(FedoraTestCase):
         self.obj.image.content = open(new_file)
         self.obj.image.checksum='aaa'
         self.assertTrue(self.obj.image.isModified())
-        
+
         #Saving with incorrect checksum should fail.
         expected_error = None
         try:
@@ -292,8 +293,8 @@ class TestDatastreams(FedoraTestCase):
         except models.DigitalObjectSaveFailure as e:
             #Error should go here
             expected_error = e
-        self.assert_(str(expected_error).endswith('successfully backed out '), 'Incorrect checksum should back out successfully.') 
-        
+        self.assert_(str(expected_error).endswith('successfully backed out '), 'Incorrect checksum should back out successfully.')
+
         #Now try with correct checksum
         self.obj.image.content = open(new_file)
         self.obj.image.checksum='57d5eb11a19cf6f67ebd9e8673c9812e'
@@ -307,8 +308,8 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(obj.image.checksum, '57d5eb11a19cf6f67ebd9e8673c9812e')
 
     def test_undo_last_save(self):
-        # test undoing profile and content changes        
-        
+        # test undoing profile and content changes
+
         # unversioned datastream
         self.obj.text.label = "totally new label"
         self.obj.text.content = "and totally new content, too"
@@ -319,7 +320,7 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual("text datastream", history.versions[0].label)
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
         self.assertEqual(TEXT_CONTENT, data)
-        
+
         # versioned datastream
         self.obj.dc.label = "DC 2.0"
         self.obj.dc.title = "my new DC"
@@ -349,7 +350,7 @@ class TestDatastreams(FedoraTestCase):
         chunks = list(self.obj.text.get_chunked_content(10))
         self.assertEqual(self.obj.text.content[:10], chunks[0])
         self.assertEqual(self.obj.text.content[10:20], chunks[1])
-        
+
 class TestNewObject(FedoraTestCase):
     pidspace = FEDORA_PIDSPACE
 
@@ -362,7 +363,7 @@ class TestNewObject(FedoraTestCase):
 
         self.assertTrue(isinstance(obj.pid, basestring))
         self.append_test_pid(obj.pid)
-        
+
         fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
         self.assertEqual(fetched.dc.content.identifier, obj.pid)
 
@@ -376,7 +377,7 @@ class TestNewObject(FedoraTestCase):
         text_dsloc = foxml.xpath('.//f:datastream[@ID="TEXT"]/' +
                                  'f:datastreamVersion/f:contentLocation',
                                  namespaces={'f': obj.FOXML_NS})[0]
-        
+
         self.assertEqual(obj.text.ds_location, text_dsloc.get('REF'))
         self.assertEqual('URL', text_dsloc.get('TYPE'))
 
@@ -406,7 +407,7 @@ class TestNewObject(FedoraTestCase):
 
         obj.owner = ' thing1,   thing2 '
         self.assertEqual(['thing1', 'thing2'], obj.owners)
-        
+
 
 
     def test_default_datastreams(self):
@@ -486,7 +487,7 @@ class TestNewObject(FedoraTestCase):
         """Verify that we can modify a new object's datastreams before
         ingesting it."""
         obj = MyDigitalObject(self.api, pid=self.getNextPid(), create=True)
-        
+
         # modify content for dc (metadata should be covered by other tests)
         obj.dc.content.description = 'A test object'
         obj.dc.content.rights = 'Rights? Sure, copy our test object.'
@@ -547,8 +548,8 @@ class TestNewObject(FedoraTestCase):
         self.assertEqual(obj.label, updated_obj.label)
         self.assertEqual(obj.dc.content.title, updated_obj.dc.content.title)
         self.assertEqual(obj.image.label, updated_obj.image.label)
- 
-        
+
+
     def test_new_file_datastream(self):
         obj = self.repo.get_object(type=MyDigitalObject)
         obj.image.content = open(os.path.join(FIXTURE_ROOT, 'test.png'))
@@ -557,7 +558,7 @@ class TestNewObject(FedoraTestCase):
 
         fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
         file = open(os.path.join(FIXTURE_ROOT, 'test.png'))
-        self.assertEqual(fetched.image.content.read(), file.read())        
+        self.assertEqual(fetched.image.content.read(), file.read())
 
 
 class TestDigitalObject(FedoraTestCase):
@@ -602,7 +603,7 @@ class TestDigitalObject(FedoraTestCase):
         self.obj.state = "I"
         saved = self.obj._saveProfile("saving test object profile")
         self.assertTrue(saved, "DigitalObject saveProfile should return True on successful update")
-        profile = self.obj.getProfile() # get fresh from fedora to confirm updated
+        profile = self.obj.getProfile()  # get fresh from fedora to confirm updated
         self.assertEqual(profile.label, "An updated test object")
         self.assertEqual(profile.owner, "notme")
         self.assertEqual(profile.state, "I")
@@ -612,13 +613,28 @@ class TestDigitalObject(FedoraTestCase):
     def test_object_label(self):
         # object label set method has special functionality
         self.obj.label = ' '.join('too long' for i in range(50))
-        self.assertEqual(255, len(self.obj.label), 'object label should be truncated to 255 characters')
+        self.assertEqual(self.obj.label_max_size, len(self.obj.label),
+            'object label should be truncated to 255 characters')
         self.assertTrue(self.obj.info_modified, 'object info modified when object label has changed')
 
         self.obj.info_modified = False
         self.obj.label = str(self.obj.label)
         self.assertFalse(self.obj.info_modified,
                          'object info should not be considered modified after setting label to its current value')
+
+    def test_object_owner(self):
+        self.obj.owner = ','.join('userid' for i in range(14))
+        self.assertTrue(len(self.obj.owner) <= self.obj.owner_max_size,
+            'object owner should be truncated to 64 characters or less')
+        self.assertTrue(self.obj.info_modified,
+            'object info modified when object owner has changed')
+        # last value should not be truncated
+        self.assertTrue(self.obj.owner.endswith('userid'))
+
+        # non-delimited value should just be truncated
+        self.obj.owner = ''.join('longestownernameever' for i in range(10))
+        self.assertEqual(self.obj.owner_max_size, len(self.obj.owner),
+            'object owner should be truncated to 64 characters or less')
 
     def test_save(self):
         # unmodified object - save should do nothing
@@ -631,7 +647,7 @@ class TestDigitalObject(FedoraTestCase):
         self.obj.text.label = "text content"
         self.obj.text.checksum_type = "MD5"
         self.obj.text.checksum = "avcd"
-        
+
         #Saving with incorrect checksum should fail.
         expected_error = None
         try:
@@ -639,8 +655,8 @@ class TestDigitalObject(FedoraTestCase):
         except models.DigitalObjectSaveFailure as e:
             #Error should go here
             expected_error = e
-        self.assert_(str(expected_error).endswith('successfully backed out '), 'Incorrect checksum should back out successfully.') 
-        
+        self.assert_(str(expected_error).endswith('successfully backed out '), 'Incorrect checksum should back out successfully.')
+
 
         # re-initialize the object. do it with a unicode pid to test a regression.
         self.obj = MyDigitalObject(self.api, unicode(self.pid))
@@ -652,19 +668,19 @@ class TestDigitalObject(FedoraTestCase):
         self.obj.text.checksum_type = "MD5"
         self.obj.text.checksum = "1c83260ff729265470c0d349e939c755"
         return_status = self.obj.save()
-        
+
         #Correct checksum should modify correctly.
         self.assertEqual(True, return_status)
 
         # confirm all changes were saved to fedora
-        profile = self.obj.getProfile() 
+        profile = self.obj.getProfile()
         self.assertEqual(profile.label, u"new label\u2014with unicode")
         data, url = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
         self.assert_(u'<dc:title>new dublin core title\u2014also with unicode</dc:title>' in unicode(data, 'utf-8'))
         text_info = self.obj.getDatastreamProfile(self.obj.text.id)
         self.assertEqual(text_info.label, "text content")
         self.assertEqual(text_info.checksum_type, "MD5")
-        
+
         # force an error on saving DC to test backing out text datastream
         self.obj.text.content = "some new text"
         self.obj.dc.content = "this is not dublin core!"    # NOTE: setting xml content like this could change...
@@ -868,7 +884,7 @@ class TestDigitalObject(FedoraTestCase):
         self.assertEqual(self.obj.state, indexdata['state'])
         for cm in self.obj.get_models():
             self.assert_(str(cm) in indexdata['content_model'])
-            
+
         # descriptive data included in index data
         self.assert_(self.obj.dc.content.title in indexdata['title'])
         self.assert_(self.obj.dc.content.description in indexdata['description'])
@@ -900,11 +916,11 @@ class TestDigitalObject(FedoraTestCase):
             'if type is not specified, get_object should return current type')
         self.assertEqual(self.api, otherobj.api,
             'get_object should pass existing api connection')
-        
+
         otherobj = obj.get_object(self.pid, type=SimpleDigitalObject)
         self.assert_(isinstance(otherobj, SimpleDigitalObject),
             'get_object should object with requested type')
-        
+
 
 
 class TestContentModel(FedoraTestCase):
@@ -924,7 +940,7 @@ class TestContentModel(FedoraTestCase):
 
         # NOTE: these tests can fail if a content model with the same
         # URI (but not the same datastreams) actually exists in Fedora
-        
+
         # first: create a cmodel for SimpleDigitalObject, the simple case
         cmodel = models.ContentModel.for_class(SimpleDigitalObject, self.repo)
         self.append_test_pid(cmodel.pid)
@@ -991,16 +1007,16 @@ class ReverseRelator(MyDigitalObject):
 
 class TestRelation(FedoraTestCase):
     fixtures = ['object-with-pid.foxml']
-    
+
     def setUp(self):
         super(TestRelation, self).setUp()
-        #self.pid = self.fedora_fixtures_ingested[-1] # get the pid for the last object
+        self.pid = self.fedora_fixtures_ingested[-1]  # get the pid for the last object
         self.obj = RelatorObject(self.api)
 
     def test_object_relation(self):
         # get - not yet set
         self.assertEqual(None, self.obj.parent)
-        
+
         # set via descriptor
         newobj = models.DigitalObject(self.api)
         newobj.pid = 'foo:2'	# test pid for convenience/distinguish temp pids
@@ -1022,7 +1038,7 @@ class TestRelation(FedoraTestCase):
         self.assert_((self.obj.uriref, relsext.isMemberOfCollection, newobj.uriref)
             not in self.obj.rels_ext.content,
             'previous isMemberOfCollection value should not be in RELS-EXT after update')
-        
+
         # delete
         del self.obj.parent
         self.assertEqual(None, self.obj.rels_ext.content.value(subject=self.obj.uriref,
@@ -1037,14 +1053,14 @@ class TestRelation(FedoraTestCase):
         newobj.pid = 'foo:3'	# test pid for convenience/distinguish temp pids
         self.obj.recursive_rel = newobj
 
-        # access to check type 
+        # access to check type
         self.assert_(isinstance(self.obj.recursive_rel, RelatorObject))
-        
+
     def test_literal_relation(self):
         # get - not set
         self.assertEqual(None, self.obj.dcid)
         self.assertEqual(None, self.obj.dctitle)
-       
+
         # set via descriptor
         # - integer, with type specified
         self.obj.dcid = 1234
@@ -1076,14 +1092,16 @@ class TestRelation(FedoraTestCase):
         self.assertEqual(None, self.obj.rels_ext.content.value(subject=self.obj.uriref,
                                                                predicate=DCNS.identifier),
                          'dc:identifier should not be set in rels-ext after delete')
-        
+
     def test_reverse_relation(self):
-        # NOTE: this test depends on syncUpdates being set to true in Fedora
-        rev = ReverseRelator(self.api, 'foo:1')
+        rev = ReverseRelator(self.api, pid=self.getNextPid())
         # add a relation to the object and save so we can query risearch
         self.obj.parent = rev
         self.obj.save()
-        self.fedora_fixtures_ingested.append(self.obj.pid) # save pid for cleanup in tearDown
+        # adding a sleep so that tests do not require syncUpdates turned
+        # on in fedora/risearch
+        sleep(6)
+        self.fedora_fixtures_ingested.append(self.obj.pid)  # save pid for cleanup in tearDown
         self.assertEqual(rev.member.pid, self.obj.pid,
             'ReverseRelation returns correct object based on risearch query')
         self.assert_(isinstance(rev.member, RelatorObject),
@@ -1091,11 +1109,12 @@ class TestRelation(FedoraTestCase):
 
         self.assert_(isinstance(rev.members, list),
             'ReverseRelation returns list when multiple=True')
-        self.assertEqual(rev.members[0].pid, self.obj.pid,
+        pids = [m.pid for m in rev.members]
+        self.assertTrue(self.obj.pid in pids,
             'ReverseRelation list includes correct item')
         self.assert_(isinstance(rev.members[0], RelatorObject),
             'ReverseRelation list items initialized as correct object type')
-        
+
 
     def test_auto_reverse_relation(self):
         # default reverse name based on classname
