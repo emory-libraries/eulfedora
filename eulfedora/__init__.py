@@ -1,5 +1,5 @@
 # file eulfedora/__init__.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,6 @@
 __version_info__ = (0, 20, 0, 'dev')
 
 # Dot-connect all but the last. Last is dash-connected if not None.
-__version__ = '.'.join([ str(i) for i in __version_info__[:-1] ])
+__version__ = '.'.join([str(i) for i in __version_info__[:-1]])
 if __version_info__[-1] is not None:
     __version__ += ('-%s' % (__version_info__[-1],))
