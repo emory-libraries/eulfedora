@@ -5,6 +5,12 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+0.19.1
+------
+
+* Bugfix: Fedora restricts the ownerId field to 64 characters; warn
+  and truncate the value to allow the object to be updated.
+
 0.19.0
 ------
 
@@ -27,7 +33,7 @@ any necessary information about installation or upgrade notes.
     responsible for ingesting the object into Fedora if ingest is
     listed in the audit trail
 * :class:`~eulfedora.models.Relation` now supports recursive relations
-  via the option ``type="self"``. 
+  via the option ``type="self"``.
 * API wrappers have been updated to take advantage of all methods
   available in the REST API as of Fedora 3.4 which were unavailable in
   3.2.  This removes the need for any SOAP-based APIs and the
@@ -52,7 +58,7 @@ any necessary information about installation or upgrade notes.
   :meth:`eulfedora.api.ResourceIndex.count_statements`
 * :class:`~eulfedora.models.DatastreamObject` now supports setting
   datastream content by URI through the new
-  :attr:`~eulfedora.models.DatastreamObject.ds_location` attribute 
+  :attr:`~eulfedora.models.DatastreamObject.ds_location` attribute
   (this is in addition to the previously-available
   :attr:`~eulfedora.models.DatastreamObject.content` attribute).
 
@@ -72,12 +78,12 @@ any necessary information about installation or upgrade notes.
 
     * :meth:`~eulfedora.api.REST_API.addDatastream`
     * :meth:`~eulfedora.api.REST_API.modifyDatastream`
-    * :meth:`~eulfedora.api.REST_API.purgeDatastream` 
+    * :meth:`~eulfedora.api.REST_API.purgeDatastream`
     * :meth:`~eulfedora.api.REST_API.modifyObject`
     * :meth:`~eulfedora.api.REST_API.purgeObject`
     * :meth:`~eulfedora.api.REST_API.setDatastreamState`
-    * :meth:`~eulfedora.api.REST_API.setDatastreamVersionable` 
-    
+    * :meth:`~eulfedora.api.REST_API.setDatastreamVersionable`
+
 * New custom Exception :class:`eulfedora.util.ChecksumMismatch`, which
   is a subclass of :class:`eulfedora.util.RequestFailed`.  This
   exception will be raised if

@@ -603,7 +603,7 @@ class TestDigitalObject(FedoraTestCase):
         self.obj.state = "I"
         saved = self.obj._saveProfile("saving test object profile")
         self.assertTrue(saved, "DigitalObject saveProfile should return True on successful update")
-        profile = self.obj.getProfile() # get fresh from fedora to confirm updated
+        profile = self.obj.getProfile()  # get fresh from fedora to confirm updated
         self.assertEqual(profile.label, "An updated test object")
         self.assertEqual(profile.owner, "notme")
         self.assertEqual(profile.state, "I")
@@ -613,13 +613,28 @@ class TestDigitalObject(FedoraTestCase):
     def test_object_label(self):
         # object label set method has special functionality
         self.obj.label = ' '.join('too long' for i in range(50))
-        self.assertEqual(255, len(self.obj.label), 'object label should be truncated to 255 characters')
+        self.assertEqual(self.obj.label_max_size, len(self.obj.label),
+            'object label should be truncated to 255 characters')
         self.assertTrue(self.obj.info_modified, 'object info modified when object label has changed')
 
         self.obj.info_modified = False
         self.obj.label = str(self.obj.label)
         self.assertFalse(self.obj.info_modified,
                          'object info should not be considered modified after setting label to its current value')
+
+    def test_object_owner(self):
+        self.obj.owner = ','.join('userid' for i in range(14))
+        self.assertTrue(len(self.obj.owner) <= self.obj.owner_max_size,
+            'object owner should be truncated to 64 characters or less')
+        self.assertTrue(self.obj.info_modified,
+            'object info modified when object owner has changed')
+        # last value should not be truncated
+        self.assertTrue(self.obj.owner.endswith('userid'))
+
+        # non-delimited value should just be truncated
+        self.obj.owner = ''.join('longestownernameever' for i in range(10))
+        self.assertEqual(self.obj.owner_max_size, len(self.obj.owner),
+            'object owner should be truncated to 64 characters or less')
 
     def test_save(self):
         # unmodified object - save should do nothing

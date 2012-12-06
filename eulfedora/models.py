@@ -1221,16 +1221,18 @@ class DigitalObject(object):
         return self._info
 
     # object info properties
+    label_max_size = 255
+    'maximum label size allowed by fedora'
 
     def _get_label(self):
         return self.info.label
 
     def _set_label(self, val):
         # Fedora object label property has a maximum of 255 characters
-        if len(val) > 255:
-            logger.warning('Attempting to set object label for %s to a value longer than 255 character max (%d); truncating' \
-                % (self.pid, len(val)))
-            val = val[0:255]
+        if len(val) > self.label_max_size:
+            logger.warning('Attempting to set object label for %s to a value longer than %d character max (%d); truncating' \
+                % (self.pid, self.label_max_size, len(val)))
+            val = val[0:self.label_max_size]
 
         # if the new value is different, track object information modification for next save
         if self.info.label != val:
@@ -1239,10 +1241,27 @@ class DigitalObject(object):
 
     label = property(_get_label, _set_label, None, "object label")
 
+    owner_max_size = 64
+    'maximum owner size allowed by fedora'
+
     def _get_owner(self):
         return self.info.owner
 
     def _set_owner(self, val):
+        if len(val) > self.owner_max_size:
+            logger.warning('Attempting to set object owner for %s to a value longer than %d character max (%d); truncating' \
+                % (self.pid, self.owner_max_size, len(val)))
+
+            # if owner is delimited, truncate to last full value
+            if self.OWNER_ID_SEPARATOR in val:
+                # find the last delimiter under the max size
+                end = val.rfind(self.OWNER_ID_SEPARATOR, 0, self.owner_max_size + 1)
+                val = val[0:end]
+
+            # otherwise, just truncate
+            else:
+                val = val[0:self.owner_max_size]
+
         self.info.owner = val
         self.info_modified = True
 
@@ -1474,7 +1493,8 @@ class DigitalObject(object):
         if self.info_modified:
             try:
                 profile_saved = self._saveProfile(logMessage)
-            except RequestFailed:
+            except RequestFailed as rf:
+                print rf.detail
                 logger.error('Failed to save object profile for %s' % self.pid)
                 profile_saved = False
 
