@@ -1,5 +1,5 @@
 # file eulfedora/models.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,6 +34,7 @@ from eulxml.xmlmap.dc import DublinCore
 
 logger = logging.getLogger(__name__)
 
+
 class DatastreamObject(object):
     """Object to ease accessing and updating a datastream belonging to a Fedora
     object.  Handles datastream content as well as datastream profile information.
@@ -41,7 +42,7 @@ class DatastreamObject(object):
     fields are accessed.
 
     Intended to be used with :class:`DigitalObject` and intialized
-    via :class:`Datastream`.  
+    via :class:`Datastream`.
 
     Initialization parameters:
         :param obj: the :class:`DigitalObject` that this datastream belongs to.
@@ -50,13 +51,13 @@ class DatastreamObject(object):
         :param mimetype: default datastream mimetype
         :param versionable: default configuration for datastream versioning
         :param state: default configuration for datastream state
-        	(default: A [active])
+            (default: A [active])
         :param format: default configuration for datastream format URI
         :param control_group: default configuration for datastream control group
-        	(default: M [managed])
+            (default: M [managed])
         :param checksum: default configuration for datastream checksum
-        :param checksum_type: default configuration for datastream checksum type 
-        	(default: MD5)
+        :param checksum_type: default configuration for datastream checksum type
+            (default: MD5)
     """
     default_mimetype = "application/octet-stream"
 
@@ -69,7 +70,7 @@ class DatastreamObject(object):
 
     def __init__(self, obj, id, label, mimetype=None, versionable=False,
             state='A', format=None, control_group='M', checksum=None, checksum_type="MD5"):
-                        
+
         self.obj = obj
         self.id = id
 
@@ -80,7 +81,7 @@ class DatastreamObject(object):
             'label': label,
             'mimetype': mimetype,
             'versionable': versionable,
-            'state' : state,
+            'state': state,
             'format': format,
             'control_group': control_group,
             'checksum': checksum,
@@ -96,17 +97,17 @@ class DatastreamObject(object):
         self.info_modified = False
         self.digest = None
         self.checksum_modified = False
-        
+
         # Flag to indicate whether this datastream exists in fedora.
         # Assume false until/unless we can confirm otherwise.
-	self.exists = False
-        
+        self.exists = False
+
         if not self.obj._create:
-            # If this datastream belongs to an existing object, check 
+            # If this datastream belongs to an existing object, check
             # to see if the datastream actually exists.
-            if self.obj.ds_list.has_key(id):
+            if id in self.obj.ds_list:
                 self.exists = True
-    
+
     @property
     def info(self):
         # pull datastream profile information from Fedora, but only when accessed
@@ -148,11 +149,13 @@ class DatastreamObject(object):
                 # calculate and store a digest of the current datastream text content
                 self.digest = self._content_digest()
         return self._content
+
     def _set_content(self, val):
         # if datastream is not versionable, grab contents before updating
         if not self.versionable:
             self._get_content()
         self._content = val
+
     content = property(_get_content, _set_content, None,
         '''contents of the datastream; for existing datastreams,
         content is only pulled from Fedora when first requested, and
@@ -194,7 +197,7 @@ class DatastreamObject(object):
     def isModified(self):
         """Check if either the datastream content or profile fields have changed
         and should be saved to Fedora.
-        
+
         :rtype: boolean
         """
         return self.info_modified or self._content_digest() != self.digest
@@ -207,58 +210,72 @@ class DatastreamObject(object):
 
     def _get_label(self):
         return self.info.label
+
     def _set_label(self, val):
         self.info.label = val
-        self.info_modified = True    
+        self.info_modified = True
+
     label = property(_get_label, _set_label, None, "datastream label")
-    
+
     def _get_mimetype(self):
         return self.info.mimetype
+
     def _set_mimetype(self, val):
         self.info.mimetype = val
         self.info_modified = True
+
     mimetype = property(_get_mimetype, _set_mimetype, None, "datastream mimetype")
 
     def _get_versionable(self):
         return self.info.versionable
+
     def _set_versionable(self, val):
         self.info.versionable = val
         self.info_modified = True
+
     versionable = property(_get_versionable, _set_versionable, None,
         "boolean; indicates if Fedora is configured to version the datastream")
 
     def _get_state(self):
         return self.info.state
+
     def _set_state(self, val):
         self.info.state = val
         self.info_modified = True
+
     state = property(_get_state, _set_state, None, "datastream state (Active/Inactive/Deleted)")
 
     def _get_format(self):
         return self.info.format
+
     def _set_format(self, val):
         self.info.format = val
         self.info_modified = True
+
     format = property(_get_format, _set_format, "datastream format URI")
-    
+
     def _get_checksum(self):
         return self.info.checksum
+
     def _set_checksum(self, val):
         self.info.checksum = val
         self.info_modified = True
         self.checksum_modified = True
+
     checksum = property(_get_checksum, _set_checksum, "datastream checksum")
-    
+
     def _get_checksumType(self):
         return self.info.checksum_type
+
     def _set_checksumType(self, val):
         self.info.checksum_type = val
         self.info_modified = True
+
     checksum_type = property(_get_checksumType, _set_checksumType, "datastream checksumType")
 
     # read-only info properties
 
-    @property 
+    @property
     def control_group(self):
         return self.info.control_group
 
@@ -279,10 +296,10 @@ class DatastreamObject(object):
     def last_modified(self):
         # NOTE: last_modified may actually be the 'created' date for
         # the current version of the datastream.
-        
+
         # FIXME: **preliminary** actual last-modified, since the above does not
         # actually work - should probably cache ds history...
-        return self.history().versions[0].created # fedora returns most recent first
+        return self.history().versions[0].created  # fedora returns most recent first
 
     def history(self):
         '''Get history/version information for this datastream and
@@ -334,9 +351,9 @@ class DatastreamObject(object):
             # if not versionable, make a backup to back out changes if object save fails
             if not self.versionable:
                 self._backup()
-                
+
             # if this datastream already exists, use modifyDatastream API call
-            success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id, 
+            success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id,
                     logMessage=logmessage, **save_opts)
         else:
             # if this datastream does not yet exist, add it
@@ -353,8 +370,8 @@ class DatastreamObject(object):
                 # particularly since the file is not guaranteed to still be open)
                 if 'content' in save_opts and hasattr(save_opts['content'], 'read'):
                     self._content = None
-                    self._content_modified = False      
- 
+                    self._content_modified = False
+
         if success:
             # update modification indicators
             self.info_modified = False
@@ -362,30 +379,30 @@ class DatastreamObject(object):
             self.digest = self._content_digest()
             # clear out ds location
             self.ds_location = None
-            
+
         return success      # msg ?
 
     def _backup(self):
         info = self.obj.getDatastreamProfile(self.id)
-        self._info_backup = { 'dsLabel': info.label,
-                              'mimeType': info.mimetype,
-                              'versionable': info.versionable,
-                              'dsState': info.state,
-                              'formatURI': info.format,
-                              'checksumType': info.checksum_type,
-                              'checksum': info.checksum }
+        self._info_backup = {'dsLabel': info.label,
+                             'mimeType': info.mimetype,
+                             'versionable': info.versionable,
+                             'dsState': info.state,
+                             'formatURI': info.format,
+                             'checksumType': info.checksum_type,
+                             'checksum': info.checksum}
 
         data, url = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id)
         self._content_backup = data
 
     def undo_last_save(self, logMessage=None):
-        """Undo the last change made to the datastream content and profile, effectively 
+        """Undo the last change made to the datastream content and profile, effectively
         reverting to the object state in Fedora as of the specified timestamp.
 
         For a versioned datastream, this will purge the most recent datastream.
         For an unversioned datastream, this will overwrite the last changes with
         a cached version of any content and/or info pulled from Fedora.
-        """        
+        """
         # NOTE: currently not clearing any of the object caches and backups
         # of fedora content and datastream info, as it is unclear what (if anything)
         # should be cleared
@@ -393,7 +410,7 @@ class DatastreamObject(object):
         if self.versionable:
             # if this is a versioned datastream, get datastream history
             # and purge the most recent version
-            last_save = self.history().versions[0].created # fedora returns most recent first
+            last_save = self.history().versions[0].created  # fedora returns most recent first
             success, timestamps = self.obj.api.purgeDatastream(self.obj.pid, self.id,
                                                 datetime_to_fedoratime(last_save),
                                                 logMessage=logMessage)
@@ -414,7 +431,7 @@ class DatastreamObject(object):
         '''Generator that returns the datastream content in chunks, so
         larger datastreams can be used without reading the entire
         contents into memory.'''
-        # get the datastream dissemination, but return the actual http response 
+        # get the datastream dissemination, but return the actual http response
         response = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
                                                            return_http_response=True)
         # read and yield the response in chunks
@@ -424,15 +441,14 @@ class DatastreamObject(object):
                 return
             yield chunk
 
-
-    def validate_checksum(self, date=None): 
+    def validate_checksum(self, date=None):
         '''Check if this datastream has a valid checksum in Fedora, by
         running the :meth:`REST_API.compareDatastreamChecksum` API
         call.  Returns a boolean based on the checksum valid
         response from Fedora.
 
         :param date: (optional) check the datastream validity at a
-		particular date/time (e.g., for versionable datastreams)
+            particular date/time (e.g., for versionable datastreams)
         '''
         response, uri = self.obj.api.compareDatastreamChecksum(self.obj.pid, self.id,
                                                                asOfDateTime=date)
@@ -459,13 +475,13 @@ class Datastream(object):
 
     def __init__(self, id, label, defaults={}):
         self.id = id
-        self.label = label 
+        self.label = label
         self.datastream_args = defaults
-        
+
         #self.label = label
         #self.datastream_defaults = defaults
 
-    def __get__(self, obj, objtype): 
+    def __get__(self, obj, objtype):
         if obj is None:
             return self
         if obj.dscache.get(self.id, None) is None:
@@ -498,7 +514,7 @@ class XmlDatastreamObject(DatastreamObject):
     :param objtype: xml object type to use for datastream content; if not specified,
         defaults to :class:`~eulxml.xmlmap.XmlObject`
     """
-    
+
     default_mimetype = "text/xml"
 
     def __init__(self, obj, id, label, objtype=xmlmap.XmlObject, **kwargs):
@@ -527,7 +543,7 @@ class XmlDatastream(Datastream):
     Example usage::
 
         from eulxml.xmlmap.dc import DublinCore
-        
+
         class MyDigitalObject(DigitalObject):
             extra_dc = XmlDatastream("EXTRA_DC", "Dublin Core", DublinCore)
 
@@ -536,8 +552,8 @@ class XmlDatastream(Datastream):
         my_obj.save(logMessage="automatically setting dc title")
     """
     _datastreamClass = XmlDatastreamObject
-    
-    def __init__(self, id, label, objtype=None, defaults={}):        
+
+    def __init__(self, id, label, objtype=None, defaults={}):
         super(XmlDatastream, self).__init__(id, label, defaults)
         self.datastream_args['objtype'] = objtype
 
@@ -650,7 +666,7 @@ class FileDatastreamObject(DatastreamObject):
             image = FileDatastream('IMAGE', 'image datastream', defaults={
                 'mimetype': 'image/png'
             })
-    
+
     Then, with an instance of ImageObject::
 
         obj.image.content = open('/path/to/my/file')
@@ -675,20 +691,22 @@ class FileDatastreamObject(DatastreamObject):
     # redefine content property to override set_content to set a flag when modified
     def _get_content(self):
         super(FileDatastreamObject, self)._get_content()
-        return self._content    
+        return self._content
+
     def _set_content(self, val):
         super(FileDatastreamObject, self)._set_content(val)
-        self._content_modified = True        
+        self._content_modified = True
+
     content = property(_get_content, _set_content, None,
         "contents of the datastream; only pulled from Fedora when accessed, cached after first access")
 
     def _content_digest(self):
         # don't attempt to create a checksum of the file content
         pass
-    
+
     def isModified(self):
         return self.info_modified or self._content_modified
-    
+
 
 class FileDatastream(Datastream):
     """File-based content version of :class:`Datastream`.  Datastreams are
@@ -703,7 +721,7 @@ class FileDatastream(Datastream):
 # more user-friendly introduction...
 
 # Relation  (list variant still TODO)
-# ReverseRelation 
+# ReverseRelation
 
 class Relation(object):
     '''This descriptor is intended for use with
@@ -711,12 +729,12 @@ class Relation(object):
     provides get, set, and delete functionality for a single related
     :class:`DigitalObject` instance or literal value in the RELS-EXT
     of an individual object.
-    
+
     Example use for a related object: a :class:`Relation` should be
     initialized with a predicate URI and optionally a subclass of
     :class:`~eulfedora.models.DigitalObject` that should be returned::
 
-    	class Page(DigitalObject):
+        class Page(DigitalObject):
             volume = Relation(relsext.isConstituentOf, type=Volume)
 
     When a :class:`Relation` is created with a type that references a
@@ -741,67 +759,67 @@ class Relation(object):
     :class:`~eulfedora.models.Relation` also supports configuring the
     RDF type and namespace prefixes that should be used for
     serialization; for example::
-        
+
         from rdflib import XSD, URIRef
         from rdflib.namespace import Namespace
-        
+
         MYNS = Namespace(URIRef("http://example.com/ns/2011/my-test-namespace/#"))
 
-    	class MyObj(DigitalObject):
+        class MyObj(DigitalObject):
             total = Relation(MYNS.count, ns_prefix={"my": MYNS}, rdf_type=XSD.int)
 
     This would allow us to access ``total`` as an integer on a MyObj
     object, e.g.::
 
-        
+
         myobj.total = 3
-        
+
     and when the RELS-EXT is serialized it will use the
     configured namespace prefix, e.g.:
 
     .. code-block:: xml
-    
-	<rdf:RDF xmlns:my="xmlns:fedora-model="info:fedora/fedora-system:def/model#"
+
+    <rdf:RDF xmlns:my="xmlns:fedora-model="info:fedora/fedora-system:def/model#"
           xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-	  <rdf:Description rdf:about="info:fedora/myobj:1">
-	    <my:count rdf:datatype="http://www.w3.org/2001/XMLSchema#int">3</my:count>
-	  </rdf:Description>
-	</rdf:RDF>
+      <rdf:Description rdf:about="info:fedora/myobj:1">
+        <my:count rdf:datatype="http://www.w3.org/2001/XMLSchema#int">3</my:count>
+      </rdf:Description>
+    </rdf:RDF>
 
     .. Note::
-        
+
         If a namespace prefix is not specified, :mod:`rfdlib` will
         automatically generate a namespace to produce valid output,
         but it may be less readable than a custom namespace.
-        
+
 
 
     Initialization options:
 
     :param relation: the RDF predicate URI as a :class:`rdflib.URIRef`
-    
+
     :param type: optional :class:`~eulfedora.models.DigitalObject`
-    	subclass to initialize (for object relations); use
-    	``type="self"`` to specify that the current DigitalObject
-    	class should be used (currently no reverse relation will be
-    	created for recursive relations).
-        
+        subclass to initialize (for object relations); use
+        ``type="self"`` to specify that the current DigitalObject
+        class should be used (currently no reverse relation will be
+        created for recursive relations).
+
     :param ns_prefix: optional dictionary to configure namespace
-    	prefixes to be used for serialization; key should be the
+        prefixes to be used for serialization; key should be the
         desired prefix, value should be an instance of
         :class:`rdflib.namespace.Namespace`
-        
+
     :param rdf_type: optional rdf type for literal values (passed
         to :class:`rdflib.Literal` as the datatype option)
-    
+
     :param related_name: optional name for the auto-generated
-    	:class:`ReverseRelation` property, when the relation is to a
-    	subclass of :class:`DigitalObject`; if not specified, the
-    	related name will be ``classname_set``; a value of ``+``
-    	indicates no :class:`ReverseRelation` should be created
-        
+        :class:`ReverseRelation` property, when the relation is to a
+        subclass of :class:`DigitalObject`; if not specified, the
+        related name will be ``classname_set``; a value of ``+``
+        indicates no :class:`ReverseRelation` should be created
+
     '''
-    
+
     def __init__(self, relation, type=None, ns_prefix={}, rdf_type=None,
                  related_name=None):
         self.relation = relation
@@ -817,18 +835,18 @@ class Relation(object):
         # no caching on related objects for now
         uri_val = obj.rels_ext.content.value(subject=obj.uriref,
                                          predicate=self.relation)
-        if uri_val and self.object_type:	# don't init new object if val is None
+        if uri_val and self.object_type:    # don't init new object if val is None
             # special case: if object_type is the string 'self',
             # use the parent object class (save after the first check)
             if self.object_type == 'self':
                 self.object_type = obj.__class__
-                
+
             # need get_object wrapper method on digital object
             return obj.get_object(uri_val, type=self.object_type)
         # if the value has 'toPython' method (e.g., rdflib.Literal),
         # return the result of that conversion
         elif hasattr(uri_val, 'toPython'):
-             return uri_val.toPython()
+            return uri_val.toPython()
         else:
             return uri_val
 
@@ -847,7 +865,7 @@ class Relation(object):
             subject_uri = Literal(subject, datatype=self.rdf_type)
         else:
             subject_uri = Literal(subject)
-        
+
         # set the property in the rels-ext, removing any existing
         # value for that property (single-value relation only, for now)
         obj.rels_ext.content.set((
@@ -882,18 +900,18 @@ class ReverseRelation(object):
     It is highly recommended to use :class:`Relation` and let the
     corresponding :class:`ReverseRelation` be automatically generated
     for you.
-    
+
     .. Note::
-    
+
        There is currently no support for sorting when multiple items
        are returned; items are currently returned in whatever order
        the :class:`~eulfedora.api.ResourceIndex` returns them.
-    
+
     Example use::
 
-    	class Volume(DigitalObject):
+        class Volume(DigitalObject):
             pages = ReverseRelation(relsext.isConstituentOf, type=Page, multiple=True)
-            
+
     '''
     def __init__(self, relation, type=None, multiple=False):
         self.relation = relation
@@ -921,7 +939,7 @@ class ReverseRelation(object):
 
 class DigitalObjectType(type):
     """A metaclass for :class:`DigitalObject`.
-    
+
     All this does for now is find Datastream objects from parent classes
     and those defined on the class itself and collect them into a
     _defined_datastreams dictionary on the class. Using this, clients (or,
@@ -975,7 +993,7 @@ class DigitalObjectType(type):
                 continue
             # TODO: look into handling this the way django handles
             # recursive relationships
-            
+
             # use related name if one has been specified
             if rel.related_name is not None:
                 reverse_name = rel.related_name
@@ -986,7 +1004,7 @@ class DigitalObjectType(type):
             setattr(rel.object_type, reverse_name,
                     ReverseRelation(rel.relation, type=new_class,
                                     multiple=True))
-            
+
         return new_class
 
     @property
@@ -1010,7 +1028,7 @@ class DigitalObject(object):
       datastreams using :class:`XmlDatastream`,
       :class:`RdfDatastream`, or :class:`FileDatastream` as
       appropriate.
-    
+
     """
 
     __metaclass__ = DigitalObjectType
@@ -1050,17 +1068,17 @@ class DigitalObject(object):
                 self.default_pidspace = default_pidspace
             except AttributeError:
                 # allow extending classes to make default_pidspace a custom property,
-                # but warn if there is case of conflict 
+                # but warn if there is case of conflict
                 if default_pidspace != getattr(self, 'default_pidspace', None):
                     logger.warn("Failed to set requested default_pidspace %s (using %s instead)" \
                                 % (default_pidspace, self.default_pidspace))
         # cache object profile, track if it is modified and needs to be saved
         self._info = None
         self.info_modified = False
-        
+
         # datastream list from fedora
         self._ds_list = None
-        
+
         # object history
         self._history = None
         self._methods = None
@@ -1075,7 +1093,7 @@ class DigitalObject(object):
             # reliably callable.
             pid = self.get_default_pid
         elif isinstance(pid, basestring) and \
-                 pid.startswith('info:fedora/'): # passed a uri
+                 pid.startswith('info:fedora/'):  # passed a uri
             pid = pid[len('info:fedora/'):]
 
         # callable(pid) signals a function to call to obtain a pid if and
@@ -1145,7 +1163,7 @@ class DigitalObject(object):
         # none is specified. If you get the urge to override it, make sure
         # it still works there.
         kwargs = {}
-        if self.default_pidspace  is not None:
+        if self.default_pidspace is not None:
             kwargs['namespace'] = self.default_pidspace
         data, url = self.api.getNextPID(**kwargs)
         nextpids = parse_xml_object(NewPids, data, url)
@@ -1201,11 +1219,12 @@ class DigitalObject(object):
         if self._info is None:
             self._info = self.getProfile()
         return self._info
-    
+
     # object info properties
 
     def _get_label(self):
         return self.info.label
+
     def _set_label(self, val):
         # Fedora object label property has a maximum of 255 characters
         if len(val) > 255:
@@ -1217,13 +1236,16 @@ class DigitalObject(object):
         if self.info.label != val:
             self.info_modified = True
         self.info.label = val
+
     label = property(_get_label, _set_label, None, "object label")
 
     def _get_owner(self):
         return self.info.owner
+
     def _set_owner(self, val):
         self.info.owner = val
         self.info_modified = True
+
     owner = property(_get_owner, _set_owner, None, "object owner")
 
     @property
@@ -1234,13 +1256,15 @@ class DigitalObject(object):
 
     def _get_state(self):
         return self.info.state
+
     def _set_state(self, val):
         self.info.state = val
         self.info_modified = True
+
     state = property(_get_state, _set_state, None, "object state (Active/Inactive/Deleted)")
 
     # read-only info properties
-    @property       
+    @property
     def created(self):
         return self.info.created
 
@@ -1262,7 +1286,7 @@ class DigitalObject(object):
             return False
 
         # If we can get a valid object profile, regardless of its contents,
-        # then this object exists. If not, then it doesn't. 
+        # then this object exists. If not, then it doesn't.
         try:
             self.getProfile()
             return True
@@ -1317,7 +1341,7 @@ class DigitalObject(object):
         if self._object_xml is None:
             self.getObjectXml()
         return self._object_xml
-    
+
     def getObjectXml(self):
         if self._create:
             return None
@@ -1325,7 +1349,7 @@ class DigitalObject(object):
             data, url = self.api.getObjectXML(self.pid)
             self._object_xml = parse_xml_object(FoxmlDigitalObject, data, url)
             return self._object_xml
-        
+
     @property
     def audit_trail(self):
         '''Fedora audit trail as an instance of :class:`eulfedora.xml.AuditTrail`
@@ -1365,7 +1389,7 @@ class DigitalObject(object):
             return set([r.user for r in self.audit_trail.records])
         return set()
 
-    def getProfile(self):    
+    def getProfile(self):
         """Get information about this object (label, owner, date created, etc.).
 
         :rtype: :class:`ObjectProfile`
@@ -1385,7 +1409,7 @@ class DigitalObject(object):
             # profile info is no longer different than what is in Fedora
             self.info_modified = False
         return saved
-    
+
     def save(self, logMessage=None):
         """Save to Fedora any parts of this object that have been
         modified (including object profile attributes such as
@@ -1407,13 +1431,13 @@ class DigitalObject(object):
         declaration, though it too can be overridden prior to the initial
         save.
         """
-        
+
         if self._create:
             self._prepare_ingest()
             self._ingest(logMessage)
         else:
             self._save_existing(logMessage)
-        
+
         #No errors, then return true
         return True
 
@@ -1427,18 +1451,18 @@ class DigitalObject(object):
         # save modified datastreams
         for ds in to_save:
             # in eulfedora 0.16 and before, add/modify datastream returned True/False
-            # in later versions, it throws an exception 
+            # in later versions, it throws an exception
             try:
                 ds_saved = self.dscache[ds].save(logMessage)
             except RequestFailed:
                 logger.error('Failed to save %s/%s' % (self.pid, ds))
                 ds_saved = False
-                
+
             if ds_saved:
                 saved.append(ds)
             else:
                 # save datastream failed - back out any changes that have been made
-                cleaned = self._undo_save(saved, 
+                cleaned = self._undo_save(saved,
                                           "failed saving %s, rolling back changes" % ds)
                 raise DigitalObjectSaveFailure(self.pid, ds, to_save, saved, cleaned)
 
@@ -1458,13 +1482,10 @@ class DigitalObject(object):
                 cleaned = self._undo_save(saved, "failed to save object profile, rolling back changes")
                 raise DigitalObjectSaveFailure(self.pid, "object profile", to_save, saved, cleaned)
 
-            
         if saved or (self.info_modified and profile_saved):
             # clear out any cached object info that is now out of date
             self._history = None
             self._object_xml = None
-            
-            
 
     def _undo_save(self, datastreams, logMessage=None):
         """Takes a list of datastreams and a datetime, run undo save on all of them,
@@ -1490,13 +1511,12 @@ class DigitalObject(object):
             if hasattr(dsobj, '_prepare_ingest'):
                 dsobj._prepare_ingest()
 
-
     def _ingest(self, logMessage):
         foxml = self._build_foxml_for_ingest()
         returned_pid = self.api.ingest(foxml, logMessage)
 
         if returned_pid != self.pid:
-            msg = ('fedora returned unexpected pid "%s" when trying to ' + 
+            msg = ('fedora returned unexpected pid "%s" when trying to ' +
                    'ingest object with pid "%s"') % \
                   (returned_pid, self.pid)
             raise Exception(msg)
@@ -1511,29 +1531,29 @@ class DigitalObject(object):
     def _build_foxml_for_ingest(self, pretty=False):
         doc = self._build_foxml_doc()
 
-        print_opts = {'encoding' : 'UTF-8'}
-        if pretty: # for easier debug
+        print_opts = {'encoding': 'UTF-8'}
+        if pretty:  # for easier debug
             print_opts['pretty_print'] = True
-        
+
         return etree.tostring(doc, **print_opts)
 
     FOXML_NS = 'info:fedora/fedora-system:def/foxml#'
 
     def _build_foxml_doc(self):
         # make an lxml element builder - default namespace is foxml, display with foxml prefix
-        E = ElementMaker(namespace=self.FOXML_NS, nsmap={'foxml' : self.FOXML_NS })
+        E = ElementMaker(namespace=self.FOXML_NS, nsmap={'foxml': self.FOXML_NS})
         doc = E('digitalObject')
         doc.set('VERSION', '1.1')
         doc.set('PID', self.pid)
         doc.append(self._build_foxml_properties(E))
-        
+
         # collect datastream definitions for ingest.
         for dsname, ds in self._defined_datastreams.items():
             dsobj = getattr(self, dsname)
             dsnode = self._build_foxml_datastream(E, ds.id, dsobj)
             if dsnode is not None:
                 doc.append(dsnode)
-        
+
         return doc
 
     def _build_foxml_properties(self, E):
@@ -1548,7 +1568,7 @@ class DigitalObject(object):
             label.set('NAME', 'info:fedora/fedora-system:def/model#label')
             label.set('VALUE', self.label)
             props.append(label)
-        
+
         if self.owner:
             owner = E('property')
             owner.set('NAME', 'info:fedora/fedora-system:def/model#ownerId')
@@ -1582,7 +1602,7 @@ class DigitalObject(object):
             ver_xml.set('FORMAT_URI', dsobj.format)
         if dsobj.label:
             ver_xml.set('LABEL', dsobj.label)
-            
+
         # Set the checksum, if available.
         #FIXME: Do this somewhere stuff somewhere else? Currently outside where the actual file content is attached....
         # if *either* a checksum or a checksum type is specified, set the contentDigest
@@ -1601,7 +1621,7 @@ class DigitalObject(object):
             # Content exists, but no checksum, so log a warning.
             # FIXME: probably need a better way to check this.
             logging.warning("Datastream ingested without a passed checksum or checksum type: %s/%s." % (self.pid, dsid))
-            
+
         ds_xml.append(ver_xml)
 
         ver_xml.append(content_node)
@@ -1654,7 +1674,7 @@ class DigitalObject(object):
             # NOTE: can be accessed as a cached class property via ds_list
             data, url = self.api.listDatastreams(self.pid)
             dsobj = parse_xml_object(ObjectDatastreams, data, url)
-            return dict([ (ds.dsid, ds) for ds in dsobj.datastreams ])
+            return dict([(ds.dsid, ds) for ds in dsobj.datastreams])
 
     @property
     def ds_list(self):      # NOTE: how to name to distinguish from locally configured datastream objects?
@@ -1725,7 +1745,7 @@ class DigitalObject(object):
                         string begins with info:fedora/ it will be treated as
                         a resource, otherwise it will be treated as a literal
         :rtype: boolean
-        """  
+        """
         if isinstance(rel_uri, URIRef):
             rel_uri = unicode(rel_uri)
 
@@ -1757,14 +1777,14 @@ class DigitalObject(object):
         # - convert model pid to info:fedora/ form if not passed in that way?
         try:
             rels = self.rels_ext.content
-        except RequestFailed, e:
+        except RequestFailed:
             # if rels-ext can't be retrieved, confirm this object does not have a RELS-EXT
-            # (in which case, it does not subscribe to the specified content model)            
+            # (in which case, it does not subscribe to the specified content model)
             if "RELS-EXT" not in self.ds_list.keys():
                 return False
             else:
                 raise
-            
+
         st = (self.uriref, modelns.hasModel, URIRef(model))
         return st in rels
 
@@ -1774,14 +1794,14 @@ class DigitalObject(object):
         """
         try:
             rels = self.rels_ext.content
-        except RequestFailed, e:
+        except RequestFailed:
             # if rels-ext can't be retrieved, confirm this object does not have a RELS-EXT
             # (in which case, it does not have any content models)
             if "RELS-EXT" not in self.ds_list.keys():
                 return []
             else:
                 raise
-            
+
         return list(rels.objects(self.uriref, modelns.hasModel))
 
     def index_data(self):
@@ -1795,15 +1815,15 @@ class DigitalObject(object):
         particular type of object in any project; data returned from
         this method should be serializable as JSON (the current
         implementation uses :mod:`django.utils.simplejson`).
-        
+
         This method was designed for use with :mod:`eulfedora.indexdata`.
         '''
         index_data = {
-            'pid': self.pid,	
+            'pid': self.pid,
             'label': self.label,
             'owner': self.owners,
             'state': self.state,
-            'content_model': [str(cm) for cm in self.get_models()],	# convert URIRefs to strings
+            'content_model': [str(cm) for cm in self.get_models()],  # convert URIRefs to strings
             }
 
         # date created/modified won't be set unless the object actually exists in Fedora
@@ -1812,15 +1832,15 @@ class DigitalObject(object):
             index_data.update({
                 # last_modified and created are configured as date type in sample solr Schema
                 # using isoformat here so they can be serialized via JSON
-                'last_modified': self.modified.isoformat(),	
+                'last_modified': self.modified.isoformat(),
                 'created': self.created.isoformat(),
                 # datastream ids
                 'dsids': list(self.ds_list.iterkeys()),
             })
-            
+
         index_data.update(self.index_data_descriptive())
         index_data.update(self.index_data_relations())
-        
+
         return index_data
 
     def index_data_descriptive(self):
@@ -1858,7 +1878,6 @@ class DigitalObject(object):
         return data
 
 
-        
 class ContentModel(DigitalObject):
     """Fedora CModel object"""
 
@@ -1908,7 +1927,7 @@ class ContentModel(DigitalObject):
 
 
 class DigitalObjectSaveFailure(StandardError):
-    """Custom exception class for when a save error occurs part-way through saving 
+    """Custom exception class for when a save error occurs part-way through saving
     an instance of :class:`DigitalObject`.  This exception should contain enough
     information to determine where the save failed, and whether or not any changes
     saved before the failure were successfully rolled back.
@@ -1921,7 +1940,7 @@ class DigitalObjectSaveFailure(StandardError):
      * cleaned - list of saved datastreams that were successfully rolled back
      * not_cleaned - saved datastreams that were not rolled back
      * recovered - boolean, True indicates all saved datastreams were rolled back
-    
+
     """
     def __init__(self, pid, failure, to_be_saved, saved, cleaned):
         self.obj_pid = pid
