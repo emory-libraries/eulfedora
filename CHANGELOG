@@ -8,8 +8,9 @@ any necessary information about installation or upgrade notes.
 0.19.1
 ------
 
-* Bugfix: Fedora restricts the ownerId field to 64 characters; warn
-  and truncate the value to allow the object to be updated.
+* Bugfix: handle Fedora restriction of ownerId field length to 64 characters.
+  When setting :attr:`~eulfedora.models.DigitalObject.owner`, will now warn
+  and truncate the value to allow the object to be saved.
 
 0.19.0
 ------
