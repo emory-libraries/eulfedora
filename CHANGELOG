@@ -5,6 +5,12 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+0.19.2
+------
+
+* Bugfix: don't auto-create an XML datastream at ingest when the xml content
+  is empty (i.e., content consists of bootstrapped :class:`xmlmap.XmlObject` only)
+
 0.19.1
 ------
 
