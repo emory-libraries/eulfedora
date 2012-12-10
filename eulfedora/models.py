@@ -532,6 +532,16 @@ class XmlDatastreamObject(DatastreamObject):
     def _content_as_node(self):
         return self.content.node
 
+    def _raw_content(self):
+        # special case for xml datastreams:
+        # self.content is automatically bootstrapped as a new XmlObject
+        # - consider the datastream to have no content if the xml is empty
+        # (which, by default, means no attributes and no text content)
+        if self.content is None or \
+            (hasattr(self.content, 'is_empty') and self.content.is_empty()):
+            return None
+        return super(XmlDatastreamObject, self)._raw_content()
+
 
 class XmlDatastream(Datastream):
     """XML-specific version of :class:`Datastream`.  Datastreams are initialized
