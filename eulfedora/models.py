@@ -204,7 +204,10 @@ class DatastreamObject(object):
 
     def _content_digest(self):
         # generate a hash of the content so we can easily check if it has changed and should be saved
-        return hashlib.sha1(self._raw_content()).hexdigest()
+        raw = self._raw_content()
+        # handle case where datastream is empty or does not yet exist
+        if raw is not None:
+            return hashlib.sha1(raw).hexdigest()
 
     ### access to datastream profile fields; tracks if changes are made for saving to Fedora
 
