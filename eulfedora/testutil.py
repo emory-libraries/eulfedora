@@ -1,5 +1,5 @@
 # file eulfedora/testutil.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,11 +46,19 @@ finish.
    is loaded, so any repository connections should **not** be made at
    class instantiation time, but in a setup method.
 
+
+If you are using :mod:`nose` or :mod:`django-nose`, you should use the
+:class:`ExistDBSetUp` plugin to set up the test eXist database.  With
+:mod:`django-nose`, you should add ``eulfedora.testutil.EulfedoraSetUp``
+to **NOSE_PLUGINS** and ``'--with-eulfedorasetup'`` to **NOSE_ARGS**
+to ensure the plugin is automatically enabled.
+
 ----
 
 """
 
 import logging
+import sys
 
 import unittest2 as unittest
 from django.conf import settings
@@ -61,6 +69,7 @@ from eulfedora.server import Repository, init_pooled_connection
 from eulfedora.util import RequestFailed
 
 logger = logging.getLogger(__name__)
+
 
 class FedoraTestWrapper(object):
     '''A `context manager <http://docs.python.org/library/stdtypes.html#context-manager-types>`_
@@ -73,7 +82,7 @@ class FedoraTestWrapper(object):
     def __init__(self):
         self.stored_default_fedora_root = None
         self.stored_default_fedora_pidspace = None
-        
+
     def __enter__(self):
         self.use_test_fedora()
 
@@ -86,19 +95,19 @@ class FedoraTestWrapper(object):
 
         if getattr(settings, "FEDORA_TEST_ROOT", None):
             settings.FEDORA_ROOT = settings.FEDORA_TEST_ROOT
-            print "Switching to test Fedora: %s" % settings.FEDORA_ROOT
+            print >> sys.stderr, "Switching to test Fedora: %s" % settings.FEDORA_ROOT
             # pooled fedora connection gets initialized before this change;
             # re-initialize connection with new fedora root configured
             init_pooled_connection()
         else:
-            print "FEDORA_TEST_ROOT is not configured in settings; tests will run against %s" % \
+            print >> sys.stderr, "FEDORA_TEST_ROOT is not configured in settings; tests will run against %s" % \
                 settings.FEDORA_ROOT
 
         if getattr(settings, "FEDORA_TEST_PIDSPACE", None):
             settings.FEDORA_PIDSPACE = settings.FEDORA_TEST_PIDSPACE
         elif getattr(settings, "FEDORA_PIDSPACE", None):
             settings.FEDORA_PIDSPACE = "%s-test" % settings.FEDORA_PIDSPACE
-        print "Using Fedora pidspace: %s" % settings.FEDORA_PIDSPACE
+        print >> sys.stderr, "Using Fedora pidspace: %s" % settings.FEDORA_PIDSPACE
 
         # remove any test objects left over from a previous test run
         self.remove_test_objects()
@@ -114,14 +123,14 @@ class FedoraTestWrapper(object):
         if self.stored_default_fedora_pidspace is not None:
             self.remove_test_objects()
             msgs.append("Restoring Fedora pidspace: %s" % self.stored_default_fedora_pidspace)
-            settings.FEDORA_PIDSPACE = self.stored_default_fedora_pidspace        
+            settings.FEDORA_PIDSPACE = self.stored_default_fedora_pidspace
         if self.stored_default_fedora_root is not None:
             msgs.append("Restoring Fedora root: %s" % self.stored_default_fedora_root)
             settings.FEDORA_ROOT = self.stored_default_fedora_root
             # re-initialize pooled connection with restored fedora root
             init_pooled_connection()
         if msgs:
-            print '\n', '\n'.join(msgs)
+            print >> sys.stderr, '\n', '\n'.join(msgs)
 
     def remove_test_objects(self):
         # remove any leftover test object before or after running tests
@@ -145,7 +154,8 @@ class FedoraTestWrapper(object):
             except RequestFailed:
                 logger.warn('Error purging test object %s' % obj.pid)
         if count:
-            print "Removed %s test object(s) with pidspace %s" % (count, settings.FEDORA_PIDSPACE)
+            print >> sys.stderr, "Removed %s test object(s) with pidspace %s" \
+                % (count, settings.FEDORA_PIDSPACE)
 
     @classmethod
     def wrap_test(cls, test):
@@ -193,7 +203,7 @@ try:
         def run(self, test):
             wrapped_test = alternate_test_fedora.wrap_test(test)
             return super(FedoraXmlTestRunner, self).run(wrapped_test)
-    
+
     class FedoraXmlTestSuiteRunner(FedoraTextTestSuiteRunner):
         '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup
         and teardown the Fedora test environment and export test results in
@@ -205,3 +215,25 @@ try:
 except ImportError:
     # xmlrunner not available. simply don't define those classes
     pass
+
+
+# when nose is available, define nosetest plugin
+try:
+
+    from nose.plugins.base import Plugin
+
+    class EulfedoraSetUp(Plugin):
+
+        def begin(self):
+            self.eulfedorawrapper = FedoraTestWrapper()
+            self.eulfedorawrapper.use_test_fedora()
+
+        def finalize(self, result):
+            self.eulfedorawrapper.restore_fedora_root()
+
+        def help(self):
+            return 'Use a test Fedora Repository instance for tests.'
+
+except ImportError:
+    pass
+
