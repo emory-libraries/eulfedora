@@ -22,7 +22,6 @@ import os
 from rdflib import URIRef, Graph as RdfGraph, XSD, Literal
 from rdflib.namespace import Namespace
 import tempfile
-from time import sleep
 
 from eulfedora import models
 from eulfedora.api import ApiFacade
@@ -1094,9 +1093,9 @@ class TestRelation(FedoraTestCase):
         # add a relation to the object and save so we can query risearch
         self.obj.parent = rev
         self.obj.save()
-        # adding a sleep so that tests do not require syncUpdates turned
-        # on in fedora/risearch
-#        sleep(6)
+
+        # run an risearch query with flush updates true
+        # so that tests do not require syncUpdates to be enabled
         self.repo.risearch.count_statements('<%s> * *' % self.obj.pid,
             flush=True)
 
