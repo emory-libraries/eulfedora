@@ -48,10 +48,11 @@ finish.
 
 
 If you are using :mod:`nose` or :mod:`django-nose`, you should use the
-:class:`ExistDBSetUp` plugin to set up the test eXist database.  With
-:mod:`django-nose`, you should add ``eulfedora.testutil.EulfedoraSetUp``
-to **NOSE_PLUGINS** and ``'--with-eulfedorasetup'`` to **NOSE_ARGS**
-to ensure the plugin is automatically enabled.
+:class:`EulfedoraSetUp` plugin to use a separate Fedora Repository for
+testing.  With :mod:`django-nose`, you should add
+``eulfedora.testutil.EulfedoraSetUp`` to **NOSE_PLUGINS** and
+``'--with-eulfedorasetup'`` to **NOSE_ARGS** to ensure the plugin is
+automatically enabled.
 
 ----
 
