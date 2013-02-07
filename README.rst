@@ -85,12 +85,13 @@ running tests, you will need to copy ``test/localsettings.py.dist`` to
 To run all unit tests::
 
 
-    nosetests test/ # for normal development
-    nosetests test/ --with-coverage --cover-package=eulfedora --cover-xml --with-xunit   # for continuous integration
+    nosetests test # for normal development
+    nosetests test --with-coverage --cover-package=eulfedora --cover-xml --with-xunit   # for continuous integration
 
-To run unit tests for a specific module, use syntax like this::
+To run unit tests for a specific module or class, use syntax like this::
 
-    nosetests test/test_fedora/test_api.py
+    nosetests test.test_fedora.test_api
+    nosetests test.test_fedora:TestDigitalObject
 
 To generate sphinx documentation::
 
