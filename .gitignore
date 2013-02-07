@@ -4,3 +4,7 @@ dist
 *.pyc
 test-results
 test/localsettings.py
+.noseids
+.coverage
+coverage.xml
+nosetests.xml

@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-
 # file test_fedora/test_views.py
-# 
+#
 #   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,21 +18,15 @@ from mock import Mock, patch
 import os
 import unittest
 
-# must be set before importing anything from django
-os.environ['DJANGO_SETTINGS_MODULE'] = 'testsettings'
-
 from django.conf import settings
 from django.http import Http404
-from django.template import Context, Template
 
-from eulfedora.util import RequestFailed, PermissionDenied
 from eulfedora.models import DigitalObject, Datastream, FileDatastream
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.views import raw_datastream, login_and_store_credentials_in_session, \
      datastream_etag, raw_audit_trail
 from eulfedora import cryptutil
 
-from testcore import main
 
 TEST_PIDSPACE = getattr(settings, 'FEDORA_PIDSPACE', 'testme')
 
@@ -52,8 +44,8 @@ class SimpleDigitalObject(DigitalObject):
                 'mimetype': 'image/png'
         })
 
-class FedoraViewsTest(unittest.TestCase):
 
+class FedoraViewsTest(unittest.TestCase):
 
     def setUp(self):
         # load test object to test views with
@@ -135,7 +127,7 @@ class FedoraViewsTest(unittest.TestCase):
             'content-length header should be set in the response for binary datastreams')
 
         # non-existent datastream should 404
-        self.assertRaises(Http404, raw_datastream, rqst, self.obj.pid, 'BOGUS-DSID')        
+        self.assertRaises(Http404, raw_datastream, rqst, self.obj.pid, 'BOGUS-DSID')
 
         # non-existent record should 404
         self.assertRaises(Http404, raw_datastream, rqst, 'bogus-pid:1', 'DC')
@@ -148,7 +140,6 @@ class FedoraViewsTest(unittest.TestCase):
             headers=extra_headers)
         self.assertTrue(response.has_header('Content-Disposition'))
         self.assertEqual(response['Content-Disposition'], extra_headers['Content-Disposition'])
-
 
         # explicitly support GET and HEAD requests only
         rqst.method = 'POST'
@@ -177,7 +168,6 @@ class FedoraViewsTest(unittest.TestCase):
         etag = datastream_etag(rqst, self.obj.pid, 'bogus-datastream-id')
         self.assertEqual(None, etag)
 
-
     def test_raw_audit_trail(self):
         rqst = Mock()
         rqst.method = 'GET'
@@ -203,7 +193,6 @@ class FedoraViewsTest(unittest.TestCase):
                      in response.content)
         self.assert_('Last-Modified' in response)
 
-
     def test_login_and_store_credentials_in_session(self):
         # only testing custom logic, which happens on POST
         # everything else is handled by django.contrib.auth
@@ -212,11 +201,11 @@ class FedoraViewsTest(unittest.TestCase):
 
         def not_logged_in(rqst):
             rqst.user.is_authenticated.return_value = False
-            
+
         def set_logged_in(rqst):
             rqst.user.is_authenticated.return_value = True
             rqst.POST.get.return_value = "TEST_PASSWORD"
-        
+
         # failed login
         with patch('eulfedora.views.authviews.login',
                    new=Mock(side_effect=not_logged_in)):
@@ -234,11 +223,9 @@ class FedoraViewsTest(unittest.TestCase):
             # test password stored in the mock request
             pwd = mockrequest.POST.get()
             # encrypted password stored in session
-            sessionpwd = mockrequest.session[FEDORA_PASSWORD_SESSION_KEY]  
+            sessionpwd = mockrequest.session[FEDORA_PASSWORD_SESSION_KEY]
             self.assertNotEqual(pwd, sessionpwd,
                                 'password should not be stored in the session without encryption')
             self.assertEqual(pwd, cryptutil.decrypt(sessionpwd),
                              'user password stored in session is encrypted')
 
-if __name__ == '__main__':
-    main()

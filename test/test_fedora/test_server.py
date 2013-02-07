@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-
 # file test_fedora/test_server.py
-# 
+#
 #   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,19 +16,20 @@
 
 from datetime import date
 
-from test_fedora.base import FedoraTestCase, load_fixture_data, \
-     FEDORA_ROOT_NONSSL, FEDORA_PIDSPACE, FEDORA_USER, FEDORA_PASSWORD
 from eulfedora.rdfns import model as modelns
 from eulfedora.models import DigitalObject
 from eulfedora.server import Repository
 
-from testcore import main
+from test.test_fedora.base import FedoraTestCase, load_fixture_data
+from test.testsettings import FEDORA_ROOT_NONSSL, FEDORA_PIDSPACE, \
+    FEDORA_USER, FEDORA_PASSWORD
+
 
 class TestBasicFedoraFunctionality(FedoraTestCase):
-    pidspace = FEDORA_PIDSPACE	# will be used for any objects ingested with ingestFixture
+    pidspace = FEDORA_PIDSPACE  # used for any objects ingested with ingestFixture
 
     # TODO: test Repository initialization with and without django settings
-    
+
     def test_get_next_pid(self):
         pid = self.repo.get_next_pid()
         self.assertTrue(pid)
@@ -44,7 +43,6 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         self.assertEqual(len(pids), COUNT)
         for pid in pids:
             self.assertTrue(pid.startswith(PID_SPACE))
-
 
     def test_ingest_without_pid(self):
         object = load_fixture_data('basic-object.foxml')
@@ -63,8 +61,8 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         # FIXME: how can we test logMessage arg to purge?
         #  -- have no idea where log message is actually stored... (if anywhere)
 
-    def test_get_object(self):       
-        
+    def test_get_object(self):
+
         testpid = "testpid:1"
         # without info:fedora/ prefix
         obj = self.repo.get_object(testpid)
@@ -72,18 +70,18 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         self.assertEqual(obj.pid, testpid)
 
         # with info:fedora/ prefix
-        obj = self.repo.get_object("info:fedora/"+testpid)
+        obj = self.repo.get_object("info:fedora/" + testpid)
         self.assertTrue(isinstance(obj, DigitalObject))
         self.assertEqual(obj.pid, testpid)
-        
+
         class MyDigitalObject(DigitalObject):
             pass
 
         # specified type
         obj = self.repo.get_object(testpid, MyDigitalObject)
         self.assertTrue(isinstance(obj, MyDigitalObject))
-        
-        # new object 
+
+        # new object
         obj = self.repo.get_object()
         self.assertTrue(isinstance(obj, DigitalObject))
         self.assertTrue(obj._create)
@@ -94,12 +92,12 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
 
     def test_infer_object_subtype(self):
         class AnotherDigitalObject(DigitalObject):
-            CONTENT_MODELS = [ 'info:fedora/example:ExampleObject-1.0' ]
+            CONTENT_MODELS = ['info:fedora/example:ExampleObject-1.0']
 
         obj = self.repo.get_object(type=AnotherDigitalObject)
         obj.save()
         testpid = obj.pid
-        self.append_test_pid(testpid)
+        self.append_pid(testpid)
 
         basic_obj = self.repo.get_object(testpid, type=DigitalObject)
         obj_type = self.repo.best_subtype_for_object(basic_obj)
@@ -115,13 +113,12 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         obj = self.repo.get_object(type=SubclassedAnotherDigitalObject)
         obj.save()
         testpid = obj.pid
-        self.append_test_pid(testpid)
-        
+        self.append_pid(testpid)
+
         obj = self.repo.get_object(testpid, type=self.repo.infer_object_subtype)
         self.assertTrue(isinstance(obj, SubclassedAnotherDigitalObject))
 
         #TODO: Test for errors? Test for multiple possible matches?
-
 
     def test_find_objects(self):
         self.ingestFixture("object-with-pid.foxml")
@@ -141,7 +138,7 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
 
         # ingest 2 more copies of the same test object, then retrieve with chunksize=2
         # - retrieve a second chunk of results with findObjects with a session token
-        for p in (1,2):
+        for p in (1, 2):
             self.ingestFixture("object-with-pid.foxml")
 
         objects = list(self.repo.find_objects(pid="%s:*" % FEDORA_PIDSPACE, chunksize=2))
@@ -161,7 +158,6 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         self.assert_(len(objects) > 0)
         # invalid filter
         self.assertRaises(Exception, list, self.repo.find_objects(created__bogusfilter='foo'))
-        
 
     def test_get_objects_by_cmodel(self):
         self.ingestFixture("object-with-pid.foxml")
@@ -178,7 +174,7 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         # query by a non-existent cmodel
         no_cmodel = self.repo.get_objects_with_cmodel("control:NotARealCmodel")
         self.assertEqual([], no_cmodel)
-            
+
     def test_nonssl(self):
         self.ingestFixture('object-with-pid.foxml')
         pid = self.fedora_fixtures_ingested[0]
@@ -192,11 +188,5 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         repo = Repository('http://bogus.host.name.foo:8080/fedora/')
         # TODO: currently just a URLError; make test more specific if we add more specific exceptions
         self.assertRaises(Exception, list, repo.find_objects(pid=pid))
-        
+
         # FIXME: is there any way to test that RequestContextManager closes the connection?
-
-
-     
-
-if __name__ == '__main__':
-    main()

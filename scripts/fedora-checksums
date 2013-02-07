@@ -100,6 +100,9 @@ class FedoraChecksums(object):
                               help='''Checksum type to use; if not specified,
                               will prompt Fedora to use the configured default checksum type''')
 
+        r_parser.add_argument('--force', dest='force_ds_ids', action=CSVAction,
+                              help='''A comma separated list of datastream IDs to repair even if checksum is present''')
+
 
     def run(self):
         # bind a handler for interrupt signal
@@ -182,9 +185,8 @@ class FedoraChecksums(object):
     def validate_datastream(self, dsobj):
         if self.args.all_versions:
             # check every version of this datastream
-            history = dsobj.obj.api.getDatastreamHistory(dsobj.obj.pid, dsobj.id)
-            for ds in history.datastreams:
-                self.check_datastream(dsobj, ds.createDate)
+            for ds in dsobj.history().versions:
+                self.check_datastream(dsobj, ds.created)
                 self.stats['ds_versions'] += 1
 
         else:
@@ -252,10 +254,11 @@ class FedoraChecksums(object):
 
         :param dsobj: :class:`~eulfedora.models.DatastreamObject`
         '''
-        if dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
+
+        if dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none' or dsobj.id in self.args.force_ds_ids:
             dsobj.checksum_type = self.args.checksum_type
             try:
-                saved = dsobj.save('updating missing checksum')
+                saved = dsobj.save('updating checksum')
                 if saved:
                     self.stats['ds_updated'] += 1
             except Exception as e:
@@ -266,7 +269,6 @@ class FedoraChecksums(object):
     def repair_summary(self):
         '''Summarize what was done when the script was run in
         **repair** mode.'''
-        
         print '\nChecked %(objects)d object(s), updated %(ds_updated)d datastream(s)' % \
               self.stats
         if self.stats['ds_err']:
@@ -298,6 +300,10 @@ class PasswordAction(argparse.Action):
         else:
             setattr(namespace, self.dest, getpass())
 
+class CSVAction(argparse.Action):
+    '''Convert CSV values to python list'''
+    def __call__(self, parser, namespace, value, option_string=None):
+        setattr(namespace, self.dest, value.split(','))
 
 if __name__ == '__main__':
     FedoraChecksums().run()

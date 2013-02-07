@@ -8,7 +8,7 @@ utilities, API wrappers, and classes for interacting with the
 `Django <https://www.djangoproject.com/>`_ integration.
 
 **eulfedora.api** provides complete access to the Fedora API,
-primarily making use of Fedora's 
+primarily making use of Fedora's
 `REST API <https://wiki.duraspace.org/display/FCR30/REST+API>`_.  This
 low-level interface is wrapped by **eulfedora.server.Repository** and
 **eulfedora.models.DigitalObject**, which provide a more abstract,
@@ -29,14 +29,14 @@ repository.
 Dependencies
 ------------
 
-**eulfedora** currently depends on 
+**eulfedora** currently depends on
 `eulxml <https://github.com/emory-libraries/eulxml>`_,
 `rdflib <http://www.rdflib.net/>`_,
 `python-dateutil <http://labix.org/python-dateutil>`_,
 `pycrypto <https://www.dlitz.net/software/pycrypto/>`_,
 `soaplib <http://pypi.python.org/pypi/soaplib/0.8.1>`_.
 
-**eulfedora** can be used without 
+**eulfedora** can be used without
 `Django <https://www.djangoproject.com/>`_, but additional
 functionality is available when used with Django.
 
@@ -65,6 +65,38 @@ history of **eulfedora**, see
 
 Developer Notes
 ---------------
-When running unit tests you must set the the PYTHONPATH variable::
 
-    $ PYTHONPATH = .:test
+To install dependencies for your local check out of the code, run ``pip install``
+in the ``eulfedora`` directory (the use of `virtualenv`_ is recommended)::
+
+    pip install -e .
+
+.. _virtualenv: http://www.virtualenv.org/en/latest/
+
+If you want to run unit tests or build sphinx documentation, you will also
+need to install development dependencies::
+
+    pip install -e . "eulfedora[dev]"
+
+Running the unit tests requires a Fedora Commons repository instance.  Before
+running tests, you will need to copy ``test/localsettings.py.dist`` to
+``test/localsettings.py`` and edit the configuration for your test repository.
+
+To run all unit tests::
+
+
+    nosetests test # for normal development
+    nosetests test --with-coverage --cover-package=eulfedora --cover-xml --with-xunit   # for continuous integration
+
+To run unit tests for a specific module or class, use syntax like this::
+
+    nosetests test.test_fedora.test_api
+    nosetests test.test_fedora:TestDigitalObject
+
+To generate sphinx documentation::
+
+    cd doc
+    make html
+
+
+
