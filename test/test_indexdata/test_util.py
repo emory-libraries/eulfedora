@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-
 # file test_indexdata/test_util.py
-# 
+#
 #   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +17,7 @@
 import unittest
 import os
 
-# must be set before importing anything from django
-os.environ['DJANGO_SETTINGS_MODULE'] = 'testsettings'
-
 from django.conf import settings
-from django.test import TestCase
-
 from eulfedora.models import DigitalObject, FileDatastream
 from eulfedora.server import Repository
 
@@ -33,8 +26,8 @@ from eulfedora.indexdata.util import pdf_to_text
 
 class TestPdfObject(DigitalObject):
     pdf = FileDatastream("PDF", "PDF document", defaults={
-        	'versionable': False, 'mimetype': 'application/pdf'
-        })
+        'versionable': False, 'mimetype': 'application/pdf'
+    })
 
 
 class PdfToTextTest(unittest.TestCase):
@@ -53,7 +46,7 @@ class PdfToTextTest(unittest.TestCase):
 
     def tearDown(self):
         self.repo.purge_object(self.pdfobj.pid)
-        
+
     def test_file(self):
         # extract text from a pdf from a file on the local filesystem
         text = pdf_to_text(open(self.pdf_filepath, 'rb'))

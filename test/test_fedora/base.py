@@ -1,5 +1,5 @@
 # file test_fedora/base.py
-# 
+#
 #   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,21 +22,26 @@ from eulfedora.api import ApiFacade
 from eulfedora.server import Repository
 from eulfedora.util import RequestFailed
 
-from localsettings import FEDORA_ROOT, FEDORA_ROOT_NONSSL, \
+from test.localsettings import FEDORA_ROOT, \
      FEDORA_USER, FEDORA_PASSWORD, FEDORA_PIDSPACE
 
 logger = logging.getLogger(__name__)
 
 FIXTURE_ROOT = os.path.join(os.path.dirname(__file__), 'fixtures')
+
+
 def fixture_path(fname):
     return os.path.join(FIXTURE_ROOT, fname)
+
 
 def load_fixture_data(fname):
     with open(fixture_path(fname)) as f:
         return f.read()
 
+
 class _MinimalFoxml(xmlmap.XmlObject):
     pid = xmlmap.StringField('@PID')
+
 
 class FedoraTestCase(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -50,15 +55,15 @@ class FedoraTestCase(unittest.TestCase):
         # if a test fails - clean up stale test objects from a previous run here
         stale_objects = list(self.repo.find_objects(pid__contains='%s:*' % self.pidspace))
         if stale_objects:
-            print 'Removing %d stale test object(s) in pidspace %s' % (len(stale_objects),
-                                                                       self.pidspace)
+            logger.info('Removing %d stale test object(s) in pidspace %s' \
+                % (len(stale_objects), self.pidspace))
+
             for obj in stale_objects:
                 try:
                     self.repo.purge_object(obj.pid)
                 except RequestFailed as rf:
                     logger.warn('Error purging stale test object %s (TestCase init): %s' % \
                                 (obj.pid, rf))
-                
 
     def setUp(self):
         # NOTE: queries require RI flush=True or test objects will not show up in RI
@@ -71,7 +76,7 @@ class FedoraTestCase(unittest.TestCase):
 
     def tearDown(self):
         for pid in self.fedora_fixtures_ingested:
-            try: 
+            try:
                 self.repo.purge_object(pid)
             except RequestFailed as rf:
                 logger.warn('Error purging test object %s in tear down: %s' % \
@@ -83,9 +88,9 @@ class FedoraTestCase(unittest.TestCase):
 
     def loadFixtureData(self, fname):
         data = load_fixture_data(fname)
-        # if pidspace is specified, get a new pid from fedora and set it as the pid in the xml 
+        # if pidspace is specified, get a new pid from fedora and set it as the pid in the xml
         if hasattr(self, 'pidspace'):
-            xml = xmlmap.load_xmlobject_from_string(data, _MinimalFoxml)            
+            xml = xmlmap.load_xmlobject_from_string(data, _MinimalFoxml)
             xml.pid = self.getNextPid()
             return xml.serialize()
         else:
@@ -98,7 +103,9 @@ class FedoraTestCase(unittest.TestCase):
             # we'd like this always to be true. if ingest fails we should
             # throw an exception. that probably hasn't been thoroughly
             # tested yet, though, so we'll check it until it has been.
-            self.append_test_pid(pid)
+            self.append_pid(pid)
 
-    def append_test_pid(self, pid):
+    # note: renamed from append_test_pid so that nosetests doesn't
+    # autodetect and attempt to run as a unit test.
+    def append_pid(self, pid):
             self.fedora_fixtures_ingested.append(pid)

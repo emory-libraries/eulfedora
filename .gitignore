@@ -4,3 +4,4 @@ dist
 *.pyc
 test-results
 test/localsettings.py
+.noseids

@@ -8,8 +8,11 @@ any necessary information about installation or upgrade notes.
 0.20
 ----
 
-* Provides a nose plugin to set up and tear down an eXist database collection
-  for tests, as an alternative to the custom test runners.
+* Development requirements can now be installed as an optional requirement
+  of the eulfedora package (``pip install "eulfedora[dev]"``).
+* Unit tests have been updated to use :mod:`nose`
+* Provides a nose plugin to set up and tear down for a test Fedora Commons
+  repository instance for tests, as an alternative to the custom test runners.
 
 
 0.19.2

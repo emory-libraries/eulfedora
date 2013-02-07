@@ -1,6 +1,6 @@
-# file test_indexdata/__init__.py
+# file test/__init__.py
 #
-#   Copyright 2012 Emory University Libraries
+#   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -14,5 +14,10 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from test.test_indexdata.test_views import *
-from test.test_indexdata.test_util import *
+import os
+
+# must be set before importing anything from django
+os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
+
+import test_fedora
+import test_indexdata

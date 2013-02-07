@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-
 # file test_fedora/test_cryptutil.py
-# 
+#
 #   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,18 +14,13 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-
 import unittest
 
-# must be set before importing anything from django
-import os
-os.environ['DJANGO_SETTINGS_MODULE'] = 'testsettings'
-
 from eulfedora import cryptutil
-from testcore import main
+
 
 class CryptTest(unittest.TestCase):
-    
+
     def test_to_blocksize(self):
         def test_valid_blocksize(text):
             block = cryptutil.to_blocksize(text)
@@ -57,7 +50,3 @@ class CryptTest(unittest.TestCase):
         test_encrypt_decrypt('textier')
         test_encrypt_decrypt('textiest')
         test_encrypt_decrypt('longish password-type text')
-
-
-if __name__ == '__main__':
-    main()

@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-
 # file test_fedora/test_templatetags.py
-# 
+#
 #   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,10 +20,7 @@ import unittest
 from django.template import Context, Template
 
 from eulfedora.util import RequestFailed, PermissionDenied
-from eulfedora.models import DigitalObject, Datastream, FileDatastream
-from eulfedora.server import Repository
 
-from testcore import main
 
 class MockFedoraResponse(StringIO):
     # The simplest thing that can possibly look like a Fedora response to
@@ -36,10 +31,11 @@ class MockFedoraResponse(StringIO):
         self.status = status
         self.reason = reason
         self.mimetype = mimetype
-        self.msg = self # for self.msg.gettype()
+        self.msg = self  # for self.msg.gettype()
 
     def gettype(self):
         return self.mimetype
+
 
 class MockFedoraObject(object):
     # not even a close approximation, just something we can force to raise
@@ -52,7 +48,7 @@ class MockFedoraObject(object):
             raise self._value
         return self._value
 
-        
+
 class TemplateTagTest(unittest.TestCase):
     def test_parse_fedora_access(self):
         TEMPLATE_TEXT = """
@@ -73,15 +69,11 @@ class TemplateTagTest(unittest.TestCase):
         self.assertEqual(val.strip(), 'sample text')
 
         response = MockFedoraResponse(status=401)
-        test_obj._value = PermissionDenied(response) # force test_obj.value to fail
+        test_obj._value = PermissionDenied(response)  # force test_obj.value to fail
         val = t.render(ctx)
         self.assertEqual(val.strip(), 'permission fallback')
 
         response = MockFedoraResponse()
-        test_obj._value = RequestFailed(response) # force test_obj.value to fail
+        test_obj._value = RequestFailed(response)  # force test_obj.value to fail
         val = t.render(ctx)
         self.assertEqual(val.strip(), 'connection fallback')
-
-
-if __name__ == '__main__':
-    main()
