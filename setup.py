@@ -22,6 +22,7 @@ CLASSIFIERS = [
     'Topic :: Software Development :: Libraries :: Python Modules',
 ]
 
+
 setup(
     name='eulfedora',
     version=eulfedora.__version__,
@@ -35,19 +36,29 @@ setup(
         'eulxml>=0.18.0',
         'rdflib>=3.0',
         'python-dateutil',
-	'poster',
+        'poster',
         'pycrypto',
     ],
 
     # indexdata utils are optional. They include things like PDF text stripping (pyPdf).
     # Be sure to include the below in your own pip dependencies file if you need to use
     # the built in indexer utility support.
-    extras_require = {
-        'indexdata_util': ['pyPdf',],
+    extras_require={
+        'indexdata_util': ['pyPdf'],
+        'django': ['Django'],
+        'dev': [
+            'sphinx',
+            'nose',
+            'coverage',
+            'Django>=1.4',
+            'mock',
+            'unittest2',  # optional testrunner in testutil
+            'pyPdf',
+            'progressbar',
+        ]
     },
-
     description='Idiomatic access to digital objects in a Fedora Commons repository',
     long_description=LONG_DESCRIPTION,
     classifiers=CLASSIFIERS,
-    scripts=['scripts/fedora-checksums',],
+    scripts=['scripts/fedora-checksums', ],
 )

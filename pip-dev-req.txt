@@ -1,8 +1,0 @@
-unittest-xml-reporting==1.3
-sphinx
-coverage
-django
-mock
-unittest2
-pyPdf
-progressbar
