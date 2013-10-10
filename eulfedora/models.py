@@ -1478,6 +1478,7 @@ class DigitalObject(object):
 
         # - list of datastreams that should be saved
         to_save = [ds for ds, dsobj in self.dscache.iteritems() if dsobj.isModified()]
+
         # - track successfully saved datastreams, in case roll-back is necessary
         saved = []
         # save modified datastreams
@@ -1586,6 +1587,10 @@ class DigitalObject(object):
             dsnode = self._build_foxml_datastream(E, ds.id, dsobj)
             if dsnode is not None:
                 doc.append(dsnode)
+            else:
+                # NOTE: this could be perfectly legitimate
+                # (e.g., defined datastream that does not yet have any content)
+                logger.warn('Did not build foxml for datastream %s' % dsname)
 
         return doc
 
@@ -1615,6 +1620,7 @@ class DigitalObject(object):
         # if we can't construct a content node then bail before constructing
         # any other nodes
         content_node = None
+
         if dsobj.control_group == 'X':
             content_node = self._build_foxml_inline_content(E, dsobj)
         elif dsobj.control_group == 'M':
@@ -1744,23 +1750,62 @@ class DigitalObject(object):
         return self.api.getDissemination(self.pid, service_pid, method, method_params=params,
                                          return_http_response=return_http_response)
 
-    def getDatastreamObject(self, dsid):
-        "Get any datastream on this object as a :class:`DatastreamObject`"
-        if dsid in self.ds_list:
-            ds_info = self.ds_list[dsid]
-            # FIXME: can we take advantage of Datastream descriptor? or at least use dscashe ?
+    def getDatastreamObject(self, dsid, dsobj_type=None):
+        '''Get any datastream on this object as a :class:`DatastreamObject`
+        **or** add a new datastream.  If the datastream id corresponds
+        to a predefined datastream, the configured object will be returned
+        and the datastream object will be returned.  If type is not
+        specified for an existing datastream, attempts to infer the
+        appropriate subclass of datastream object to return based on the
+        mimetype (for XML and RELS-EXT).
 
-            # if datastream mimetype matches one of our base datastream objects, use it
-            if ds_info.mimeType == XmlDatastreamObject.default_mimetype:
-                dsobj_type = XmlDatastreamObject
-            elif ds_info.mimeType == RdfDatastreamObject.default_mimetype:
-                dsobj_type = RdfDatastreamObject
-            else:
-                # default to base datastream object class
-                dsobj_type = DatastreamObject
+        Note that if you use this method to add new datastreams you should
+        be sure to set all datastream metadata appropriately for your content
+        (i.e., label, mimetype, control group, etc).
+
+        :param dsid: datastream id
+        :param dsobj_type: optional :class:`DatastreamObject` type to
+            be returned
+        '''
+
+        # if the requested datastream is a defined datastream, return it
+        if dsid in self._defined_datastreams:
+            return self._defined_datastreams[dsid]
+
+        if dsid in self.ds_list:   # FIXME: should this also check _defined_datastreams?
+            ds_info = self.ds_list[dsid]
+            # FIXME: can we take advantage of Datastream descriptor? or at least use dscache ?
+
+            if dsobj_type is None:
+                # if datastream mimetype matches one of our base datastream objects, use it
+                if ds_info.mimeType == XmlDatastreamObject.default_mimetype:
+                    dsobj_type = XmlDatastreamObject
+                elif ds_info.mimeType == RdfDatastreamObject.default_mimetype:
+                    dsobj_type = RdfDatastreamObject
+                else:
+                    # default to base datastream object class
+                    dsobj_type = DatastreamObject
 
             return dsobj_type(self, dsid, label=ds_info.label, mimetype=ds_info.mimeType)
-        # exception if not ?
+
+        else:
+            if dsobj_type is None:
+                dsobj_type = DatastreamObject
+            logger.info('Adding new datastream %s to %s' % (dsid, self.pid))
+            # NOTE: label is required to initialize a new datastream object;
+            # using dsid as label since we don't have anything else.
+            dsobj = dsobj_type(self, dsid, dsid)
+            # add to the defined datastreams so it will get ingested to fedora (if new)
+            self._defined_datastreams[dsid] = dsobj
+            # make available like a defined datastream object so ingest will work
+            setattr(self, dsid, dsobj)
+            # add to dscache so new datastream will be saved on existing object
+            self.dscache[dsid] = dsobj
+            # default modification logic should be appropriate here since the
+            # calling program should be setting content, label, etc
+
+            return dsobj
+
 
     def add_relationship(self, rel_uri, object):
         """
