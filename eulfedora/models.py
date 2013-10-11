@@ -1075,6 +1075,8 @@ class DigitalObject(object):
         self.api = api
         self.dscache = {}       # accessed by DatastreamDescriptor to store and cache datastreams
         self._risearch = None
+        self._adhoc_datastreams = {}
+        # per-object ad-hoc datastreams parallel to per-class _defined_datastreams
 
         if default_pidspace:
             try:
@@ -1592,6 +1594,13 @@ class DigitalObject(object):
                 # (e.g., defined datastream that does not yet have any content)
                 logger.warn('Did not build foxml for datastream %s' % dsname)
 
+        # also collect ad-hoc datastream definitions for ingest.
+        for dsname, ds in self._adhoc_datastreams.items():
+            dsobj = getattr(self, dsname)
+            dsnode = self._build_foxml_datastream(E, ds.id, dsobj)
+            if dsnode is not None:
+                doc.append(dsnode)
+
         return doc
 
     def _build_foxml_properties(self, E):
@@ -1772,6 +1781,9 @@ class DigitalObject(object):
         if dsid in self._defined_datastreams:
             return self._defined_datastreams[dsid]
 
+        if dsid in self._adhoc_datastreams:
+            return self._adhoc_datastreams[dsid]
+
         if dsid in self.ds_list:   # FIXME: should this also check _defined_datastreams?
             ds_info = self.ds_list[dsid]
             # FIXME: can we take advantage of Datastream descriptor? or at least use dscache ?
@@ -1795,8 +1807,8 @@ class DigitalObject(object):
             # NOTE: label is required to initialize a new datastream object;
             # using dsid as label since we don't have anything else.
             dsobj = dsobj_type(self, dsid, dsid)
-            # add to the defined datastreams so it will get ingested to fedora (if new)
-            self._defined_datastreams[dsid] = dsobj
+            # add to the adhoc datastreams so it will get ingested to fedora (if new)
+            self._adhoc_datastreams[dsid] = dsobj
             # make available like a defined datastream object so ingest will work
             setattr(self, dsid, dsobj)
             # add to dscache so new datastream will be saved on existing object
