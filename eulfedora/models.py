@@ -1589,10 +1589,6 @@ class DigitalObject(object):
             dsnode = self._build_foxml_datastream(E, ds.id, dsobj)
             if dsnode is not None:
                 doc.append(dsnode)
-            else:
-                # NOTE: this could be perfectly legitimate
-                # (e.g., defined datastream that does not yet have any content)
-                logger.warn('Did not build foxml for datastream %s' % dsname)
 
         # also collect ad-hoc datastream definitions for ingest.
         for dsname, ds in self._adhoc_datastreams.items():
