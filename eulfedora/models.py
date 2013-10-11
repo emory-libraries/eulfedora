@@ -1799,7 +1799,7 @@ class DigitalObject(object):
         else:
             if dsobj_type is None:
                 dsobj_type = DatastreamObject
-            logger.info('Adding new datastream %s to %s' % (dsid, self.pid))
+            logger.info('Adding new datastream %s to %r' % (dsid, self))
             # NOTE: label is required to initialize a new datastream object;
             # using dsid as label since we don't have anything else.
             dsobj = dsobj_type(self, dsid, dsid)
