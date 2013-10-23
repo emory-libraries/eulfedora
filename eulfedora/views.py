@@ -20,7 +20,7 @@ Intended to be analogous to `Django's generic views
 
 Using these views (in the simpler cases) should be as easy as::
 
-    from django.conf.urls.defaults import *
+    from django.conf.urls import *
     from eulfedora.views import raw_datastream, raw_audit_trail
 
     urlpatterns = patterns('',
@@ -31,7 +31,6 @@ Using these views (in the simpler cases) should be as easy as::
 '''
 
 
-from django.conf import settings
 from django.contrib.auth import views as authviews
 from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods, condition
@@ -58,7 +57,7 @@ def datastream_etag(request, pid, dsid, type=None, repo=None, **kwargs):
             return ds.checksum
     except RequestFailed:
         pass
-    
+
     return None
 
 
@@ -82,7 +81,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
     If either the datastream or object are not found, raises an
     :class:`~django.http.Http404` .  For any other errors (e.g., permission
     denied by Fedora), the exception is re-raised and should be handled elsewhere.
-    
+
     :param request: HttpRequest
     :param pid: Fedora object PID
     :param dsid: datastream ID to be returned
@@ -92,10 +91,10 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
         in case your application requires custom repository initialization (optional)
     :param headers: dictionary of additional headers to include in the response
     '''
-    
+
     if repo is None:
         repo = Repository()
-        
+
     get_obj_opts = {}
     if type is not None:
         get_obj_opts['type'] = type
@@ -107,7 +106,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
         # Leaving out for now, for efficiency
 
         ds = obj.getDatastreamObject(dsid)
-        
+
         if ds and ds.exists:
             # because retrieving the content is expensive and checking
             # headers can be useful, explicitly support HEAD requests
@@ -127,7 +126,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
             # ds.created *may* be the creation date of this *version* of the datastream
             # so this might be what we want, at least in some cases - (needs to be confirmed)
             #response['Last-Modified'] = ds.created
-            
+
             # Where available, set content length & MD5 checksum in response headers.
             if ds.checksum_type == 'MD5':
                 response['Content-MD5'] = ds.checksum
@@ -137,11 +136,11 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
             # set any user-specified headers that were passed in
             for header, val in headers.iteritems():
                 response[header] = val
-                
+
             return response
         else:
             raise Http404
-        
+
     except RequestFailed as rf:
         # if object is not the speficied type or if either the object
         # or the requested datastream doesn't exist, 404
@@ -158,13 +157,13 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
 def raw_audit_trail(request, pid, type=None, repo=None):
     '''View to display the raw xml audit trail for a Fedora Object.
     Returns an :class:`~django.http.HttpResponse` with the response content
-    populated with the content of the audit trial. 
+    populated with the content of the audit trial.
 
     If the object is not found or does not have an audit trail, raises
     an :class:`~django.http.Http404` .  For any other errors (e.g.,
     permission denied by Fedora), the exception is not caught and
     should be handled elsewhere.
-    
+
     :param request: HttpRequest
     :param pid: Fedora object PID
     :param repo: :class:`~eulcore.django.fedora.server.Repository` instance to use,
@@ -177,9 +176,9 @@ def raw_audit_trail(request, pid, type=None, repo=None):
       available for the audit trail (since it is internal and not a
       true datastream), so the additional headers included in
       :meth:`raw_datastream` cannot be added here.
-      
+
     '''
-    
+
     if repo is None:
         repo = Repository()
     # no special options are *needed* to access audit trail, since it
@@ -196,7 +195,7 @@ def raw_audit_trail(request, pid, type=None, repo=None):
         # audit trail is updated every time the object gets modified
         response['Last-Modified'] = obj.modified
         return response
-        
+
     else:
         raise Http404
 
@@ -219,7 +218,7 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
 
         def my_view(rqst):
             repo = Repository(request=rqst)
-    
+
 
     Any arguments supported by :meth:`django.contrib.auth.views.login`
     can be specified and they will be passed along for the standard
@@ -227,7 +226,7 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
 
     **This is not a terribly secure.  Do NOT use this method unless
     you need the functionality.**
-    
+
     '''
     response = authviews.login(request, *args, **kwargs)
     if request.method == "POST" and request.user.is_authenticated():

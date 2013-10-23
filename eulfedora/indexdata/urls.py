@@ -1,5 +1,5 @@
 # file eulfedora/indexdata/urls.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,7 @@ In your projects urls.py, this is to be included in a form similar to:
         )
 '''
 
-from django.conf.urls.defaults import *
+from django.conf.urls import *
 
 urlpatterns = patterns('eulfedora.indexdata.views',
     url(r'^$', 'index_config', name='index_config'),

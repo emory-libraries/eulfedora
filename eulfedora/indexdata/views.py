@@ -1,5 +1,5 @@
 # file eulfedora/indexdata/views.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ Projects that use this module should include the following settings in their
     SOLR_SERVER_URL = "http://localhost:8983/solr/"
     # IPs that will be allowed to access the indexdata views
     EUL_INDEXER_ALLOWED_IPS = "ANY" #Or put in a list such as ("127.0.0.1", "127.0.0.2")
-    
+
     # OPTIONAL SETTING: A list of lists of content models you want this application to index.
     # If this setting is missing, the code will automatically detect all content
     # models the application is using. In this example, it will index items with BOTH
@@ -43,8 +43,8 @@ sure that ``eulfedora`` is included in INSTALLED_APPS in your ``settings.py``::
 
 And then bind the indexdata views to a url in your application
 ``urls.py``::
-        
-    from django.conf.urls.defaults import *
+
+    from django.conf.urls import *
 
     urlpatterns = patterns('',
         url(r'^indexdata/', include('eulfedora.indexdata.urls', namespace='indexdata')),
@@ -83,7 +83,7 @@ def index_config(request):
     and the Fedora content models that this application expects to index.
 
     .. Note::
-    
+
        By default, Fedora system content models (such as
        ``fedora-system:ContentModel-3.0``) are excluded.  Any
        application that actually wants to index such objects will need
@@ -134,7 +134,7 @@ def index_data(request, id, repo=None):
             basic_info = auth_info[len(basic):]
             u, p = basic_info.decode('base64').split(':')
             repo_opts.update({'username': u, 'password': p})
-            
+
         repo = TypeInferringRepository(**repo_opts)
     try:
         obj = repo.get_object(id)
