@@ -103,6 +103,11 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         obj_type = self.repo.best_subtype_for_object(basic_obj)
         self.assertEqual(obj_type, AnotherDigitalObject)
 
+        # optionally can specify list of content models
+        obj_type = self.repo.best_subtype_for_object(basic_obj,
+            content_models=AnotherDigitalObject.CONTENT_MODELS)
+        self.assertEqual(obj_type, AnotherDigitalObject)
+
         obj = self.repo.get_object(testpid, type=self.repo.infer_object_subtype)
         self.assertTrue(isinstance(obj, AnotherDigitalObject))
 
