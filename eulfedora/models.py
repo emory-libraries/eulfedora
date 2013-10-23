@@ -1794,7 +1794,13 @@ class DigitalObject(object):
                     # default to base datastream object class
                     dsobj_type = DatastreamObject
 
-            return dsobj_type(self, dsid, label=ds_info.label, mimetype=ds_info.mimeType)
+            dsobj = dsobj_type(self, dsid, label=ds_info.label, mimetype=ds_info.mimeType)
+
+            # add to dscache so modifications will be saved on existing object
+            self.dscache[dsid] = dsobj
+            setattr(self, dsid, dsobj)
+
+            return dsobj
 
         else:
             if dsobj_type is None:
