@@ -559,6 +559,47 @@ class TestNewObject(FedoraTestCase):
         file = open(os.path.join(FIXTURE_ROOT, 'test.png'))
         self.assertEqual(fetched.image.content.read(), file.read())
 
+    def test_new_getdatastream(self):
+        # use getDatastreamObject to add a datastream not defined
+        # on the digital object
+        self.repo.default_pidspace = self.pidspace
+        obj = self.repo.get_object(type=MyDigitalObject)
+        dsid = 'new_ds'
+        content = 'here is some simple text content'
+        label = 'my ad-hoc datastream'
+        new_ds = obj.getDatastreamObject(dsid)
+        new_ds.content = content
+        new_ds.label = label
+        new_ds.mimetype = 'text/plain'
+        obj.save()
+        self.append_pid(obj.pid)
+
+        # fetch fresh copy from repo for inspection
+        fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
+        self.assert_(dsid in fetched.ds_list)
+        dsobj = fetched.getDatastreamObject(dsid)
+        self.assertEqual(label, dsobj.label)
+        self.assertEqual('text/plain', dsobj.mimetype)
+        self.assertEqual(content, dsobj.content)
+
+        # add new datastream to existing object using the same method
+        dsid2 = 'newer_ds'
+        content = 'totally different content here'
+        label = 'yet another ad-hoc datastream'
+        newer_ds = fetched.getDatastreamObject(dsid2)
+        newer_ds.content = content
+        newer_ds.label = label
+        newer_ds.mimetype = 'text/plain'
+        fetched.save()
+
+        # re-fetch for inspect
+        fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
+        self.assert_(dsid2 in fetched.ds_list)
+        dsobj = fetched.getDatastreamObject(dsid2)
+        self.assertEqual(label, dsobj.label)
+        self.assertEqual('text/plain', dsobj.mimetype)
+        self.assertEqual(content, dsobj.content)
+
 
 class TestDigitalObject(FedoraTestCase):
     fixtures = ['object-with-pid.foxml']

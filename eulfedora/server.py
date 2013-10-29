@@ -1,5 +1,5 @@
 # file eulfedora/server.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,7 @@ If you are writing unit tests that use :mod:`eulfedora`, you may want
 to take advantage of
 :class:`eulfedora.testutil.FedoraTestSuiteRunner`, which has logic to
 set up and switch configurations between a development fedora
-repository and a test repository.  
+repository and a test repository.
 
 Projects that use this module should include the following settings in their
 ``settings.py``::
@@ -96,7 +96,7 @@ def init_pooled_connection(fedora_root=None):
 
 class Repository(object):
     "Pythonic interface to a single Fedora Commons repository instance."
-    
+
     """Connect to a Fedora Repository based on configuration in ``settings.py``.
 
     This class is a simple wrapper to initialize :class:`eulcore.fedora.server.Repository`,
@@ -111,14 +111,14 @@ class Repository(object):
     risks).
 
     Order of precedence for credentials:
-        
+
         * If a request object is passed in and user credentials are
           available in the session, that will be used first.
-        * Explicit username and password parameters will be used next. 
+        * Explicit username and password parameters will be used next.
         * If none of these options are available, fedora credentials
           will be set in django settings will be used.
 
-    
+
     """
 
     default_object_type = DigitalObject
@@ -130,7 +130,7 @@ class Repository(object):
     'contributor', 'date', 'type', 'format', 'identifier', 'source', 'language',
     'relation', 'coverage', 'rights']
     "fields that can be searched against in :meth:`find_objects`"
-    
+
     search_fields_aliases = {
         'owner' : 'ownerId',
         'created' : 'cDate',
@@ -138,8 +138,8 @@ class Repository(object):
         'dc_modified' : 'dcmDate'
     }
     "human-readable aliases for oddly-named fedora search fields"
-    
-    
+
+
     def __init__(self, root=None, username=None, password=None, request=None):
         global _connection
         # when initialized via django, settings should be pulled from django conf
@@ -154,11 +154,11 @@ class Repository(object):
                 try:
                     from django.conf import settings
                     from eulfedora import cryptutil
-                    
+
                     if request is not None and request.user.is_authenticated() and \
                        FEDORA_PASSWORD_SESSION_KEY in request.session:
                         username = request.user.username
-                        password = cryptutil.decrypt(request.session[FEDORA_PASSWORD_SESSION_KEY])            
+                        password = cryptutil.decrypt(request.session[FEDORA_PASSWORD_SESSION_KEY])
 
                     if username is None and hasattr(settings, 'FEDORA_USER'):
                         username = settings.FEDORA_USER
@@ -170,7 +170,7 @@ class Repository(object):
 
                 except ImportError:
                     pass
-                
+
         if root is None:
             raise Exception('Could not determine Fedora root url from django settings or parameter')
 
@@ -214,7 +214,7 @@ class Repository(object):
             kwargs['namespace'] = namespace
         elif self.default_pidspace:
             kwargs['namespace'] = self.default_pidspace
-            
+
         if count:
             kwargs['numPIDs'] = count
         data, url = self.api.getNextPID(**kwargs)
@@ -247,7 +247,7 @@ class Repository(object):
         :param pid: pid of the object to be purged
         :param log_message: optional log message
         :rtype: boolean
-        """        
+        """
         kwargs = { 'pid': pid }
         if log_message:
             kwargs['logMessage'] = log_message
@@ -277,7 +277,7 @@ class Repository(object):
         :rtype: single object of the type specified
         :create: boolean: create a new object? (if not specified, defaults
                  to False when pid is specified, and True when it is not)
-        """        
+        """
         type = type or self.default_object_type
 
         if pid is None:
@@ -309,7 +309,7 @@ class Repository(object):
         match_type = self.best_subtype_for_object(obj)
         return match_type(api, pid)
 
-    def best_subtype_for_object(self, obj):
+    def best_subtype_for_object(self, obj, content_models=None):
         """Given a :class:`~eulfedora.models.DigitalObject`, examine the
         object to select the most appropriate subclass to instantiate. This
         generic implementation examines the object's content models and
@@ -321,9 +321,16 @@ class Repository(object):
         :meth:`infer_object_subtype`.
 
         :param obj: a :class:`~eulfedora.models.DigitalObject` to inspect
+        :param content_models: optional list of content models, if they are known
+            ahead of time (e.g., from a Solr search result), to avoid
+            an additional Fedora look-up
+
         :rtype: a subclass of :class:`~eulfedora.models.DigitalObject`
         """
-        obj_models = set(str(m) for m in obj.get_models())
+        if content_models is None:
+            obj_models = set(str(m) for m in obj.get_models())
+        else:
+            obj_models = content_models
 
         # go through registered DigitalObject subtypes looking for what type
         # this object might be. use the first longest match: that is, look
@@ -359,9 +366,9 @@ class Repository(object):
                         is_root_subclass = False
                 if is_root_subclass:
                     return obj_type
-                
-            logger.warn('%s has %d potential classes with no root subclass for the list. using the first: %s' % 
-                (obj.pid, len(matches), repr(matches)))
+
+            logger.warn('%s has %d potential classes with no root subclass for the list. using the first: %s' %
+                (obj, len(matches), repr(matches)))
         return matches[0]
 
     def find_objects(self, terms=None, type=None, chunksize=None, **kwargs):
@@ -373,7 +380,7 @@ class Repository(object):
         in ascending PID order.
 
         Example usage - search for all objects where the owner contains 'jdoe'::
-        
+
             repository.find_objects(ownerId='jdoe')
 
         Supports all search operators provided by Fedora findObjects query (exact,
@@ -423,10 +430,10 @@ class Repository(object):
                     # if value contains whitespace, it must be delimited with single quotes
                     value = "'%s'" % value
                 conditions.append("%s%s%s" % (field, op, value))
-                
+
             query = ' '.join(conditions)
             find_opts['query'] = query
-            
+
         data, url = self.api.findObjects(**find_opts)
         chunk = parse_xml_object(SearchResults, data, url)
         while True:
