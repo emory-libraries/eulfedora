@@ -13,7 +13,8 @@ any necessary information about installation or upgrade notes.
   to predefined datastreams on a subclass of
   :class:`~eulfedora.models.DigitalObject`).  Adding new datastreams is
   supported when ingesting a new object as well as when saving an
-  existing object.
+  existing object.  This method can also be used to update
+  existing datastreams that are not predefined on a DigitalObject subclass.
 
 0.20
 ----
