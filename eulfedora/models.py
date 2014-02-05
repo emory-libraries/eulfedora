@@ -1856,6 +1856,43 @@ class DigitalObject(object):
 
         return self.api.addRelationship(self.pid, self.uri, rel_uri, object, obj_is_literal)
 
+
+    def purge_relationship(self, rel_uri, object):
+        """
+        Remove a relationship from the RELS-EXT for this object.
+        Calls :meth:`API_M.purgeRelationship`.
+
+        Example usage::
+
+            isMemberOfCollection = 'info:fedora/fedora-system:def/relations-external#isMemberOfCollection'
+            collection_uri = 'info:fedora/foo:456'
+            object.purge_relationship(isMemberOfCollection, collection_uri)
+
+        :param rel_uri: URI for the new relationship
+        :param object: related object; can be :class:`DigitalObject` or string; if
+                        string begins with info:fedora/ it will be treated as
+                        a resource, otherwise it will be treated as a literal
+        :rtype: boolean
+        """
+        if isinstance(rel_uri, URIRef):
+            rel_uri = unicode(rel_uri)
+
+        obj_is_literal = True
+        if isinstance(object, DigitalObject):
+            object = object.uri
+            obj_is_literal = False
+        elif isinstance(object, str) and object.startswith('info:fedora/'):
+            obj_is_literal = False
+
+        # this call will change RELS-EXT, possibly creating it if it's
+        # missing. remove any cached info we have for that datastream.
+        if 'RELS-EXT' in self.dscache:
+            del self.dscache['RELS-EXT']
+        self._ds_list = None
+
+        return self.api.purgeRelationship(self.pid, self.uri, rel_uri, object, obj_is_literal)
+
+
     def has_model(self, model):
         """
         Check if this object subscribes to the specified content model.
