@@ -145,7 +145,8 @@ class ValidateChecksums(object):
                     % (self.args.timelimit, end_time)
 
         for pid in object_pids:
-            print pid
+            if not self.args.quiet:
+                print pid
             obj = self.repo.get_object(pid=pid, type=FixityObject)
             if not obj.exists:
                 print "Error: %s does not exist or is inaccessible" % pid
@@ -224,13 +225,14 @@ class ValidateChecksums(object):
         '''Generator that returns a list of pids where the object has not
         been checked since the specified number of days.'''
 
-        # if verbose
-        print '\nLooking for unchecked pids...'
+        if not self.args.quiet:
+            print '\nLooking for unchecked pids...'
         results = self.repo.risearch.sparql_query(self.SPARQL_FIND_UNCHECKED)
         for row in results:
             yield row['pid']
 
-        print '\nLooking for pids not checked in the last 30 days...'
+        if not self.args.quiet:
+            print '\nLooking for pids not checked in the last 30 days...'
         delta = timedelta(days=days)
         datesince = datetime.now() - delta
         query = self.SPARQL_FIND_UNCHECKED_SINCE % datesince.strftime('%Y-%m-%dT%H:%M:%S')
@@ -266,8 +268,7 @@ class ValidateChecksums(object):
 
         if not valid:
             self.stats['invalid'] += 1
-            if not self.args.quiet:
-                print "%s/%s - invalid checksum (%s)" % \
+            print "Error: %s/%s - invalid checksum (%s)" % \
                       (dsobj.obj.pid, dsobj.id, date or dsobj.created)
 
     def interrupt_handler(self, signum, frame):
@@ -316,7 +317,8 @@ class ValidateChecksums(object):
         config = self.setup_configparser()
         with open(self.args.gen_config, 'w') as cfgfile:
             config.write(cfgfile)
-        print 'Config file created at %s' % self.args.gen_config
+        if not self.args.quiet:
+            print 'Config file created at %s' % self.args.gen_config
 
     def load_confgfile(self):
         cfg = ConfigParser.ConfigParser()
