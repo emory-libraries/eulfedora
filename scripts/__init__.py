@@ -1,5 +1,5 @@
 # file scripts/__init__.py
-# 
+#
 #   Copyright 2012 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,10 +22,6 @@ fedora-checksums
 **fedora-checksums** is a command line utility script to validate or
 repair datastream checksums for content stored in a Fedora Commons
 repository.
-
-.. Note::
-
-   Requires Python2.7 (due to use of :mod:`argparse`).
 
 The script has two basic modes: **validate** and **repair**.
 
@@ -75,5 +71,29 @@ more details, see the script usage for the appropriate mode::
   If the python package :mod:`progressbar` is available, progress will
   be displayed as objects are processed; however, :mod:`progressbar`
   is not required to run this script.
+
+
+----
+
+validate-checksums
+----------------
+
+**validate-checksums** is a command line utility script intended for
+regularly, periodically checking that datastream checksums are valid for
+content stored in a Fedora Commons repository.
+
+When a fixity check is completed, the objects will be updated with a
+RELS-EXT property indicating the date of the last fixity check, so that
+objects can be checked again after a specified period.
+
+The default logic is to find and process all objects without any fixity
+check date in the RELS-EXT (prioritizing objects with the oldest modification
+dates first, since these are likely to be most at risk), and then to find
+any objects whose last fixity check was before a specified window (e.g., 30 days).
+
+Because the script needs to run as a privileged fedora user (in order to access
+and make minor updates to all content), if you are configuring it to run as
+a cron job or similar, it is recommended to use the options to generate a config
+file and then load options from that config file when running under cron.
 
 '''

@@ -22,6 +22,16 @@ CLASSIFIERS = [
     'Topic :: Software Development :: Libraries :: Python Modules',
 ]
 
+requirements = [
+    'eulxml>=0.18.0',
+    'rdflib>=3.0',
+    'python-dateutil',
+    'poster',
+    'pycrypto',
+]
+
+if sys.version_info < (2, 7):
+    requirements.append('argparse')
 
 setup(
     name='eulfedora',
@@ -31,15 +41,7 @@ setup(
     url='https://github.com/emory-libraries/eulfedora',
     license='Apache License, Version 2.0',
     packages=find_packages(),
-
-    install_requires=[
-        'eulxml>=0.18.0',
-        'rdflib>=3.0',
-        'python-dateutil',
-        'poster',
-        'pycrypto',
-    ],
-
+    install_requires=requirements,
     # indexdata utils are optional. They include things like PDF text stripping (pyPdf).
     # Be sure to include the below in your own pip dependencies file if you need to use
     # the built in indexer utility support.
