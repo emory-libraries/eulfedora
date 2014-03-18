@@ -200,7 +200,11 @@ class DatastreamObject(object):
 
         :rtype: boolean
         """
-        return self.info_modified or self._content_digest() != self.digest
+        # NOTE: only check content digest if locally cached content is set
+        # (content already pulled or new content set); otherwise this
+        # results in pulling content down to checksum it !
+        return self.info_modified or \
+            self._content and self._content_digest() != self.digest
 
     def _content_digest(self):
         # generate a hash of the content so we can easily check if it has changed and should be saved
@@ -1480,7 +1484,6 @@ class DigitalObject(object):
 
         # - list of datastreams that should be saved
         to_save = [ds for ds, dsobj in self.dscache.iteritems() if dsobj.isModified()]
-
         # - track successfully saved datastreams, in case roll-back is necessary
         saved = []
         # save modified datastreams
@@ -1786,10 +1789,13 @@ class DigitalObject(object):
 
             if dsobj_type is None:
                 # if datastream mimetype matches one of our base datastream objects, use it
-                if ds_info.mimeType == XmlDatastreamObject.default_mimetype:
-                    dsobj_type = XmlDatastreamObject
-                elif ds_info.mimeType == RdfDatastreamObject.default_mimetype:
+
+                # special case: rels-ext should always be loaded as rdf
+                if ds_info.mimeType == RdfDatastreamObject.default_mimetype or \
+                    dsid == 'RELS-EXT':
                     dsobj_type = RdfDatastreamObject
+                elif ds_info.mimeType == XmlDatastreamObject.default_mimetype:
+                    dsobj_type = XmlDatastreamObject
                 else:
                     # default to base datastream object class
                     dsobj_type = DatastreamObject
