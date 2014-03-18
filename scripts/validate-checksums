@@ -21,21 +21,21 @@
 # scripts/__init__.py for inclusion in sphinx docs.
 
 import argparse
+import ConfigParser
 from collections import defaultdict
 from datetime import datetime, timedelta
 from getpass import getpass
-import os
 import rdflib
 from rdflib.namespace import Namespace
 import signal
-import sys
 
 from eulfedora.server import Repository
 from eulfedora.models import DigitalObject, Relation, DigitalObjectSaveFailure
-from eulfedora.rdfns import model as modelns
+from eulfedora import cryptutil
 
 
 REPOMGMT = Namespace(rdflib.URIRef('http://pid.emory.edu/ns/2011/repo-management/#'))
+
 
 class FixityObject(DigitalObject):
     '''Generic digital object with access to last fixity check in rels-ext'''
@@ -63,9 +63,19 @@ class ValidateChecksums(object):
         self.parser.add_argument('--quiet', '-q', default=False, action='store_true',
                                  help='Quiet mode: only output summary report')
 
+        # config file options
+        cfg_args = self.parser.add_argument_group('Config file options')
+        cfg_args.add_argument('--generate-config', '-g', default=False, dest='gen_config',
+            help='''Create a sample config file at the specified location, including any options passed.
+            Specify the --fedora-password option to generate an encrypted password in the config file.''')
+        cfg_args.add_argument('--config', '-c', help='Load the specified config file')
+        cfg_args.add_argument('--key', '-k',
+            help='''Optional encryption key for encrypting and decrypting the password in the
+            config file (you must use the same key for generating and loading)''')
+
         # fedora connection options
         repo_args = self.parser.add_argument_group('Fedora repository connection options')
-        repo_args.add_argument('--fedora-root', dest='fedora_root', required=True,
+        repo_args.add_argument('--fedora-root', dest='fedora_root',
                                help='URL for accessing fedora, e.g. http://localhost:8080/fedora/')
         repo_args.add_argument('--fedora-user', dest='fedora_user', default=None,
                                help='Fedora username')
@@ -93,13 +103,23 @@ class ValidateChecksums(object):
         self.parser.add_argument('pids', metavar='PID', nargs='*',
                                  help='list specific pids to be checked (optional)')
 
-
     def run(self):
         # bind a handler for interrupt signal
         signal.signal(signal.SIGINT, self.interrupt_handler)
 
         self.config_arg_parser()
         self.args = self.parser.parse_args()
+
+        # if requested, generate config file and exit
+        if self.args.key:
+            # patch in cryptutil encryption key with specified one
+            cryptutil.ENCRYPTION_KEY = self.args.key
+        if self.args.gen_config:
+            self.generate_configfile()
+            return
+        # if requested, load config file and set arguments
+        if self.args.config:
+            self.load_confgfile()
 
         # TODO: needs fedora error handling (e.g., bad password, hostname, etc)
         self.repo = Repository(self.args.fedora_root,
@@ -250,47 +270,6 @@ class ValidateChecksums(object):
                 print "%s/%s - invalid checksum (%s)" % \
                       (dsobj.obj.pid, dsobj.id, date or dsobj.created)
 
-
-# itql query to find by modified
-# select $object
-# from <#ri>
-# where  $object <fedora-model:hasModel>  <info:fedora/fedora-system:FedoraObject-3.0>
-# and    $object <fedora-view:lastModifiedDate> $modified
-# and    $modified <mulgara:after> '2014-02-17T12:54:59.265Z'^^<xml-schema:dateTime> in <#xsd>
-
-# query last fixity check after date
-# select $object
-# from <#ri>
-# where  $object <fedora-model:hasModel>  <info:fedora/fedora-system:FedoraObject-3.0>
-# and    $object <http://pid.emory.edu/ns/2011/repo-management/#lastFixityCheck> $modified
-# and    $modified <mulgara:after> '2014-02-17T12:54:59.265Z'^^<xml-schema:dateTime> in <#xsd>
-
-# before
-# select $object
-# from <#ri>
-# where  $object <fedora-model:hasModel>  <info:fedora/fedora-system:FedoraObject-3.0>
-# and    $object <http://pid.emory.edu/ns/2011/repo-management/#lastFixityCheck> $modified
-# and    $modified <mulgara:before> '2014-03-19T12:54:59.265Z'^^<xml-schema:dateTime> in <#xsd>
-
-# object model may not be needed; but maybe we don't want to check control/fedora objects either
-
-# TODO: convert to sparql form?
-# aha - sparql version
-# select ?object
-# where {
-#   ?object <http://pid.emory.edu/ns/2011/repo-management/#lastFixityCheck> ?checked .
-#   FILTER (?checked < xsd:dateTime('2014-03-19T12:54:59.265Z'))
-# }
-
-# sparql 1.0 - find objects without a fixity check
-# (1.1  or higher could use FILTER NOT EXISTS)
-# select ?object
-# where {
-#   ?object <fedora-model:hasModel> <info:fedora/fedora-system:FedoraObject-3.0> .
-#   OPTIONAL { ?object <http://pid.emory.edu/ns/2011/repo-management/#lastFixityCheck> ?checked }
-#  FILTER (!BOUND(?checked))
-# }
-
     def interrupt_handler(self, signum, frame):
         '''Gracefully handle a SIGINT, if possible. Sets a flag so main script
         loop can exit cleanly, and restores the default SIGINT behavior,
@@ -305,6 +284,61 @@ class ValidateChecksums(object):
             print 'Script will exit after processing the current object.'
             print '(Ctrl-C / Interrupt again to quit immediately)'
 
+    ## config file handling (generate config, load config)
+
+    repo_cfg = 'Fedora Settings'
+    proc_cfg = 'Processing Options'
+
+    # patch in a non-django encryption key
+    cryptutil.ENCRYPTION_KEY = 'ae764f8rRBN8Y1n4CG56188JXZH1nox6'
+
+    def setup_configparser(self):
+        # define a config file parser with same basic options as command line
+        # - use command line settings as initial values
+        config = ConfigParser.ConfigParser()
+        # fedora connection settings
+        config.add_section(self.repo_cfg)
+        config.set(self.repo_cfg, 'fedora_root', self.args.fedora_root)
+        config.set(self.repo_cfg, 'fedora_user', self.args.fedora_user)
+        # TODO: encrypt pwd before setting here
+        pwd = self.args.fedora_password
+        if pwd is not None:
+            config.set(self.repo_cfg, 'fedora_password', cryptutil.encrypt(pwd))
+        # processing options
+        config.add_section(self.proc_cfg)
+        config.set(self.proc_cfg, 'max', self.args.max)
+        config.set(self.proc_cfg, 'all_versions', self.args.all_versions)
+        config.set(self.proc_cfg, 'since', self.args.since)
+        config.set(self.proc_cfg, 'timelimit', self.args.timelimit)
+        return config
+
+    def generate_configfile(self):
+        config = self.setup_configparser()
+        with open(self.args.gen_config, 'w') as cfgfile:
+            config.write(cfgfile)
+        print 'Config file created at %s' % self.args.gen_config
+
+    def load_confgfile(self):
+        cfg = ConfigParser.ConfigParser()
+        with open(self.args.config) as cfgfile:
+            cfg.readfp(cfgfile)
+        # NOTE: config file options override any command line options specified
+
+        # set args from config
+        # - fedora opts
+        self.args.fedora_root = cfg.get(self.repo_cfg, 'fedora_root')
+        self.args.fedora_user = cfg.get(self.repo_cfg, 'fedora_user')
+        self.args.fedora_password = cryptutil.decrypt(cfg.get(self.repo_cfg, 'fedora_password'))
+        # - processing opts
+        if cfg.has_section(self.proc_cfg):
+            if cfg.has_option(self.proc_cfg, 'max'):
+                self.args.max = cfg.get(self.proc_cfg, 'max')
+            if cfg.has_option(self.proc_cfg, 'all_versions'):
+                self.args.all_versions = cfg.getboolean(self.proc_cfg, 'all_versions')
+            if cfg.has_option(self.proc_cfg, 'since'):
+                self.args.since = cfg.get(self.proc_cfg, 'since')
+            if cfg.has_option(self.proc_cfg, 'timelimit'):
+                self.args.timelimit = cfg.getint(self.proc_cfg, 'timelimit')
 
 
 class PasswordAction(argparse.Action):
