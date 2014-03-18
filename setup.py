@@ -60,5 +60,5 @@ setup(
     description='Idiomatic access to digital objects in a Fedora Commons repository',
     long_description=LONG_DESCRIPTION,
     classifiers=CLASSIFIERS,
-    scripts=['scripts/fedora-checksums', ],
+    scripts=['scripts/fedora-checksums', 'scripts/validate-checksums',],
 )
