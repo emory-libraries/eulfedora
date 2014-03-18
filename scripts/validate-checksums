@@ -1,0 +1,323 @@
+#!/usr/bin/env python
+
+# file scripts/validate-checksums
+#
+#   Copyright 2014 Emory University Libraries
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+
+# NOTE: more detailed documentation & usage examples are included in
+# scripts/__init__.py for inclusion in sphinx docs.
+
+import argparse
+from collections import defaultdict
+from datetime import datetime, timedelta
+from getpass import getpass
+import os
+import rdflib
+from rdflib.namespace import Namespace
+import signal
+import sys
+
+from eulfedora.server import Repository
+from eulfedora.models import DigitalObject, Relation, DigitalObjectSaveFailure
+from eulfedora.rdfns import model as modelns
+
+
+REPOMGMT = Namespace(rdflib.URIRef('http://pid.emory.edu/ns/2011/repo-management/#'))
+
+class FixityObject(DigitalObject):
+    '''Generic digital object with access to last fixity check in rels-ext'''
+    last_fixity_check = Relation(REPOMGMT.lastFixityCheck,
+        ns_prefix={'eul-repomgmt': REPOMGMT}, rdf_type=rdflib.XSD.dateTime,
+        related_name='+')
+
+
+class ValidateChecksums(object):
+
+    stats = defaultdict(int)
+
+    # interrupt flag to exit the main processing loop when a signal is caught
+    interrupted = False
+
+    # URI for Fedora object content model
+    object_model = 'info:fedora/fedora-system:FedoraObject-3.0'
+
+    def config_arg_parser(self):
+        # configure argument parser
+
+        # common args for either mode
+        self.parser = argparse.ArgumentParser()
+        # general script options
+        self.parser.add_argument('--quiet', '-q', default=False, action='store_true',
+                                 help='Quiet mode: only output summary report')
+
+        # fedora connection options
+        repo_args = self.parser.add_argument_group('Fedora repository connection options')
+        repo_args.add_argument('--fedora-root', dest='fedora_root', required=True,
+                               help='URL for accessing fedora, e.g. http://localhost:8080/fedora/')
+        repo_args.add_argument('--fedora-user', dest='fedora_user', default=None,
+                               help='Fedora username')
+        repo_args.add_argument('--fedora-password', dest='fedora_password', metavar='PASSWORD',
+                               default=None, action=PasswordAction,
+                               help='Password for the specified Fedora user (leave blank to be prompted)')
+
+        # processing opts
+        proc_args = self.parser.add_argument_group('Processing options')
+        proc_args.add_argument('--max', '-m', type=int, metavar='N',
+                                 help='Stop after processing the first %(metavar)s objects')
+
+        proc_args.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
+                              help='''Check all versions of datastreams
+                              (by default, only current versions are checked)''')
+
+        proc_args.add_argument('--since', '-s', dest='since', type=int, default=30,
+                              help='''Check objects with a last fixity check older
+                              than the specified number of days (default: %(default)s)''')
+
+        proc_args.add_argument('--time-limit', '-t', dest='timelimit', type=int,
+                              help='''Only run for the specified duration in minutes''')
+
+        # optional list of pids
+        self.parser.add_argument('pids', metavar='PID', nargs='*',
+                                 help='list specific pids to be checked (optional)')
+
+
+    def run(self):
+        # bind a handler for interrupt signal
+        signal.signal(signal.SIGINT, self.interrupt_handler)
+
+        self.config_arg_parser()
+        self.args = self.parser.parse_args()
+
+        # TODO: needs fedora error handling (e.g., bad password, hostname, etc)
+        self.repo = Repository(self.args.fedora_root,
+                          self.args.fedora_user, self.args.fedora_password)
+
+
+        if self.args.pids:
+            # if pids were specified on the command line, use those
+            # get distinct pid list (only process each object once)
+            object_pids = set(pid for pid in self.args.pids)
+        else:
+            # otherwise, process all find-able objects
+            # TODO: find unchecked or last fixity check older than given time period
+            # object_pids = self.unchecked_pids()
+            object_pids = self.pids_to_check(days=self.args.since)
+            # TODO: should be unchecked (never) or unchecked since date (30 days)
+
+        # if a time limit is requested, calculate when to stop
+        if self.args.timelimit:
+            end_time = datetime.now() + timedelta(minutes=self.args.timelimit)
+            if not self.args.quiet:
+                print 'Time limit of %d minutes requested; processing will end at %s' \
+                    % (self.args.timelimit, end_time)
+
+        for pid in object_pids:
+            print pid
+            obj = self.repo.get_object(pid=pid, type=FixityObject)
+            if not obj.exists:
+                print "Error: %s does not exist or is inaccessible" % pid
+                continue
+
+            self.stats['objects'] += 1
+
+            for dsid in obj.ds_list.iterkeys():
+                # print dsid
+                dsobj = obj.getDatastreamObject(dsid)
+                self.stats['ds'] += 1
+                self.validate_datastream(dsobj)
+
+            # whether success or failure, update object as checked
+            now = datetime.now()
+            # needs to be in a format fedora accepts as xsd:dateTime,
+            # isoformat doesn't seem to work (maybe because without timezone?)
+            obj.last_fixity_check = now.strftime('%Y-%m-%dT%H:%M:%S')
+            try:
+                obj.save('datastream fixity check')
+            except DigitalObjectSaveFailure as err:
+                print 'Error saving %s : %s' % (pid, err)
+                self.stats['save_errors'] += 1
+
+            # check if any of our end conditions are met
+            # - interrupted by SIGINT
+            if self.interrupted:
+                break
+            if self.args.max and self.stats['objects'] >= self.args.max:
+                if not self.args.quiet:
+                    print 'Processed %d objects (requested maximum of %d); stopping' \
+                        % (self.stats['objects'], self.args.max)
+                break
+
+            if self.args.timelimit and datetime.now() >= end_time:
+                if not self.args.quiet:
+                    print 'Processing has exceeded requested time limit of %d minutes; stopping' \
+                        % self.args.timelimit
+                break
+
+        totals = '\nChecked %(objects)d object(s), %(ds)d datastream(s)' % self.stats
+        if self.args.all_versions:
+            totals += ', %(ds_versions)d datastream version(s)' % self.stats
+        print totals
+        print '%(invalid)d invalid checksum(s)' % self.stats
+        print '%(save_errors)d save error(s)' % self.stats
+
+    #: SPARQL query to find objects without a fixity check recorded
+    #: Sort by oldest modification time (since the content that has not been
+    #: modified the longest is most likely higher risk)
+    #: NOTE: this is for Sparql 1.0; for 1.1 or higher, use FILTER NOT EXISTS
+    #: 2nd NOTE: apparently modified must be returned to use in ordering
+    SPARQL_FIND_UNCHECKED = '''
+        PREFIX eul-repomgmt: <%s>
+        SELECT ?pid ?modified
+        WHERE {
+           ?pid <fedora-model:hasModel> <%s> .
+           ?pid <fedora-view:lastModifiedDate> ?modified
+           OPTIONAL {
+               ?pid <eul-repomgmt:lastFixityCheck> ?checked
+           }
+           FILTER (!BOUND(?checked))
+        } ORDER BY ?modified ''' % (REPOMGMT, object_model)
+
+    SPARQL_FIND_UNCHECKED_SINCE = '''
+        PREFIX eul-repomgmt: <%s>
+        SELECT ?pid
+        WHERE {
+           ?pid <eul-repomgmt:lastFixityCheck> ?checked
+           FILTER (?checked < xsd:dateTime('%%s'))
+        } ORDER BY ?checked ''' % (REPOMGMT, )
+
+    def pids_to_check(self, days):
+        '''Generator that returns a list of pids where the object has never had
+        a fixity check recorded'''
+        '''Generator that returns a list of pids where the object has not
+        been checked since the specified number of days.'''
+
+        # if verbose
+        print '\nLooking for unchecked pids...'
+        results = self.repo.risearch.sparql_query(self.SPARQL_FIND_UNCHECKED)
+        for row in results:
+            yield row['pid']
+
+        print '\nLooking for pids not checked in the last 30 days...'
+        delta = timedelta(days=days)
+        datesince = datetime.now() - delta
+        query = self.SPARQL_FIND_UNCHECKED_SINCE % datesince.strftime('%Y-%m-%dT%H:%M:%S')
+
+        results = self.repo.risearch.sparql_query(query)
+        for row in results:
+            yield row['pid']
+
+    def validate_datastream(self, dsobj):
+        if self.args.all_versions:
+            # check every version of this datastream
+            for ds in dsobj.history().versions:
+                self.check_datastream(dsobj, ds.created)
+                self.stats['ds_versions'] += 1
+
+        else:
+            # current version only
+            self.check_datastream(dsobj)
+
+    def check_datastream(self, dsobj, date=None):
+        '''Check the validity of a particular datastream.  Checks for
+        invalid datastreams using
+        :meth:`~eulfedora.models.DatastreamObject.validate_checksum`
+
+        :param dsobj: :class:`~eulfedora.models.DatastreamObject` to
+            be checked
+        :param date: optional date/time for a particular
+            version of the datastream to be checked; when not specified,
+            the current version will be checked
+        '''
+
+        valid = dsobj.validate_checksum(date=date)
+
+        if not valid:
+            self.stats['invalid'] += 1
+            if not self.args.quiet:
+                print "%s/%s - invalid checksum (%s)" % \
+                      (dsobj.obj.pid, dsobj.id, date or dsobj.created)
+
+
+# itql query to find by modified
+# select $object
+# from <#ri>
+# where  $object <fedora-model:hasModel>  <info:fedora/fedora-system:FedoraObject-3.0>
+# and    $object <fedora-view:lastModifiedDate> $modified
+# and    $modified <mulgara:after> '2014-02-17T12:54:59.265Z'^^<xml-schema:dateTime> in <#xsd>
+
+# query last fixity check after date
+# select $object
+# from <#ri>
+# where  $object <fedora-model:hasModel>  <info:fedora/fedora-system:FedoraObject-3.0>
+# and    $object <http://pid.emory.edu/ns/2011/repo-management/#lastFixityCheck> $modified
+# and    $modified <mulgara:after> '2014-02-17T12:54:59.265Z'^^<xml-schema:dateTime> in <#xsd>
+
+# before
+# select $object
+# from <#ri>
+# where  $object <fedora-model:hasModel>  <info:fedora/fedora-system:FedoraObject-3.0>
+# and    $object <http://pid.emory.edu/ns/2011/repo-management/#lastFixityCheck> $modified
+# and    $modified <mulgara:before> '2014-03-19T12:54:59.265Z'^^<xml-schema:dateTime> in <#xsd>
+
+# object model may not be needed; but maybe we don't want to check control/fedora objects either
+
+# TODO: convert to sparql form?
+# aha - sparql version
+# select ?object
+# where {
+#   ?object <http://pid.emory.edu/ns/2011/repo-management/#lastFixityCheck> ?checked .
+#   FILTER (?checked < xsd:dateTime('2014-03-19T12:54:59.265Z'))
+# }
+
+# sparql 1.0 - find objects without a fixity check
+# (1.1  or higher could use FILTER NOT EXISTS)
+# select ?object
+# where {
+#   ?object <fedora-model:hasModel> <info:fedora/fedora-system:FedoraObject-3.0> .
+#   OPTIONAL { ?object <http://pid.emory.edu/ns/2011/repo-management/#lastFixityCheck> ?checked }
+#  FILTER (!BOUND(?checked))
+# }
+
+    def interrupt_handler(self, signum, frame):
+        '''Gracefully handle a SIGINT, if possible. Sets a flag so main script
+        loop can exit cleanly, and restores the default SIGINT behavior,
+        so that a second interrupt will stop the script.
+        '''
+        if signum == signal.SIGINT:
+            # restore default signal handler so a second SIGINT can be used to quit
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            # set interrupt flag so main loop knows to quit at a reasonable time
+            self.interrupted = True
+            # report if script is in the middle of an object
+            print 'Script will exit after processing the current object.'
+            print '(Ctrl-C / Interrupt again to quit immediately)'
+
+
+
+class PasswordAction(argparse.Action):
+    '''Use :meth:`getpass.getpass` to prompt for a password for a
+    command-line argument.'''
+    def __call__(self, parser, namespace, value, option_string=None):
+        # if a value was specified on the command-line, use that
+        if value:
+            setattr(namespace, self.dest, value)
+        # otherwise, use getpass to prompt for a password
+        else:
+            setattr(namespace, self.dest, getpass())
+
+
+if __name__ == '__main__':
+    ValidateChecksums().run()
