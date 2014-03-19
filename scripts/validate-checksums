@@ -46,12 +46,19 @@ class FixityObject(DigitalObject):
 
 class ValidateChecksums(object):
 
+    #: dictionary to keep counts of objects, datastreams checked, errors found, etc
     stats = defaultdict(int)
 
-    # interrupt flag to exit the main processing loop when a signal is caught
+    #: dictionaries to keep track of objects that will need to be reported via email
+    #: likely should include pid (key), list of tuples (dsid, date)
+    invalid = {}
+    missing = {}
+    save_errors = {}
+
+    #: interrupt flag to exit the main processing loop when a signal is caught
     interrupted = False
 
-    # URI for Fedora object content model
+    #: URI for Fedora object content model
     object_model = 'info:fedora/fedora-system:FedoraObject-3.0'
 
     def config_arg_parser(self):
@@ -124,7 +131,6 @@ class ValidateChecksums(object):
         # TODO: needs fedora error handling (e.g., bad password, hostname, etc)
         self.repo = Repository(self.args.fedora_root,
                           self.args.fedora_user, self.args.fedora_password)
-
 
         if self.args.pids:
             # if pids were specified on the command line, use those
@@ -270,6 +276,16 @@ class ValidateChecksums(object):
             self.stats['invalid'] += 1
             print "Error: %s/%s - invalid checksum (%s)" % \
                       (dsobj.obj.pid, dsobj.id, date or dsobj.created)
+
+        else:
+            # if checksum is not invalid it could still be missing
+            # NOTE: missing checksum test can currently only be done on latest version
+            if date is None and dsobj.checksum_type == 'DISABLED' or \
+               dsobj.checksum == 'none':
+               self.stats['missing'] += 1
+               print "Error: %s/%s - missing checksum (%s)" % \
+                      (dsobj.obj.pid, dsobj.id, date or dsobj.created)
+
 
     def interrupt_handler(self, signum, frame):
         '''Gracefully handle a SIGINT, if possible. Sets a flag so main script
