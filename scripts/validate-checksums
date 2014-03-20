@@ -116,6 +116,8 @@ class ValidateChecksums(object):
                                help='''One or more email addresses (comma separated) where a report
                                should be sent if any errors are encountered''')
         email_args.add_argument('--smtp', help='''SMTP server to use for sending email (required for email)''')
+        email_args.add_argument('--from', dest='from_email',
+            help='''Email address reports should come from (required for email)''')
 
         # optional list of pids
         self.parser.add_argument('pids', metavar='PID', nargs='*',
@@ -142,7 +144,8 @@ class ValidateChecksums(object):
             return
 
         # if email is specified without smtp, warn (unless quiet mode)
-        if self.args.email and not self.args.smtp and not self.args.quiet:
+        if self.args.email and not self.args.smtp or not self.args.from_email \
+           and not self.args.quiet:
             print 'Email address specified without an SMTP server; no email will be sent'
 
         if not self.args.fedora_root:
@@ -331,7 +334,7 @@ class ValidateChecksums(object):
 
     def email_report(self):
         # if email or smtp not specified, can't send
-        if not self.args.email or not self.args.smtp:
+        if not self.args.email or not self.args.smtp or not self.args.from_email:
             return
 
         # if there are no errors or problems, don't send an email
@@ -361,8 +364,6 @@ class ValidateChecksums(object):
 
         msg = MIMEText(output.getvalue())
         output.close()
-        # PLACEHOLDER! needs to be specified via arg/config ?
-        from_email = 'libsysdev-l@listserv.cc.emory.edu'
 
         if ',' in self.args.email:
             to_addresses = [e.strip() for e in self.args.email.split(',')]
@@ -371,12 +372,15 @@ class ValidateChecksums(object):
 
         msg['Subject'] = 'Checksum Validation report for %s on %s' % \
             (self.args.fedora_root, datetime.date.today())
-        msg['From'] = from_email
+        msg['From'] = self.args.from_email
         msg['To'] = ', '.join(to_addresses)
+
+        if not self.args.quiet:
+            print 'Sending email report to %s' % ', '.join(to_addresses)
 
         # Send the message via our the specified SMTP server
         s = smtplib.SMTP(self.args.smtp)
-        s.sendmail(from_email, to_addresses, msg.as_string())
+        s.sendmail(self.args.from_email, to_addresses, msg.as_string())
         s.quit()
 
 
@@ -424,6 +428,7 @@ class ValidateChecksums(object):
         # email options
         config.add_section(self.email_cfg)
         config.set(self.email_cfg, 'email', self.args.email)
+        config.set(self.email_cfg, 'from', self.args.from_email)
         config.set(self.email_cfg, 'smtp', self.args.smtp)
         return config
 
@@ -476,6 +481,8 @@ class ValidateChecksums(object):
         if cfg.has_section(self.email_cfg):
             if cfg.has_option(self.email_cfg, 'email') and not self.args.email:
                 self.args.email = cfg.get(self.email_cfg, 'email')
+            if cfg.has_option(self.email_cfg, 'from') and not self.args.from_email:
+                self.args.from_email = cfg.get(self.email_cfg, 'from')
             if cfg.has_option(self.email_cfg, 'smtp') and not \
               self.args.smtp:
                 self.args.smtp = cfg.get(self.email_cfg, 'smtp')
