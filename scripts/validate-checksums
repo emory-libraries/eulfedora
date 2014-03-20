@@ -139,6 +139,8 @@ class ValidateChecksums(object):
         if self.args.config:
             self.load_confgfile()
 
+        # if requested, generate a config file with any options specified so far,
+        # and then quit
         if self.args.gen_config:
             self.generate_configfile()
             return
