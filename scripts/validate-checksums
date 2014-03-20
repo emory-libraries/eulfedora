@@ -23,11 +23,14 @@
 import argparse
 import ConfigParser
 from collections import defaultdict
-from datetime import datetime, timedelta
+import datetime
+from email.mime.text import MIMEText
 from getpass import getpass
 import rdflib
 from rdflib.namespace import Namespace
 import signal
+import smtplib
+import StringIO
 
 from eulfedora.server import Repository
 from eulfedora.models import DigitalObject, Relation, DigitalObjectSaveFailure
@@ -106,6 +109,14 @@ class ValidateChecksums(object):
         proc_args.add_argument('--time-limit', '-t', dest='timelimit', type=int,
                               help='''Only run for the specified duration in minutes''')
 
+
+        # email opts
+        email_args = self.parser.add_argument_group('Email options')
+        email_args.add_argument('--email', '-e',
+                               help='''One or more email addresses (comma separated) where a report
+                               should be sent if any errors are encountered''')
+        email_args.add_argument('--smtp', help='''SMTP server to use for sending email (required for email)''')
+
         # optional list of pids
         self.parser.add_argument('pids', metavar='PID', nargs='*',
                                  help='list specific pids to be checked (optional)')
@@ -121,12 +132,23 @@ class ValidateChecksums(object):
         if self.args.key:
             # patch in cryptutil encryption key with specified one
             cryptutil.ENCRYPTION_KEY = self.args.key
-        if self.args.gen_config:
-            self.generate_configfile()
-            return
+
         # if requested, load config file and set arguments
         if self.args.config:
             self.load_confgfile()
+
+        if self.args.gen_config:
+            self.generate_configfile()
+            return
+
+        # if email is specified without smtp, warn (unless quiet mode)
+        if self.args.email and not self.args.smtp and not self.args.quiet:
+            print 'Email address specified without an SMTP server; no email will be sent'
+
+        if not self.args.fedora_root:
+            print 'Error: Fedora URL (--fedora-root) is required\n'
+            self.parser.print_help()
+            return
 
         # TODO: needs fedora error handling (e.g., bad password, hostname, etc)
         self.repo = Repository(self.args.fedora_root,
@@ -145,7 +167,7 @@ class ValidateChecksums(object):
 
         # if a time limit is requested, calculate when to stop
         if self.args.timelimit:
-            end_time = datetime.now() + timedelta(minutes=self.args.timelimit)
+            end_time = datetime.datetime.now() + datetime.timedelta(minutes=self.args.timelimit)
             if not self.args.quiet:
                 print 'Time limit of %d minutes requested; processing will end at %s' \
                     % (self.args.timelimit, end_time)
@@ -167,7 +189,7 @@ class ValidateChecksums(object):
                 self.validate_datastream(dsobj)
 
             # whether success or failure, update object as checked
-            now = datetime.now()
+            now = datetime.datetime.now()
             # needs to be in a format fedora accepts as xsd:dateTime,
             # isoformat doesn't seem to work (maybe because without timezone?)
             obj.last_fixity_check = now.strftime('%Y-%m-%dT%H:%M:%S')
@@ -188,7 +210,7 @@ class ValidateChecksums(object):
                         % (self.stats['objects'], self.args.max)
                 break
 
-            if self.args.timelimit and datetime.now() >= end_time:
+            if self.args.timelimit and datetime.datetime.now() >= end_time:
                 if not self.args.quiet:
                     print 'Processing has exceeded requested time limit of %d minutes; stopping' \
                         % self.args.timelimit
@@ -202,7 +224,8 @@ class ValidateChecksums(object):
         print '%(invalid)d invalid checksum(s)' % self.stats
         print '%(save_errors)d save error(s)' % self.stats
 
-        self.report()
+        # send an email report if appropriate
+        self.email_report()
 
     #: SPARQL query to find objects without a fixity check recorded
     #: Sort by oldest modification time (since the content that has not been
@@ -243,8 +266,8 @@ class ValidateChecksums(object):
 
         if not self.args.quiet:
             print '\nLooking for pids not checked in the last 30 days...'
-        delta = timedelta(days=days)
-        datesince = datetime.now() - delta
+        delta = datetime.timedelta(days=days)
+        datesince = datetime.datetime.now() - delta
         query = self.SPARQL_FIND_UNCHECKED_SINCE % datesince.strftime('%Y-%m-%dT%H:%M:%S')
 
         results = self.repo.risearch.sparql_query(query)
@@ -306,11 +329,17 @@ class ValidateChecksums(object):
                 tracker[pid] = []
             tracker[pid].append((dsobj.id, date or dsobj.created))
 
-    def report(self):
-        # preliminary text for email report
-        # needs to be added to a string and put into an email
-        # - should only get sent *if* an email is configured and *if*
-        # there are any errors to be reported
+    def email_report(self):
+        # if email or smtp not specified, can't send
+        if not self.args.email or not self.args.smtp:
+            return
+
+        # if there are no errors or problems, don't send an email
+        if not self.invalid and not self.missing and not self.save_errors:
+            return
+
+        # construct the body of the email
+        output = StringIO.StringIO()
 
         for tracker, label in [(self.invalid, 'Invalid'),
                                (self.missing, 'Missing')]:
@@ -318,17 +347,37 @@ class ValidateChecksums(object):
             # if any items were found in this category (invalid or missing)
             if tracker:
                 # heading label
-                print '\n%s checksums detected:' % label
+                print >> output, '\n%s checksums detected:' % label
 
                 # list of pids and information about the datastreams with errors
                 for pid, vals in tracker.iteritems():
-                    print '  %s' % pid
-                    for dsid, date in vals:
-                        print '\t%s (%s)' % (dsid, date)
+                    print >> output, '  %s' % pid
+                    for dsid, d in vals:
+                        print >> output, '\t%s (%s)' % (dsid, d)
 
         if self.save_errors:
-            print '\nError saving the following objects:'
-            print '  ' + '\n  '.join(self.save_errors)
+            print >> output, '\nError saving the following objects:'
+            print >> output, '  ' + '\n  '.join(self.save_errors)
+
+        msg = MIMEText(output.getvalue())
+        output.close()
+        # PLACEHOLDER! needs to be specified via arg/config ?
+        from_email = 'libsysdev-l@listserv.cc.emory.edu'
+
+        if ',' in self.args.email:
+            to_addresses = [e.strip() for e in self.args.email.split(',')]
+        else:
+            to_addresses = [self.args.email]
+
+        msg['Subject'] = 'Checksum Validation report for %s on %s' % \
+            (self.args.fedora_root, datetime.date.today())
+        msg['From'] = from_email
+        msg['To'] = ', '.join(to_addresses)
+
+        # Send the message via our the specified SMTP server
+        s = smtplib.SMTP(self.args.smtp)
+        s.sendmail(from_email, to_addresses, msg.as_string())
+        s.quit()
 
 
     def interrupt_handler(self, signum, frame):
@@ -349,6 +398,7 @@ class ValidateChecksums(object):
 
     repo_cfg = 'Fedora Settings'
     proc_cfg = 'Processing Options'
+    email_cfg = 'Email options'
 
     # patch in a non-django encryption key
     cryptutil.ENCRYPTION_KEY = 'ae764f8rRBN8Y1n4CG56188JXZH1nox6'
@@ -371,6 +421,10 @@ class ValidateChecksums(object):
         config.set(self.proc_cfg, 'all_versions', self.args.all_versions)
         config.set(self.proc_cfg, 'since', self.args.since)
         config.set(self.proc_cfg, 'timelimit', self.args.timelimit)
+        # email options
+        config.add_section(self.email_cfg)
+        config.set(self.email_cfg, 'email', self.args.email)
+        config.set(self.email_cfg, 'smtp', self.args.smtp)
         return config
 
     def generate_configfile(self):
@@ -384,27 +438,47 @@ class ValidateChecksums(object):
         cfg = ConfigParser.ConfigParser()
         with open(self.args.config) as cfgfile:
             cfg.readfp(cfgfile)
-        # NOTE: config file options override any command line options specified
 
-        # set args from config
+        # set args from config, making sure not to override any
+        # non-defaults sepcified on the command line
+
         # - fedora opts
-        self.args.fedora_root = cfg.get(self.repo_cfg, 'fedora_root')
-        self.args.fedora_user = cfg.get(self.repo_cfg, 'fedora_user')
-        self.args.fedora_password = cryptutil.decrypt(cfg.get(self.repo_cfg, 'fedora_password'))
+        if cfg.has_section(self.repo_cfg):
+            if cfg.has_option(self.repo_cfg, 'fedora_root') and \
+              not self.args.fedora_root:
+                self.args.fedora_root = cfg.get(self.repo_cfg, 'fedora_root')
+            if cfg.has_option(self.repo_cfg, 'fedora_user') and \
+              not self.args.fedora_user:
+                self.args.fedora_user = cfg.get(self.repo_cfg, 'fedora_user')
+            if cfg.has_option(self.repo_cfg, 'fedora_password') and \
+              not self.args.fedora_password:
+                self.args.fedora_password = cryptutil.decrypt(cfg.get(self.repo_cfg, 'fedora_password'))
+
         # - processing opts
         if cfg.has_section(self.proc_cfg):
-            if cfg.has_option(self.proc_cfg, 'max'):
+            if cfg.has_option(self.proc_cfg, 'max') and not self.args.max:
                 self.args.max = cfg.get(self.proc_cfg, 'max')
-            if cfg.has_option(self.proc_cfg, 'all_versions'):
+            if cfg.has_option(self.proc_cfg, 'all_versions') and not \
+              self.args.all_versions:
                 self.args.all_versions = cfg.getboolean(self.proc_cfg, 'all_versions')
-            if cfg.has_option(self.proc_cfg, 'since'):
+            if cfg.has_option(self.proc_cfg, 'since') and not \
+              self.args.since:
                 self.args.since = cfg.get(self.proc_cfg, 'since')
-            if cfg.has_option(self.proc_cfg, 'timelimit'):
+            if cfg.has_option(self.proc_cfg, 'timelimit') and not \
+              self.args.timelimit:
                 try:
                     self.args.timelimit = cfg.getint(self.proc_cfg, 'timelimit')
                 except:
                     # if None or non-numeric, getint will fail; ignore invalid number
                     pass
+
+        # - email opts
+        if cfg.has_section(self.email_cfg):
+            if cfg.has_option(self.email_cfg, 'email') and not self.args.email:
+                self.args.email = cfg.get(self.email_cfg, 'email')
+            if cfg.has_option(self.email_cfg, 'smtp') and not \
+              self.args.smtp:
+                self.args.smtp = cfg.get(self.email_cfg, 'smtp')
 
 
 class PasswordAction(argparse.Action):
