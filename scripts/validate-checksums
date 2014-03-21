@@ -56,7 +56,10 @@ class ValidateChecksums(object):
     #: likely should include pid (key), list of tuples (dsid, date)
     invalid = {}
     missing = {}
+    #: list of pids with save errors
     save_errors = []
+    #: list of error messages where any fedora error occurred
+    fedora_errors = []
 
     #: interrupt flag to exit the main processing loop when a signal is caught
     interrupted = False
@@ -146,9 +149,10 @@ class ValidateChecksums(object):
             return
 
         # if email is specified without smtp, warn (unless quiet mode)
-        if self.args.email and not self.args.smtp or not self.args.from_email \
-           and not self.args.quiet:
-            print 'Email address specified without an SMTP server; no email will be sent'
+        if self.args.email:
+            if not self.args.smtp or not self.args.from_email \
+              and not self.args.quiet:
+               print 'Email address specified without an SMTP server; no email will be sent'
 
         if not self.args.fedora_root:
             print 'Error: Fedora URL (--fedora-root) is required\n'
@@ -282,13 +286,35 @@ class ValidateChecksums(object):
     def validate_datastream(self, dsobj):
         if self.args.all_versions:
             # check every version of this datastream
-            for ds in dsobj.history().versions:
-                self.check_datastream(dsobj, ds.created)
-                self.stats['ds_versions'] += 1
+            try:
+                history = dsobj.history()
+            except Exception as err:
+                msg = 'Error: failed to get datastream history for %s/%s : %s' % \
+                       (dsobj.obj.pid, dsobj.id, err)
+                self.fedora_errors.append(msg)
+                print msg
+                # bail out
+                return
+
+            for ds in history.versions:
+                try:
+                    self.check_datastream(dsobj, ds.created)
+                    self.stats['ds_versions'] += 1
+                except Exception as err:
+                    msg = 'Error checking datastream %s/%s %s : %s' % \
+                          (dsobj.obj.pid, dsobj.id, ds.created, err)
+                    self.fedora_errors.append(msg)
+                    print msg
 
         else:
             # current version only
-            self.check_datastream(dsobj)
+            try:
+                self.check_datastream(dsobj)
+            except Exception as err:
+                msg = 'Error checking datastream %s/%s : %s' % \
+                          (dsobj.obj.pid, dsobj.id, err)
+                self.fedora_errors.append(msg)
+                print msg
 
     def check_datastream(self, dsobj, date=None):
         '''Check the validity of a particular datastream.  Checks for
@@ -363,6 +389,10 @@ class ValidateChecksums(object):
         if self.save_errors:
             print >> output, '\nError saving the following objects:'
             print >> output, '  ' + '\n  '.join(self.save_errors)
+
+        if self.fedora_errors:
+            print >> output, '\nFedora errors when attempting to validate checksums:'
+            print >> output, '  ' + '\n  '.join(self.fedora_errors)
 
         msg = MIMEText(output.getvalue())
         output.close()
