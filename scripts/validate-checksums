@@ -58,6 +58,8 @@ class ValidateChecksums(object):
     missing = {}
     #: list of pids with save errors
     save_errors = []
+    #: list of pids with rels-ext errors
+    relsext_errors = []
     #: list of error messages where any fedora error occurred
     fedora_errors = []
 
@@ -201,7 +203,16 @@ class ValidateChecksums(object):
             now = datetime.datetime.now()
             # needs to be in a format fedora accepts as xsd:dateTime,
             # isoformat doesn't seem to work (maybe because without timezone?)
-            obj.last_fixity_check = now.strftime('%Y-%m-%dT%H:%M:%S')
+            try:
+                obj.last_fixity_check = now.strftime('%Y-%m-%dT%H:%M:%S')
+            except:
+                # in a few cases, objects have malformed RELS-EXT
+                # (e.g., about=pid instead of rdf:about=pid)
+                # - catch and report on those
+                self.stats['rels-ext'] += 1
+                self.relsext_errors.append(pid)
+                continue
+
             try:
                 obj.save('datastream fixity check')
             except DigitalObjectSaveFailure as err:
@@ -231,7 +242,7 @@ class ValidateChecksums(object):
             totals += ', %(ds_versions)d datastream version(s)' % self.stats
         print totals
         print '%(invalid)d invalid checksum(s)' % self.stats
-        print '%(save_errors)d save error(s)' % self.stats
+        print '%(save_errors)d save error(s), %(relsext_errors)d objects with RELS-EXT errors' % self.stats
 
         # send an email report if appropriate
         self.email_report()
@@ -366,7 +377,8 @@ class ValidateChecksums(object):
             return
 
         # if there are no errors or problems, don't send an email
-        if not self.invalid and not self.missing and not self.save_errors:
+        if not any([self.invalid, self.missing, self.save_errors,
+                    self.relsext_errors]):
             return
 
         # construct the body of the email
@@ -389,6 +401,10 @@ class ValidateChecksums(object):
         if self.save_errors:
             print >> output, '\nError saving the following objects:'
             print >> output, '  ' + '\n  '.join(self.save_errors)
+
+        if self.relsext_errors:
+            print >> output, '\nError updating the RELS-EXT for the following objects:'
+            print >> output, '  ' + '\n  '.join(self.relsext_errors)
 
         if self.fedora_errors:
             print >> output, '\nFedora errors when attempting to validate checksums:'
