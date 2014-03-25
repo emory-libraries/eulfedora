@@ -209,7 +209,7 @@ class ValidateChecksums(object):
                 # in a few cases, objects have malformed RELS-EXT
                 # (e.g., about=pid instead of rdf:about=pid)
                 # - catch and report on those
-                self.stats['rels-ext'] += 1
+                self.stats['relsext_errors'] += 1
                 self.relsext_errors.append(pid)
                 continue
 
