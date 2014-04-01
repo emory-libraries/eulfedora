@@ -102,7 +102,7 @@ class FixityObject(DigitalObject):
         if self.provenance.exists:
             return self.provenance
         elif self.old_premis.exists:
-            return self.premis
+            return self.old_premis
         # otherwise none
 
 
@@ -127,6 +127,9 @@ class ValidateChecksums(object):
 
     #: URI for Fedora object content model
     object_model = 'info:fedora/fedora-system:FedoraObject-3.0'
+
+    #: default number of days between fixity checks before another
+    default_days_betweeen_checks = 30
 
     def config_arg_parser(self):
         # configure argument parser
@@ -166,7 +169,8 @@ class ValidateChecksums(object):
                               help='''Check all versions of datastreams
                               (by default, only current versions are checked)''')
 
-        proc_args.add_argument('--since', '-s', dest='since', type=int, default=30,
+        proc_args.add_argument('--since', '-s', dest='since', type=int,
+                              default=self.default_days_betweeen_checks,
                               help='''Check objects with a last fixity check older
                               than the specified number of days (default: %(default)s)''')
 
@@ -669,8 +673,10 @@ class ValidateChecksums(object):
             if cfg.has_option(self.proc_cfg, 'all_versions') and not \
               self.args.all_versions:
                 self.args.all_versions = cfg.getboolean(self.proc_cfg, 'all_versions')
-            if cfg.has_option(self.proc_cfg, 'since') and not \
-              self.args.since:
+            # since is always set, so command-line opt should only override if
+            # set to a non-default value, to allow config take precedence
+            if cfg.has_option(self.proc_cfg, 'since') and \
+              self.args.since == self.default_days_betweeen_checks:
                 self.args.since = cfg.get(self.proc_cfg, 'since')
             if cfg.has_option(self.proc_cfg, 'timelimit') and not \
               self.args.timelimit:
