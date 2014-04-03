@@ -205,7 +205,7 @@ class ValidateChecksums(object):
 
         # if requested, load config file and set arguments
         if self.args.config:
-            self.load_confgfile()
+            self.load_configfile()
 
         # if requested, generate a config file with any options specified so far,
         # and then quit
@@ -333,7 +333,7 @@ class ValidateChecksums(object):
 
     SPARQL_FIND_UNCHECKED_SINCE = '''
         PREFIX eul-repomgmt: <%s>
-        SELECT ?pid
+        SELECT ?pid ?checked
         WHERE {
            ?pid <eul-repomgmt:lastFixityCheck> ?checked
            FILTER (?checked < xsd:dateTime('%%s'))
@@ -352,7 +352,8 @@ class ValidateChecksums(object):
             yield row['pid']
 
         if not self.args.quiet:
-            print '\nLooking for pids not checked in the last 30 days...'
+            print '\nLooking for pids not checked in the last %d days...' % \
+                self.args.since
         delta = datetime.timedelta(days=days)
         datesince = datetime.datetime.now() - delta
         query = self.SPARQL_FIND_UNCHECKED_SINCE % datesince.strftime('%Y-%m-%dT%H:%M:%S')
@@ -646,7 +647,7 @@ class ValidateChecksums(object):
         if not self.args.quiet:
             print 'Config file created at %s' % self.args.gen_config
 
-    def load_confgfile(self):
+    def load_configfile(self):
         cfg = ConfigParser.ConfigParser()
         with open(self.args.config) as cfgfile:
             cfg.readfp(cfgfile)
@@ -677,7 +678,7 @@ class ValidateChecksums(object):
             # set to a non-default value, to allow config take precedence
             if cfg.has_option(self.proc_cfg, 'since') and \
               self.args.since == self.default_days_betweeen_checks:
-                self.args.since = cfg.get(self.proc_cfg, 'since')
+                self.args.since = cfg.getint(self.proc_cfg, 'since')
             if cfg.has_option(self.proc_cfg, 'timelimit') and not \
               self.args.timelimit:
                 try:
