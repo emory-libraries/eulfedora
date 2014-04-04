@@ -438,15 +438,18 @@ class DatastreamObject(object):
         '''Generator that returns the datastream content in chunks, so
         larger datastreams can be used without reading the entire
         contents into memory.'''
+        from contextlib import closing
+
         # get the datastream dissemination, but return the actual http response
-        response = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
-                                                           return_http_response=True)
-        # read and yield the response in chunks
-        while True:
-            chunk = response.read(chunksize)
-            if not chunk:
-                return
-            yield chunk
+        with closing(self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
+                                                           return_http_response=True)) \
+          as response:
+            # read and yield the response in chunks
+            while True:
+                chunk = response.read(chunksize)
+                if not chunk:
+                    return
+                yield chunk
 
     def validate_checksum(self, date=None):
         '''Check if this datastream has a valid checksum in Fedora, by
