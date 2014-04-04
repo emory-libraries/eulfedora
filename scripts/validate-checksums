@@ -483,9 +483,8 @@ class ValidateChecksums(object):
                 for dsid, results in ds_results.iteritems():
                     for r in results:
                         ds_counts[r] += 1
-                    print ds_counts
                     details.append('%s: %d valid, %d missing, %d invalid' % \
-                        dsid, ds_counts['valid'], ds_counts['missing'], ds_counts['invalid'])
+                        (dsid, ds_counts['valid'], ds_counts['missing'], ds_counts['invalid']))
 
                 detailed_info = 'Datastream results: %s' % ', '.join(details)
 
