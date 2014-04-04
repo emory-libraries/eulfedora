@@ -512,8 +512,9 @@ class ValidateChecksums(object):
         event.id = event_id
         event.type = 'fixity check'
         event.date = datetime.datetime.now().isoformat()
-        # event detail should be about the program generating the event (?)
-        event.detail = 'validate-checksums / eulfedora version %s' % __version__
+        # event detail should be about the program generating the event
+        # follow convention po parse out program name/version in case of latter processing
+        event.detail = 'program="eulfedora validate-checksums"; version="%s"' % __version__
         # outcome as basic success or failure pass/fail
         event.outcome = result
         # detailed outcome results
