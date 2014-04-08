@@ -30,6 +30,7 @@ Using these views (in the simpler cases) should be as easy as::
 
 '''
 
+import logging
 
 from django.contrib.auth import views as authviews
 from django.http import HttpResponse, Http404, HttpResponseBadRequest, \
@@ -40,6 +41,8 @@ from eulfedora.util import RequestFailed
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.cryptutil import encrypt
 
+
+logger = logging.getLogger(__name__)
 
 
 class HttpResponseRangeNotSatisfiable(HttpResponseBadRequest):
@@ -55,6 +58,10 @@ def datastream_etag(request, pid, dsid, type=None, repo=None, **kwargs):
     :class:`django.views.decorators.http.condition`.  Takes the same
     arguments as :meth:`~eulfedora.views.raw_datastream`.
     '''
+
+    if request.META.get('HTTP_RANGE', None):
+        return None
+
     try:
         if repo is None:
             repo = Repository()
@@ -121,7 +128,6 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
 
         ds = obj.getDatastreamObject(dsid)
 
-        print 'if-range ? ', request.META.get('HTTP_IF_RANGE', None)
         if ds and ds.exists:
             # because retrieving the content is expensive and checking
             # headers can be useful, explicitly support HEAD requests
@@ -130,38 +136,40 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
 
             elif request.META.get('HTTP_RANGE', None):
                 rng = request.META['HTTP_RANGE']
-                print 'setting range request=True'
+                logger.debug('HTTP Range request: %s' % rng)
                 range_request = True
-                print '** partial request = ', request.META['HTTP_RANGE']
                 kind, numbers = rng.split('=')
-                print 'kind = ', kind
                 if kind != 'bytes':
                     return HttpResponseRangeNotSatisfiable()
 
                 start, end = numbers.split('-')
                 # NOTE: could potentially be complicated stuff like
                 # this: 0-999,1002-9999,1-9999
-                # assuming simple case of a single range
+                # for now, assuming simple case of a single range
                 start = int(start)
                 if not end:
-                    end = ds.info.size
+                    end = ds.info.size - 1
                 else:
                     end = int(end)
-                print 'start %s end %s' % (start, end)
 
                 # ignore requests where end is before start
                 if end < start:
                     return HttpResponseRangeNotSatisfiable()
 
+                if start == end:  # safari sends this (weird?); don't 500
+                    partial_length = 0
+                    partial_request = True
+                    content = ''
+
                 # special case for bytes=0-
-                if start == 0 and end == ds.info.size:
+                elif start == 0 and end == (ds.info.size - 1):
                     # set chunksize and end so range headers can be set on response
                     partial_length= ds.info.size
 
                     content = ds.get_chunked_content()
 
                 # range with *NOT* full content requested
-                elif start != 0 or end != ds.info.size:
+                elif start != 0 or end != (ds.info.size - 1):
                     partial_request = True
                     partial_length = end - start
                     # chunksize = min(end - start, 4096)
@@ -184,36 +192,28 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
             # (but checksum not valid when sending partial content)
             if ds.checksum_type != 'DISABLED' and not partial_request:
                 response['ETag'] = ds.checksum
-                print '*** setting header: ETag=%s' % ds.checksum
-            # TODO: set last-modified header also, if it is not oto costly
-            # ds.created *may* be the creation date of this *version* of the datastream
-            # so this might be what we want, at least in some cases - (needs to be confirmed)
-            #response['Last-Modified'] = ds.created
+            # ds.created is the creation date of this *version* of the datastream,
+            # so it is effectively our last-modified date
+            response['Last-Modified'] = ds.created
 
             # Where available, set content length & MD5 checksum in response headers.
             # (but checksum not valid when sending partial content)
             if ds.checksum_type == 'MD5' and not partial_request:
                 response['Content-MD5'] = ds.checksum
-                print '*** setting header: Content-MD5=%s' % ds.checksum
             if ds.info.size and not range_request:
                 response['Content-Length'] = ds.info.size
-                print '*** setting header: Content-Length=%s' % ds.info.size
             if ds.info.size:
                 response['Accept-Ranges'] = 'bytes'
-                print '*** setting header: Accept-Ranges=bytes'
                 # response['Content-Range'] = '0,%d/%d' % (ds.info.size, ds.info.size)
 
             # if partial request, status should be 206 (even for whole file?)
             if range_request:
-            # if partial_request:
-                print 'status code 206'
                 response.status_code = 206
                 response['Content-Length'] = partial_length
-                print '*** setting header: Content-Length=%s' % partial_length
-                response['Content-Range'] = 'bytes %d-%d/%d' % (start, end, ds.info.size)
-                print '*** setting header: Content-Range=%s' % response['Content-Range']
-                response['Content-Transfer-Encoding'] = 'binary'
-
+                cont_range = 'bytes %d-%d/%d' % (start, end, ds.info.size)
+                response['Content-Range'] = cont_range
+                logger.debug('Content-Length=%s Content-Range=%s' % \
+                             (partial_length, cont_range))
 
             # set any user-specified headers that were passed in
             for header, val in headers.iteritems():
@@ -240,7 +240,7 @@ def get_range_content(ds, start, end, info):
     # NOTE: should there be a minimum also? e.g. don't want to chunk by 1
     # if we are grabbing content somewhere in the middle...
     if not end:
-        end = ds.info.size
+        end = ds.info.size - 1
         print '*** setting end to ds.info.size'
     chunksize = min(end - start, 4096)
     # sample chunk 370726-3005759
@@ -259,7 +259,7 @@ def get_range_content(ds, start, end, info):
         print 'end is less than start!!'
     if end > ds.info.size:
         print 'end is more than datastream size!!'
-        end = ds.info.size
+        end = ds.info.size - 1
 
     # TODO: need logic here to check that start is a multiple of chunksize
     # print 'chunksize = ', chunksize
