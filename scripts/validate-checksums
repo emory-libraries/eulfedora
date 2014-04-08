@@ -507,7 +507,7 @@ class ValidateChecksums(object):
             print "Error loading PREMIS datastream (%s/%s) to record fixity check event" % \
                     (obj.pid, premis_ds.id)
             self.stats['premis_errors'] += 1
-            self.premis_errors.append(pid)
+            self.premis_errors.append(obj.pid)
 
 
         event.id_type = 'UUID'
