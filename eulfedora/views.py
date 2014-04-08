@@ -210,7 +210,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
                 response.status_code = 206
                 response['Content-Length'] = partial_length
                 print '*** setting header: Content-Length=%s' % partial_length
-                response['Content-Range'] = 'bytes %d,%d/%d' % (start, end, ds.info.size)
+                response['Content-Range'] = 'bytes %d-%d/%d' % (start, end, ds.info.size)
                 print '*** setting header: Content-Range=%s' % response['Content-Range']
                 response['Content-Transfer-Encoding'] = 'binary'
 
