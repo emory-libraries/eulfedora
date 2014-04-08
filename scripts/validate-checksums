@@ -31,6 +31,7 @@ from rdflib.namespace import Namespace
 import signal
 import smtplib
 import StringIO
+import uuid
 
 from eulxml import xmlmap
 from eulxml.xmlmap import premis
@@ -39,6 +40,7 @@ from eulfedora import __version__
 from eulfedora.server import Repository
 from eulfedora.models import DigitalObject, Relation, DigitalObjectSaveFailure, \
     XmlDatastream
+from eulfedora.util import RequestFailed
 from eulfedora import cryptutil
 
 
@@ -119,6 +121,8 @@ class ValidateChecksums(object):
     save_errors = []
     #: list of pids with rels-ext errors
     relsext_errors = []
+    #: list of pids with premis errors
+    premis_errors = []
     #: list of error messages where any fedora error occurred
     fedora_errors = []
 
@@ -309,7 +313,8 @@ class ValidateChecksums(object):
             totals += ', %(ds_versions)d datastream version(s)' % self.stats
         print totals
         print '%(invalid)d invalid checksum(s)' % self.stats
-        print '%(save_errors)d save error(s), %(relsext_errors)d objects with RELS-EXT errors' % self.stats
+        print '''%(save_errors)d save error(s), %(relsext_errors)d object(s) with RELS-EXT errors,
+%(premis_errors)d object(s) with PREMIS errors''' % self.stats
 
         # send an email report if appropriate
         self.email_report()
@@ -493,23 +498,20 @@ class ValidateChecksums(object):
                     ', '.join(['%s: %s' % (k, v) for k, v in ds_results.iteritems()])
 
         # use appropriate version of premis to keep content valid
-        if isinstance(premis_ds.content, PremisV1):
-            event = PremisEventV1()
-        else:
-            event = PremisEvent()
+        try:
+            if isinstance(premis_ds.content, PremisV1):
+                event = PremisEventV1()
+            else:
+                event = PremisEvent()
+        except RequestFailed:
+            print "Error loading PREMIS datastream (%s/%s) to record fixity check event" % \
+                    (obj.pid, premis_ds.id)
+            self.stats['premis_errors'] += 1
+            self.premis_errors.append(pid)
 
-        event.id_type = 'local'
 
-        event_index = len(premis_ds.content.events) + 1
-
-        # generate event id based on premis object id if accessible
-        if premis_ds.content.object:
-            event_id = '%s.ev%03d' % (premis_ds.content.object.id, event_index)
-        # otherwise fall back to object id as base for event id
-        else:
-            event_id = '%s.ev%03d' % (obj.pid, event_index)
-
-        event.id = event_id
+        event.id_type = 'UUID'
+        event.id = uuid.uuid1()
         event.type = 'fixity check'
         event.date = datetime.datetime.now().isoformat()
         # event detail should be about the program generating the event
@@ -538,7 +540,7 @@ class ValidateChecksums(object):
 
         # if there are no errors or problems, don't send an email
         if not any([self.invalid, self.missing, self.save_errors,
-                    self.relsext_errors]):
+                    self.relsext_errors, self.premis_errors]):
             return
 
         # construct the body of the email
@@ -565,6 +567,10 @@ class ValidateChecksums(object):
         if self.relsext_errors:
             print >> output, '\nError updating the RELS-EXT for the following objects:'
             print >> output, '  ' + '\n  '.join(self.relsext_errors)
+
+        if self.premis_errors:
+            print >> output, '\nError adding PREMIS fixity event for the following objects:'
+            print >> output, '  ' + '\n  '.join(self.premis_errors)
 
         if self.fedora_errors:
             print >> output, '\nFedora errors when attempting to validate checksums:'
