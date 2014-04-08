@@ -508,7 +508,7 @@ class ValidateChecksums(object):
                     (obj.pid, premis_ds.id)
             self.stats['premis_errors'] += 1
             self.premis_errors.append(obj.pid)
-
+            return
 
         event.id_type = 'UUID'
         event.id = uuid.uuid1()
