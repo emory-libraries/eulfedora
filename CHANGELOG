@@ -8,6 +8,15 @@ any necessary information about installation or upgrade notes.
 0.22
 ----
 
+* A repository administrator can configure a script to periodically check
+  content checksums in order to identify integrity issues so that they can
+  be dealt with.
+* A repository administrator will receive an email notification if the system
+  encounters bad or missing checksums so that they can then resolve any
+  integrity issues.
+* A repository admin can view fixity check results for individual objects
+  in the premis data stream (for objects where premis exists) in order to
+  view a more detailed result and the history.
 * Support for *basic* HTTP Range requests in :meth:`eulfedora.views.raw_datastream`
   (e.g., to allow audio/video seek in HTML5 media players)
 
