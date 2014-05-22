@@ -18,7 +18,10 @@ from Crypto.Cipher import Blowfish as EncryptionAlgorithm
 import hashlib
 import logging
 
-from django.conf import settings
+try:
+    from django.conf import settings
+except ImportError:
+    settings = None
 
 logger = logging.getLogger(__name__)
 

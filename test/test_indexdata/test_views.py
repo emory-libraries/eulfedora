@@ -21,6 +21,7 @@ import unittest
 from django.conf import settings
 from django.http import Http404, HttpRequest
 from django.utils import simplejson
+from django.test import TestCase
 from django.test.utils import override_settings
 
 from eulfedora.indexdata.views import index_config, index_data
@@ -42,7 +43,7 @@ TEST_SOLR_URL = 'http://localhost:5555/'
 
 
 @override_settings(SOLR_SERVER_URL=TEST_SOLR_URL)
-class IndexDataViewsTest(unittest.TestCase):
+class IndexDataViewsTest(TestCase):
 
     def setUp(self):
         #Creation of a HTTP request object for tests.

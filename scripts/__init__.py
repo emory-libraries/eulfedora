@@ -1,5 +1,5 @@
 # file scripts/__init__.py
-# 
+#
 #   Copyright 2012 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,10 +22,6 @@ fedora-checksums
 **fedora-checksums** is a command line utility script to validate or
 repair datastream checksums for content stored in a Fedora Commons
 repository.
-
-.. Note::
-
-   Requires Python2.7 (due to use of :mod:`argparse`).
 
 The script has two basic modes: **validate** and **repair**.
 
@@ -75,5 +71,49 @@ more details, see the script usage for the appropriate mode::
   If the python package :mod:`progressbar` is available, progress will
   be displayed as objects are processed; however, :mod:`progressbar`
   is not required to run this script.
+
+
+----
+
+validate-checksums
+----------------
+
+**validate-checksums** is a command line utility script intended for
+regularly, periodically checking that datastream checksums are valid for
+content stored in a Fedora Commons repository.
+
+When a fixity check is completed, the objects will be updated with a
+RELS-EXT property indicating the date of the last fixity check, so that
+objects can be checked again after a specified period.
+
+The default logic is to find and process all objects without any fixity
+check date in the RELS-EXT (prioritizing objects with the oldest modification
+dates first, since these are likely to be most at risk), and then to find
+any objects whose last fixity check was before a specified window (e.g., 30 days).
+
+Because the script needs to run as a privileged fedora user (in order to access
+and make minor updates to all content), if you are configuring it to run as
+a cron job or similar, it is recommended to use the options to generate a config
+file and then load options from that config file when running under cron.
+
+For example, to generate a config file::
+
+  validate-checksums --generate-config /path/to/config.txt --fedora-password=#####
+
+Any arguments passed via the command line will be set in the generated
+config file; you must pass the password so it can be encrypted in the config
+file and decrypted for use.
+
+To update a config file from an earlier version of the script::
+
+  validate-checksums --config /old/config.txt --generate-config /new/config.txt
+
+This will preserve all settings in the old config file and generate a new config
+file with all new settings that are available in the script.
+
+To configure the script to send an email report when invalid or missing checksums
+are found or when there are any errors saving objects, you can specify email
+addresses, a from email address, and an smtp server via the command line or a
+config file.
 
 '''

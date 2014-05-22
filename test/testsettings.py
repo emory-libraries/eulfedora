@@ -1,5 +1,5 @@
 # file testsettings.py
-# 
+#
 #   Copyright 2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,5 +27,15 @@ INSTALLED_APPS = (
 
 FEDORA_FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    'test_fedora', 'fixtures')
+
+DATABASES = {
+    # default database - required for django
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3', # Add 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.
+        'NAME': 'test.db',                      # Or path to database file if using sqlite3.
+    }
+}
+
+EUL_INDEXER_ALLOWED_IPS = ['*']
 
 from localsettings import *
