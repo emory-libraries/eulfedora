@@ -5,6 +5,12 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+0.22
+----
+
+* Support for *basic* HTTP Range requests in :meth:`eulfedora.views.raw_datastream`
+  (e.g., to allow audio/video seek in HTML5 media players)
+
 0.21
 ----
 

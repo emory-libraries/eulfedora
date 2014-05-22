@@ -67,7 +67,8 @@ class FedoraViewsTest(unittest.TestCase):
         rqst = Mock()
         rqst.method = 'GET'
         # return empty headers for ETag condition check
-        rqst.META.get.return_value = None
+        rqst.META = {}
+        # rqst.META.get.return_value = None
 
         # DC
         response = raw_datastream(rqst, self.obj.pid, 'DC')
@@ -158,8 +159,115 @@ class FedoraViewsTest(unittest.TestCase):
                 % (expected, got))
         self.assertEqual('', response.content)
 
+    def test_raw_datastream_range(self):
+        # test http range requests
+        rqst = Mock()
+        rqst.method = 'GET'
+        rqst.META = {}
+
+        # use IMAGE for testing since it is binary content
+        # set range header in the request; bytes=0- : entire datastream
+        rqst.META['HTTP_RANGE'] = 'bytes=0-'
+
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        expected, got = 206, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for raw_datastream range request' \
+                % (expected, got))
+        self.assertEqual(self.obj.image.size, len(response.content),
+            'range request of bytes=0- should return entire content (expected %d, got %d)' \
+            % (self.obj.image.size, len(response.content)))
+        self.assertEqual(self.obj.image.size, int(response['Content-Length']),
+            'content-length header should be size of entire content (expected %d, got %d)' \
+            % (self.obj.image.size, int(response['Content-Length'])))
+        expected = 'bytes 0-%d/%d' % (self.obj.image.size - 1, self.obj.image.size)
+        self.assertEqual(expected, response['Content-Range'],
+            'content range response header should indicate bytes returned (expected %s, got %s)' \
+            % (expected, response['Content-Range']))
+        del response
+
+        # set range request for partial beginning content; bytes=0-150
+        bytes_requested = 'bytes=0-150'
+        rqst.META['HTTP_RANGE'] = bytes_requested
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        expected, got = 206, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for raw_datastream range request' \
+                % (expected, got))
+        content_len = 150
+        self.assertEqual(content_len, len(response.content),
+            'range request of %s should return %d bytes, got %d' \
+            % (bytes_requested, content_len, len(response.content)))
+        self.assertEqual(content_len, int(response['Content-Length']),
+            'content-length header should be set to partial size %d (got %d)' \
+            % (content_len, int(response['Content-Length'])))
+        expected = 'bytes 0-150/%d' % self.obj.image.size
+        self.assertEqual(expected, response['Content-Range'],
+            'content range response header should indicate bytes returned (expected %s, got %s)' \
+            % (expected, response['Content-Range']))
+
+        # set range request for partial middle content; bytes=10-150
+        bytes_requested = 'bytes=10-150'
+        rqst.META['HTTP_RANGE'] = bytes_requested
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        expected, got = 206, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for raw_datastream range request' \
+                % (expected, got))
+        content_len = 150 - 10
+        self.assertEqual(content_len, len(response.content),
+            'range request of %s should return %d bytes, got %d' \
+            % (bytes_requested, content_len, len(response.content)))
+        self.assertEqual(content_len, int(response['Content-Length']),
+            'content-length header should be set to partial size %d (got %d)' \
+            % (content_len, int(response['Content-Length'])))
+        expected = 'bytes 10-150/%d' % self.obj.image.size
+        self.assertEqual(expected, response['Content-Range'],
+            'content range response header should indicate bytes returned (expected %s, got %s)' \
+            % (expected, response['Content-Range']))
+
+        # set range request for partial end content; bytes=2000-3118
+        bytes_requested = 'bytes=2000-3118'
+        rqst.META['HTTP_RANGE'] = bytes_requested
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        expected, got = 206, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for raw_datastream range request' \
+                % (expected, got))
+        content_len = 3118 - 2000
+        self.assertEqual(content_len, len(response.content),
+            'range request of %s should return %d bytes, got %d' \
+            % (bytes_requested, content_len, len(response.content)))
+        self.assertEqual(content_len, int(response['Content-Length']),
+            'content-length header should be set to partial size %d (got %d)' \
+            % (content_len, int(response['Content-Length'])))
+        expected = 'bytes 2000-3118/%d' % self.obj.image.size
+        self.assertEqual(expected, response['Content-Range'],
+            'content range response header should indicate bytes returned (expected %s, got %s)' \
+            % (expected, response['Content-Range']))
+
+        # invalid or unsupported ranges should return 416, range not satisfiable
+        bytes_requested = 'bytes=10-9'  # start > end
+        rqst.META['HTTP_RANGE'] = bytes_requested
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        expected, got = 416, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for raw_datastream invalid range request %s' \
+                % (expected, got, bytes_requested))
+
+        # complex ranges not yet supported
+        bytes_requested = 'bytes=1-10,30-50'
+        rqst.META['HTTP_RANGE'] = bytes_requested
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        expected, got = 416, response.status_code
+        self.assertEqual(expected, got,
+            'Expected %s but returned %s for raw_datastream invalid range request %s' \
+                % (expected, got, bytes_requested))
+
+
     def test_datastream_etag(self):
         rqst = Mock()
+        rqst.META = {}
         # DC
         etag = datastream_etag(rqst, self.obj.pid, 'DC')
         self.assertEqual(self.obj.dc.checksum, etag)
@@ -167,6 +275,17 @@ class FedoraViewsTest(unittest.TestCase):
         # bogus dsid should not error
         etag = datastream_etag(rqst, self.obj.pid, 'bogus-datastream-id')
         self.assertEqual(None, etag)
+
+        # range request 1 to end should return etag
+        rqst.META = {'HTTP_RANGE': 'bytes=1-'}
+        etag = datastream_etag(rqst, self.obj.pid, 'DC')
+        self.assertEqual(self.obj.dc.checksum, etag)
+
+        # any other range request should NOT return etag
+        rqst.META = {'HTTP_RANGE': 'bytes=300-500'}
+        etag = datastream_etag(rqst, self.obj.pid, 'DC')
+        self.assertEqual(None, etag)
+
 
     def test_raw_audit_trail(self):
         rqst = Mock()

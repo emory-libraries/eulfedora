@@ -30,9 +30,10 @@ Using these views (in the simpler cases) should be as easy as::
 
 '''
 
+import logging
 
 from django.contrib.auth import views as authviews
-from django.http import HttpResponse, Http404
+from django.http import HttpResponse, Http404, HttpResponseBadRequest
 from django.views.decorators.http import require_http_methods, condition
 
 from eulfedora.util import RequestFailed
@@ -40,11 +41,27 @@ from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.cryptutil import encrypt
 
 
+logger = logging.getLogger(__name__)
+
+
+class HttpResponseRangeNotSatisfiable(HttpResponseBadRequest):
+    '''Custom version of :class:`~django.http.HttpResponseBadRequest`
+    to return a 416 response when a requested range cannot be satisfied.'''
+    status_code = 416
+
+
 def datastream_etag(request, pid, dsid, type=None, repo=None, **kwargs):
     '''Method suitable for use as an etag function with
     :class:`django.views.decorators.http.condition`.  Takes the same
     arguments as :meth:`~eulfedora.views.raw_datastream`.
     '''
+
+    # if a range is requested and it is not for the entire file,
+    # do *NOT* return an etag
+    if request.META.get('HTTP_RANGE', None) and \
+       request.META['HTTP_RANGE'] != 'bytes=1-':
+        return None
+
     try:
         if repo is None:
             repo = Repository()
@@ -99,6 +116,10 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
     if type is not None:
         get_obj_opts['type'] = type
     obj = repo.get_object(pid, **get_obj_opts)
+
+    range_request = False
+    partial_request = False
+
     try:
         # NOTE: we could test that pid is actually the requested
         # obj.has_requisite_content_models but that would mean
@@ -112,6 +133,54 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
             # headers can be useful, explicitly support HEAD requests
             if request.method == 'HEAD':
                 content = ''
+
+            elif request.META.get('HTTP_RANGE', None) is not None:
+                rng = request.META['HTTP_RANGE']
+                logger.debug('HTTP Range request: %s' % rng)
+                range_request = True
+                kind, numbers = rng.split('=')
+                if kind != 'bytes':
+                    return HttpResponseRangeNotSatisfiable()
+
+                try:
+                    start, end = numbers.split('-')
+                    # NOTE: could potentially be complicated stuff like
+                    # this: 0-999,1002-9999,1-9999
+                   # for now, only support the simple case of a single range
+                except:
+                    return HttpResponseRangeNotSatisfiable()
+
+                start = int(start)
+                if not end:
+                    end = ds.info.size - 1
+                else:
+                    end = int(end)
+
+                # ignore requests where end is before start
+                if end < start:
+                    return HttpResponseRangeNotSatisfiable()
+
+                if start == end:  # safari sends this (weird?); don't 500
+                    partial_length = 0
+                    partial_request = True
+                    content = ''
+
+                # special case for bytes=0-
+                elif start == 0 and end == (ds.info.size - 1):
+                    # set chunksize and end so range headers can be set on response
+                    # partial_length= ds.info.size
+                    partial_length = end - start
+
+                    content = ds.get_chunked_content()
+
+                # range with *NOT* full content requested
+                elif start != 0 or end != (ds.info.size - 1):
+                    partial_request = True
+                    partial_length = end - start
+                    # chunksize = min(end - start, 4096)
+                    # sample chunk 370726-3005759
+                    content = get_range_content(ds, start, end)
+
             else:
                 # get the datastream content in chunks, to handle larger datastreams
                 content = ds.get_chunked_content()
@@ -119,19 +188,38 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
                 # we actually want the raw datstream content.
 
             response = HttpResponse(content, mimetype=ds.mimetype)
+            # NOTE: might want to use StreamingHttpResponse here, at least
+            # over some size threshold or for range requests
+
             # if we have a checksum, use it as an ETag
-            if ds.checksum_type != 'DISABLED':
+            # (but checksum not valid when sending partial content)
+            if ds.checksum_type != 'DISABLED' and not partial_request:
                 response['ETag'] = ds.checksum
-            # TODO: set last-modified header also, if it is not too costly
-            # ds.created *may* be the creation date of this *version* of the datastream
-            # so this might be what we want, at least in some cases - (needs to be confirmed)
-            #response['Last-Modified'] = ds.created
+            # ds.created is the creation date of this *version* of the datastream,
+            # so it is effectively our last-modified date
+            response['Last-Modified'] = ds.created
 
             # Where available, set content length & MD5 checksum in response headers.
-            if ds.checksum_type == 'MD5':
+            # (but checksum not valid when sending partial content)
+            if ds.checksum_type == 'MD5' and not partial_request:
                 response['Content-MD5'] = ds.checksum
-            if ds.info.size:
+            if ds.info.size and not range_request:
                 response['Content-Length'] = ds.info.size
+            if ds.info.size:
+                response['Accept-Ranges'] = 'bytes'
+                # response['Content-Range'] = '0,%d/%d' % (ds.info.size, ds.info.size)
+
+            # if partial request, status should be 206 (even for whole file?)
+            if range_request:
+                response.status_code = 206
+                if partial_request:
+                    response['Content-Length'] = partial_length
+                else:
+                    response['Content-Length'] = ds.info.size
+                cont_range = 'bytes %d-%d/%d' % (start, end, ds.info.size)
+                response['Content-Range'] = cont_range
+                logger.debug('Content-Length=%s Content-Range=%s' % \
+                             (partial_length, cont_range))
 
             # set any user-specified headers that were passed in
             for header, val in headers.iteritems():
@@ -151,6 +239,70 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
 
         # for anything else, re-raise & let Django's default 500 logic handle it
         raise
+
+def get_range_content(ds, start, end):
+    '''Generator for range-requested datastream content.  Iterates over
+    datastream content in chunks, and yields the chunks (or partial chunks)
+    that are part of the requested range.'''
+    if not end or end > ds.info.size:
+        end = ds.info.size - 1
+    chunksize = 4096
+
+    content_chunks = ds.get_chunked_content(chunksize=chunksize)
+    length = 0
+    for i in range(end/chunksize + 10):
+        chunk_start = chunksize  * i
+        chunk_end = chunk_start + chunksize
+
+        # probably shouldn't run out of data, but in case data doesn't
+        # match datastream metadata size in fedora...
+        try:
+            content = content_chunks.next()
+        except StopIteration:
+            break
+
+        real_chunksize = len(content)
+
+        if chunk_start <= start < chunk_end:
+            # start of range is somewhere in the current chunk
+            # get the section of requested content at start index
+            content = content[start - chunk_start:]
+
+            # range could also *end* in same chunk where it starts
+            if chunk_start < end <= chunk_end:
+
+                # trim based on *actual* size of current chunk (before any
+                # start trim), since last chunk may not be fullsize
+                end_trim = -(chunk_start + real_chunksize - end)
+                if end_trim:
+                    content = content[:end_trim]
+                length += len(content)
+                yield content
+
+                # stop - hit the end of the range
+                break
+            else:
+                length += len(content)
+                yield content
+
+        elif chunk_start < end <= chunk_end:
+            # end of range is in this chunk; trim if necessary, then stop
+
+            # trim based on *actual* size of current chunk (before any
+            # start trimming), since last chunk may not be fullsize
+            content = content[:-(chunk_start + real_chunksize - end)]
+
+            length += len(content)
+            yield content
+            # stop - hit the end of the range
+            break
+
+        elif chunk_start > start  and chunk_end < end:
+            # chunk is somewhere in the range of start - end
+            length += len(content)
+            yield content
+
+    logger.debug('total content length returned is %d' % length)
 
 
 @require_http_methods(['GET'])
