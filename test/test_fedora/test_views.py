@@ -169,7 +169,8 @@ class FedoraViewsTest(unittest.TestCase):
         # set range header in the request; bytes=0- : entire datastream
         rqst.META['HTTP_RANGE'] = 'bytes=0-'
 
-        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE',
+                                  accept_range_request=True)
         expected, got = 206, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream range request' \
@@ -189,7 +190,8 @@ class FedoraViewsTest(unittest.TestCase):
         # set range request for partial beginning content; bytes=0-150
         bytes_requested = 'bytes=0-150'
         rqst.META['HTTP_RANGE'] = bytes_requested
-        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE',
+                                  accept_range_request=True)
         expected, got = 206, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream range request' \
@@ -209,7 +211,8 @@ class FedoraViewsTest(unittest.TestCase):
         # set range request for partial middle content; bytes=10-150
         bytes_requested = 'bytes=10-150'
         rqst.META['HTTP_RANGE'] = bytes_requested
-        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE',
+                                  accept_range_request=True)
         expected, got = 206, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream range request' \
@@ -229,7 +232,8 @@ class FedoraViewsTest(unittest.TestCase):
         # set range request for partial end content; bytes=2000-3118
         bytes_requested = 'bytes=2000-3118'
         rqst.META['HTTP_RANGE'] = bytes_requested
-        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE',
+                                  accept_range_request=True)
         expected, got = 206, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream range request' \
@@ -249,7 +253,8 @@ class FedoraViewsTest(unittest.TestCase):
         # invalid or unsupported ranges should return 416, range not satisfiable
         bytes_requested = 'bytes=10-9'  # start > end
         rqst.META['HTTP_RANGE'] = bytes_requested
-        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE',
+                                  accept_range_request=True)
         expected, got = 416, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream invalid range request %s' \
@@ -258,7 +263,8 @@ class FedoraViewsTest(unittest.TestCase):
         # complex ranges not yet supported
         bytes_requested = 'bytes=1-10,30-50'
         rqst.META['HTTP_RANGE'] = bytes_requested
-        response = raw_datastream(rqst, self.obj.pid, 'IMAGE')
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE',
+                                  accept_range_request=True)
         expected, got = 416, response.status_code
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream invalid range request %s' \
@@ -283,7 +289,7 @@ class FedoraViewsTest(unittest.TestCase):
 
         # any other range request should NOT return etag
         rqst.META = {'HTTP_RANGE': 'bytes=300-500'}
-        etag = datastream_etag(rqst, self.obj.pid, 'DC')
+        etag = datastream_etag(rqst, self.obj.pid, 'DC', accept_range_request=True)
         self.assertEqual(None, etag)
 
 

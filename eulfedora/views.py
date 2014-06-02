@@ -50,7 +50,8 @@ class HttpResponseRangeNotSatisfiable(HttpResponseBadRequest):
     status_code = 416
 
 
-def datastream_etag(request, pid, dsid, type=None, repo=None, **kwargs):
+def datastream_etag(request, pid, dsid, type=None, repo=None,
+                    accept_range_request=False, **kwargs):
     '''Method suitable for use as an etag function with
     :class:`django.views.decorators.http.condition`.  Takes the same
     arguments as :meth:`~eulfedora.views.raw_datastream`.
@@ -58,7 +59,7 @@ def datastream_etag(request, pid, dsid, type=None, repo=None, **kwargs):
 
     # if a range is requested and it is not for the entire file,
     # do *NOT* return an etag
-    if request.META.get('HTTP_RANGE', None) and \
+    if accept_range_request and request.META.get('HTTP_RANGE', None) and \
        request.META['HTTP_RANGE'] != 'bytes=1-':
         return None
 
@@ -80,7 +81,8 @@ def datastream_etag(request, pid, dsid, type=None, repo=None, **kwargs):
 
 @condition(etag_func=datastream_etag)
 @require_http_methods(['GET', 'HEAD'])
-def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
+def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
+                   accept_range_request=False):
     '''View to display a raw datastream that belongs to a Fedora Object.
     Returns an :class:`~django.http.HttpResponse` with the response content
     populated with the content of the datastream.  The following HTTP headers
@@ -107,6 +109,8 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
     :param repo: :class:`~eulcore.django.fedora.server.Repository` instance to use,
         in case your application requires custom repository initialization (optional)
     :param headers: dictionary of additional headers to include in the response
+    :param accept_range_request: enable HTTP Range requests (disabled by default)
+
     '''
 
     if repo is None:
@@ -134,7 +138,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
             if request.method == 'HEAD':
                 content = ''
 
-            elif request.META.get('HTTP_RANGE', None) is not None:
+            elif accept_range_request and request.META.get('HTTP_RANGE', None) is not None:
                 rng = request.META['HTTP_RANGE']
                 logger.debug('HTTP Range request: %s' % rng)
                 range_request = True
@@ -205,7 +209,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={}):
                 response['Content-MD5'] = ds.checksum
             if ds.info.size and not range_request:
                 response['Content-Length'] = ds.info.size
-            if ds.info.size:
+            if ds.info.size and accept_range_request:
                 response['Accept-Ranges'] = 'bytes'
                 # response['Content-Range'] = '0,%d/%d' % (ds.info.size, ds.info.size)
 
@@ -320,7 +324,6 @@ def raw_audit_trail(request, pid, type=None, repo=None):
     :param pid: Fedora object PID
     :param repo: :class:`~eulcore.django.fedora.server.Repository` instance to use,
         in case your application requires custom repository initialization (optional)
-
 
     .. Note::
 
