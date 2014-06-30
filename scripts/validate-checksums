@@ -484,12 +484,18 @@ class ValidateChecksums(object):
             if self.args.all_versions:
                 detailed_info = 'Datastream results: '
                 details = []
-                ds_counts = defaultdict(int)
                 for dsid, results in ds_results.iteritems():
+                    ds_counts = defaultdict(int)
                     for r in results:
                         ds_counts[r] += 1
-                    details.append('%s: %d valid, %d missing, %d invalid' % \
-                        (dsid, ds_counts['valid'], ds_counts['missing'], ds_counts['invalid']))
+                    ds_info = []
+                    for result_type in ['valid', 'missing', 'invalid']:
+                        if ds_counts[result_type]:
+                            # i.e. '%(missing)d missing'
+                            template = '%%(%s)d %s' % (result_type, result_type)
+                            ds_info.append(template % ds_counts)
+
+                    details.append('%s: %s' % (dsid, ', '.join(ds_info)))
 
                 detailed_info = 'Datastream results: %s' % ', '.join(details)
 
