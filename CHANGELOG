@@ -5,6 +5,12 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+0.22.2
+------
+
+* bugfix: correction in detailed output for validate-checksum script when
+  all versions are checked and at least one checksum is invalid
+
 0.22.1
 ------
 
