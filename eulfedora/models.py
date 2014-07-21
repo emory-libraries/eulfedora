@@ -847,28 +847,37 @@ class Relation(object):
         self.ns_prefix = ns_prefix
         self.rdf_type = rdf_type
         self.related_name = related_name
+        self.uri_val = None
 
     def __get__(self, obj, objtype):
         if obj is None:
             return self
 
-        # no caching on related objects for now
-        uri_val = obj.rels_ext.content.value(subject=obj.uriref,
+        #  if related object has already been cached, use the cached copy
+        if self.uri_val is not None and obj.relcache.get(self.uri_val, None) is not None:
+            return obj.relcache[self.uri_val]
+
+        # otherwise: lookup, add to cache, and return
+        self.uri_val = obj.rels_ext.content.value(subject=obj.uriref,
                                          predicate=self.relation)
-        if uri_val and self.object_type:    # don't init new object if val is None
+        if self.uri_val and self.object_type:    # don't init new object if val is None
             # special case: if object_type is the string 'self',
             # use the parent object class (save after the first check)
             if self.object_type == 'self':
                 self.object_type = obj.__class__
 
             # need get_object wrapper method on digital object
-            return obj.get_object(uri_val, type=self.object_type)
+            result = obj.get_object(self.uri_val, type=self.object_type)
+
         # if the value has 'toPython' method (e.g., rdflib.Literal),
         # return the result of that conversion
-        elif hasattr(uri_val, 'toPython'):
-            return uri_val.toPython()
+        elif hasattr(self.uri_val, 'toPython'):
+            result = self.uri_val.toPython()
         else:
-            return uri_val
+            result = self.uri_val
+
+        obj.relcache[self.uri_val] = result
+        return obj.relcache[self.uri_val]
 
     def __set__(self, obj, subject):
         # if any namespace prefixes were specified, bind them before adding the tuple
@@ -893,6 +902,9 @@ class Relation(object):
             self.relation,
             subject_uri
         ))
+
+        # store updated value in cache
+        obj.relcache[self.uri_val] = subject
 
     def __delete__(self, obj):
         # find the subject uri and remove from rels-ext
@@ -1081,6 +1093,7 @@ class DigitalObject(object):
     def __init__(self, api, pid=None, create=False, default_pidspace=None):
         self.api = api
         self.dscache = {}       # accessed by DatastreamDescriptor to store and cache datastreams
+        self.relcache = {}      # used by Relation to store and cache related objects
         self._risearch = None
         self._adhoc_datastreams = {}
         # per-object ad-hoc datastreams parallel to per-class _defined_datastreams
@@ -1568,7 +1581,8 @@ class DigitalObject(object):
         self._create = False
         self._info = None
         self.info_modified = False
-        self.dscache = {}
+        self.dscache = {}     # cache for datastreams that have been retrieved
+        self.relcache = {}    # cache for related objects that have been retrieved
 
     def _build_foxml_for_ingest(self, pretty=False):
         doc = self._build_foxml_doc()
