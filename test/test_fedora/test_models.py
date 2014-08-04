@@ -904,6 +904,68 @@ class TestDigitalObject(FedoraTestCase):
         # convert first added relationship to rdflib statement to check that it is in the rdf graph
         st = (self.obj.uriref, relsext.isMemberOf, related.uriref)
         self.assertTrue(st in rels)
+    
+    def test_purge_relationships(self):
+        # purge relation from a resource, by digital object
+        related = models.DigitalObject(self.api, "foo:123")
+        self.obj.add_relationship(relsext.isMemberOf, related)        
+        purged = self.obj.purge_relationship(relsext.isMemberOf, related)
+        self.assertTrue(purged, "add relationship should return True on success, got %s" % purged)
+        rels_ext, url = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
+        self.assert_("isMemberOf" not in rels_ext)
+        self.assert_(related.uri not in rels_ext)  # should be full uri, not just pid
+
+        # purge relation from a resource, by string
+        collection_uri = "info:fedora/foo:456"
+        self.obj.add_relationship(relsext.isMemberOfCollection, collection_uri)
+        self.obj.purge_relationship(relsext.isMemberOfCollection, collection_uri)
+        rels_ext, url = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
+        self.assert_("isMemberOfCollection" not in rels_ext)
+        self.assert_(collection_uri not in rels_ext)
+
+        # purge relation to a literal
+        self.obj.add_relationship('info:fedora/example:owner', "testuser")
+        self.obj.purge_relationship('info:fedora/example:owner', "testuser")
+        rels_ext, url = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
+        self.assert_("owner" not in rels_ext)
+        self.assert_("testuser" not in rels_ext)
+
+        rels = self.obj.rels_ext.content
+        # convert first added relationship to rdflib statement to check that it is NOT in the rdf graph
+        st = (self.obj.uriref, relsext.isMemberOf, related.uriref)
+        self.assertTrue(st not in rels)
+
+    def test_modify_relationships(self):    	
+        # modify a pre-existing relation to a resource, by digital object
+        old_related = models.DigitalObject(self.api, "foo:1234")        
+        new_related = models.DigitalObject(self.api, "foo:5678")
+        self.obj.add_relationship(relsext.isMemberOf, old_related)
+        modified = self.obj.modify_relationship(relsext.isMemberOf, old_related, new_related)
+        self.assertTrue(modified, "modify relationship should return True on success, got %s" % modified)
+        rels_ext, url = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
+        self.assert_("isMemberOf" in rels_ext)
+        self.assert_(new_related.uri in rels_ext)  # should be full uri, not just pid
+
+        # modify a pre-existing relation, by string
+        old_collection_uri = "info:fedora/foo:8765"
+        new_collection_uri = "info:fedora/foo:4321"
+        self.obj.add_relationship(relsext.isMemberOfCollection, old_collection_uri)
+        self.obj.modify_relationship(relsext.isMemberOfCollection, old_collection_uri, new_collection_uri)
+        rels_ext, url = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
+        self.assert_("isMemberOfCollection" in rels_ext)
+        self.assert_(new_collection_uri in rels_ext)
+
+        # modify a relation to a literal
+        self.obj.add_relationship('info:fedora/example:owner', "old_testuser")
+        self.obj.modify_relationship('info:fedora/example:owner', "old_testuser", "new_testuser")
+        rels_ext, url = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
+        self.assert_("owner" in rels_ext)
+        self.assert_("new_testuser" in rels_ext)
+
+        rels = self.obj.rels_ext.content
+        # convert first modified relationship to rdflib statement to check that it is in the rdf graph
+        st = (self.obj.uriref, relsext.isMemberOf, new_related.uriref)
+        self.assertTrue(st in rels)    
 
     def test_registry(self):
         self.assert_('test.test_fedora.test_models.MyDigitalObject' in
