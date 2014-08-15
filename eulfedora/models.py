@@ -1829,7 +1829,6 @@ class DigitalObject(object):
 
             return dsobj
 
-
     def add_relationship(self, rel_uri, object):
         """
         Add a new relationship to the RELS-EXT for this object.
@@ -1864,6 +1863,102 @@ class DigitalObject(object):
         self._ds_list = None
 
         return self.api.addRelationship(self.pid, self.uri, rel_uri, object, obj_is_literal)
+
+    def purge_relationship(self, rel_uri, object):
+        """
+        Purge a relationship from RELS-EXT for this object.
+        Calls :meth:`API_M.purgeRelationship`.
+
+        Example usage::
+
+            isMemberOfCollection = 'info:fedora/fedora-system:def/relations-external#isMemberOfCollection'
+            collection_uri = 'info:fedora/foo:789'
+            object.purge_relationship(isMemberOfCollection, collection_uri)
+
+        :param rel_uri: URI for the existing relationship
+        :param object: related object; can be :class:`DigitalObject` or string; if
+                        string begins with info:fedora/ it will be treated as
+                        a resource, otherwise it will be treated as a literal
+        :rtype: boolean
+        """
+        if isinstance(rel_uri, URIRef):
+            rel_uri = unicode(rel_uri)
+
+        obj_is_literal = True
+        if isinstance(object, DigitalObject):
+            object = object.uri
+            obj_is_literal = False
+        elif isinstance(object, str) and object.startswith('info:fedora/'):
+            obj_is_literal = False
+
+        # this call will change RELS-EXT, possibly creating it if it's
+        # missing. remove any cached info we have for that datastream.
+        if 'RELS-EXT' in self.dscache:
+            del self.dscache['RELS-EXT']
+        self._ds_list = None
+
+        return self.api.purgeRelationship(self.pid, self.uri, rel_uri, object, obj_is_literal)
+
+    def modify_relationship(self, rel_uri, old_object, new_object):
+        """
+        Modify a relationship from RELS-EXT for this object.  As the Fedora API-M does not contain
+        a native "modifyRelationship", this method purges an existing one, then adds a new one,
+        pivoting on the predicate.
+        Calls :meth:`API_M.purgeRelationship`, :meth:`API_M.addRelationship`
+
+        Example usage::
+
+            predicate = 'info:fedora/fedora-system:def/relations-external#isMemberOfCollection'
+            old_object = 'info:fedora/foo:456'
+            new_object = 'info:fedora/foo:789'
+            
+            object.modify_relationship(predicate, old_object, new_object)
+
+        :param rel_uri: URI for the existing relationship
+        :param old_object: previous target object for relationship; can be 
+        				:class:`DigitalObject` or string; if string begins with info:fedora/ it 
+        				will be treated as a resource, otherwise it will be treated as a literal
+        :param new_object: new target object for relationship; can be 
+        				:class:`DigitalObject` or string; if string begins with info:fedora/ it 
+        				will be treated as a resource, otherwise it will be treated as a literal
+        :rtype: boolean
+        """
+
+        if isinstance(rel_uri, URIRef):
+            rel_uri = unicode(rel_uri)
+
+        # old_object
+        obj_old_is_literal = True
+        if isinstance(old_object, DigitalObject):
+            old_object = old_object.uri
+            obj_old_is_literal = False
+        elif isinstance(old_object, str) and old_object.startswith('info:fedora/'):
+            obj_old_is_literal = False
+
+        # new_object
+        obj_new_is_literal = True
+        if isinstance(new_object, DigitalObject):
+            new_object = new_object.uri
+            obj_new_is_literal = False
+        elif isinstance(new_object, str) and new_object.startswith('info:fedora/'):
+            obj_new_is_literal = False
+
+        # this call will change RELS-EXT, possibly creating it if it's
+        # missing. remove any cached info we have for that datastream.
+        if 'RELS-EXT' in self.dscache:
+            del self.dscache['RELS-EXT']
+        self._ds_list = None
+        
+        # attempt purge        
+        if self.api.purgeRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal) != True:        	
+        	return False
+        # attempt add
+        elif self.api.addRelationship(self.pid, self.uri, rel_uri, new_object, obj_new_is_literal) != True:
+        	# if addRelationship fails, rollback to old_object        	
+        	result = self.api.addRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal)
+        	return False
+    	else:
+    		return True
 
     def has_model(self, model):
         """
