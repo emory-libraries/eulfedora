@@ -5,6 +5,17 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+0.23
+----
+
+* Related objects accessed via :class:`~eulfedora.models.Relation` are now
+  cached for efficiency, similar to the way datastreams are cached on
+  :class:`~eulfedora.models.DigitalObject`.
+* Methods :meth:`~eulfedora.models.DigitalObject.purge_relationship` and
+  :meth:`~eulfedora.models.DigitalObject.modify_relationship` added to
+  :class:`~eulfedora.models.DigitalObject`.
+  Contributed by `Graham Hukill @ghukill <https://github.com/ghukill>`_.
+
 0.22.2
 ------
 

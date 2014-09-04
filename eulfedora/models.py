@@ -847,28 +847,37 @@ class Relation(object):
         self.ns_prefix = ns_prefix
         self.rdf_type = rdf_type
         self.related_name = related_name
+        self.uri_val = None
 
     def __get__(self, obj, objtype):
         if obj is None:
             return self
 
-        # no caching on related objects for now
-        uri_val = obj.rels_ext.content.value(subject=obj.uriref,
+        #  if related object has already been cached, use the cached copy
+        if self.uri_val is not None and obj.relcache.get(self.uri_val, None) is not None:
+            return obj.relcache[self.uri_val]
+
+        # otherwise: lookup, add to cache, and return
+        self.uri_val = obj.rels_ext.content.value(subject=obj.uriref,
                                          predicate=self.relation)
-        if uri_val and self.object_type:    # don't init new object if val is None
+        if self.uri_val and self.object_type:    # don't init new object if val is None
             # special case: if object_type is the string 'self',
             # use the parent object class (save after the first check)
             if self.object_type == 'self':
                 self.object_type = obj.__class__
 
             # need get_object wrapper method on digital object
-            return obj.get_object(uri_val, type=self.object_type)
+            result = obj.get_object(self.uri_val, type=self.object_type)
+
         # if the value has 'toPython' method (e.g., rdflib.Literal),
         # return the result of that conversion
-        elif hasattr(uri_val, 'toPython'):
-            return uri_val.toPython()
+        elif hasattr(self.uri_val, 'toPython'):
+            result = self.uri_val.toPython()
         else:
-            return uri_val
+            result = self.uri_val
+
+        obj.relcache[self.uri_val] = result
+        return obj.relcache[self.uri_val]
 
     def __set__(self, obj, subject):
         # if any namespace prefixes were specified, bind them before adding the tuple
@@ -893,6 +902,9 @@ class Relation(object):
             self.relation,
             subject_uri
         ))
+
+        # store updated value in cache
+        obj.relcache[self.uri_val] = subject
 
     def __delete__(self, obj):
         # find the subject uri and remove from rels-ext
@@ -1081,6 +1093,7 @@ class DigitalObject(object):
     def __init__(self, api, pid=None, create=False, default_pidspace=None):
         self.api = api
         self.dscache = {}       # accessed by DatastreamDescriptor to store and cache datastreams
+        self.relcache = {}      # used by Relation to store and cache related objects
         self._risearch = None
         self._adhoc_datastreams = {}
         # per-object ad-hoc datastreams parallel to per-class _defined_datastreams
@@ -1568,7 +1581,8 @@ class DigitalObject(object):
         self._create = False
         self._info = None
         self.info_modified = False
-        self.dscache = {}
+        self.dscache = {}     # cache for datastreams that have been retrieved
+        self.relcache = {}    # cache for related objects that have been retrieved
 
     def _build_foxml_for_ingest(self, pretty=False):
         doc = self._build_foxml_doc()
@@ -1829,7 +1843,6 @@ class DigitalObject(object):
 
             return dsobj
 
-
     def add_relationship(self, rel_uri, object):
         """
         Add a new relationship to the RELS-EXT for this object.
@@ -1864,6 +1877,102 @@ class DigitalObject(object):
         self._ds_list = None
 
         return self.api.addRelationship(self.pid, self.uri, rel_uri, object, obj_is_literal)
+
+    def purge_relationship(self, rel_uri, object):
+        """
+        Purge a relationship from RELS-EXT for this object.
+        Calls :meth:`API_M.purgeRelationship`.
+
+        Example usage::
+
+            isMemberOfCollection = 'info:fedora/fedora-system:def/relations-external#isMemberOfCollection'
+            collection_uri = 'info:fedora/foo:789'
+            object.purge_relationship(isMemberOfCollection, collection_uri)
+
+        :param rel_uri: URI for the existing relationship
+        :param object: related object; can be :class:`DigitalObject` or string; if
+                        string begins with info:fedora/ it will be treated as
+                        a resource, otherwise it will be treated as a literal
+        :rtype: boolean
+        """
+        if isinstance(rel_uri, URIRef):
+            rel_uri = unicode(rel_uri)
+
+        obj_is_literal = True
+        if isinstance(object, DigitalObject):
+            object = object.uri
+            obj_is_literal = False
+        elif isinstance(object, str) and object.startswith('info:fedora/'):
+            obj_is_literal = False
+
+        # this call will change RELS-EXT, possibly creating it if it's
+        # missing. remove any cached info we have for that datastream.
+        if 'RELS-EXT' in self.dscache:
+            del self.dscache['RELS-EXT']
+        self._ds_list = None
+
+        return self.api.purgeRelationship(self.pid, self.uri, rel_uri, object, obj_is_literal)
+
+    def modify_relationship(self, rel_uri, old_object, new_object):
+        """
+        Modify a relationship from RELS-EXT for this object.  As the Fedora API-M does not contain
+        a native "modifyRelationship", this method purges an existing one, then adds a new one,
+        pivoting on the predicate.
+        Calls :meth:`API_M.purgeRelationship`, :meth:`API_M.addRelationship`
+
+        Example usage::
+
+            predicate = 'info:fedora/fedora-system:def/relations-external#isMemberOfCollection'
+            old_object = 'info:fedora/foo:456'
+            new_object = 'info:fedora/foo:789'
+            
+            object.modify_relationship(predicate, old_object, new_object)
+
+        :param rel_uri: URI for the existing relationship
+        :param old_object: previous target object for relationship; can be 
+        				:class:`DigitalObject` or string; if string begins with info:fedora/ it 
+        				will be treated as a resource, otherwise it will be treated as a literal
+        :param new_object: new target object for relationship; can be 
+        				:class:`DigitalObject` or string; if string begins with info:fedora/ it 
+        				will be treated as a resource, otherwise it will be treated as a literal
+        :rtype: boolean
+        """
+
+        if isinstance(rel_uri, URIRef):
+            rel_uri = unicode(rel_uri)
+
+        # old_object
+        obj_old_is_literal = True
+        if isinstance(old_object, DigitalObject):
+            old_object = old_object.uri
+            obj_old_is_literal = False
+        elif isinstance(old_object, str) and old_object.startswith('info:fedora/'):
+            obj_old_is_literal = False
+
+        # new_object
+        obj_new_is_literal = True
+        if isinstance(new_object, DigitalObject):
+            new_object = new_object.uri
+            obj_new_is_literal = False
+        elif isinstance(new_object, str) and new_object.startswith('info:fedora/'):
+            obj_new_is_literal = False
+
+        # this call will change RELS-EXT, possibly creating it if it's
+        # missing. remove any cached info we have for that datastream.
+        if 'RELS-EXT' in self.dscache:
+            del self.dscache['RELS-EXT']
+        self._ds_list = None
+        
+        # attempt purge        
+        if self.api.purgeRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal) != True:        	
+        	return False
+        # attempt add
+        elif self.api.addRelationship(self.pid, self.uri, rel_uri, new_object, obj_new_is_literal) != True:
+        	# if addRelationship fails, rollback to old_object        	
+        	result = self.api.addRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal)
+        	return False
+    	else:
+    		return True
 
     def has_model(self, model):
         """
