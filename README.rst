@@ -1,5 +1,13 @@
-README
-======
+EULFedora
+=========
+
+   
+.. image:: https://pypip.in/version/eulfedora/badge.png  
+   :target: https://pypi.python.org/pypi/eulfedora
+
+.. image:: https://pypip.in/license/eulfedora/badge.png
+
+.. image:: https://pypip.in/download/eulfedora/badge.png
 
 EULfedora is a `Python <http://www.python.org/>`_ module that provides
 utilities, API wrappers, and classes for interacting with the
