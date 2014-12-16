@@ -71,6 +71,9 @@ from eulfedora.util import RequestFailed
 
 logger = logging.getLogger(__name__)
 
+# set a flag to indicate to nosetests that this should not be run as a test
+__test__ = False
+
 
 class FedoraTestWrapper(object):
     '''A `context manager <http://docs.python.org/library/stdtypes.html#context-manager-types>`_
