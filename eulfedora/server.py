@@ -59,13 +59,13 @@ the configured Fedora credentials should use the following settings::
 
 from urllib import urlencode
 import logging
+import requests
 import warnings
 
 from eulfedora.rdfns import model as modelns
-from eulfedora.api import HTTP_API_Base, ApiFacade, ResourceIndex
+from eulfedora.api import ApiFacade, ResourceIndex
 from eulfedora.models import DigitalObject
-from eulfedora.util import AuthorizingServerConnection, \
-     RelativeServerConnection, parse_xml_object, RequestFailed
+from eulfedora.util import RelativeServerConnection, parse_xml_object, RequestFailed
 from eulfedora.xml import SearchResults, NewPids
 
 logger = logging.getLogger(__name__)
@@ -144,16 +144,18 @@ class Repository(object):
         global _connection
         # when initialized via django, settings should be pulled from django conf
         if root is None:
-            # if global connection is not set yet, initialize it
-            if _connection is None:
-                init_pooled_connection()
-            root = _connection
 
-            # if username and password are not set, attempt to pull from django conf
-            if username is None and password is None:
-                try:
-                    from django.conf import settings
-                    from eulfedora import cryptutil
+            try:
+                from django.conf import settings
+                from eulfedora import cryptutil
+
+                root = getattr(settings, 'FEDORA_ROOT', None)
+                if root is None:
+                    raise Exception('Cannot initialize a Fedora connection without specifying ' +
+                        'Fedora root url directly or in Django settings as FEDORA_ROOT')
+
+                # if username and password are not set, attempt to pull from django conf
+                if username is None and password is None:
 
                     if request is not None and request.user.is_authenticated() and \
                        FEDORA_PASSWORD_SESSION_KEY in request.session:
@@ -165,20 +167,19 @@ class Repository(object):
                         if password is None and hasattr(settings, 'FEDORA_PASSWORD'):
                             password = settings.FEDORA_PASSWORD
 
-                    if hasattr(settings, 'FEDORA_PIDSPACE'):
-                        self.default_pidspace = settings.FEDORA_PIDSPACE
+                if hasattr(settings, 'FEDORA_PIDSPACE'):
+                    self.default_pidspace = settings.FEDORA_PIDSPACE
 
-                except ImportError:
-                    pass
+            except ImportError:
+                pass
 
         if root is None:
             raise Exception('Could not determine Fedora root url from django settings or parameter')
 
         logger.debug("Connecting to fedora at %s %s" % (root,
                       'as %s' % username if username else '(no user credentials)'))
-        self.opener = AuthorizingServerConnection(root, username, password)
-        self.api = ApiFacade(self.opener)
-        self.fedora_root = self.opener.base_url
+        self.api = ApiFacade(root, username, password)
+        self.fedora_root = self.api.base_url
 
         self.username = username
         self.password = password
@@ -188,7 +189,7 @@ class Repository(object):
     def risearch(self):
         "instance of :class:`eulfedora.api.ResourceIndex`, with the same root url and credentials"
         if self._risearch is None:
-            self._risearch = ResourceIndex(self.opener)
+            self._risearch = ResourceIndex(self.fedora_root, self.username, self.password)
         return self._risearch
 
     def get_next_pid(self, namespace=None, count=None):
@@ -217,8 +218,8 @@ class Repository(object):
 
         if count:
             kwargs['numPIDs'] = count
-        data, url = self.api.getNextPID(**kwargs)
-        nextpids = parse_xml_object(NewPids, data, url)
+        r = self.api.getNextPID(**kwargs)
+        nextpids = parse_xml_object(NewPids, r.content, r.url)
 
         if count is None:
             return nextpids.pids[0]
@@ -238,7 +239,8 @@ class Repository(object):
         kwargs = { 'text': text }
         if log_message:
             kwargs['logMessage'] = log_message
-        return self.api.ingest(**kwargs)
+        r = self.api.ingest(**kwargs)
+        return r.content
 
     def purge_object(self, pid, log_message=None):
         """
@@ -251,8 +253,8 @@ class Repository(object):
         kwargs = { 'pid': pid }
         if log_message:
             kwargs['logMessage'] = log_message
-        success, timestamp = self.api.purgeObject(**kwargs)
-        return success
+        r = self.api.purgeObject(**kwargs)
+        return r.status_code == requests.codes.ok
 
     def get_objects_with_cmodel(self, cmodel_uri, type=None):
         """
@@ -434,15 +436,15 @@ class Repository(object):
             query = ' '.join(conditions)
             find_opts['query'] = query
 
-        data, url = self.api.findObjects(**find_opts)
-        chunk = parse_xml_object(SearchResults, data, url)
+        r = self.api.findObjects(**find_opts)
+        chunk = parse_xml_object(SearchResults, r.content, r.url)
         while True:
             for result in chunk.results:
                 yield type(self.api, result.pid)
 
             if chunk.session_token:
-                data, url = self.api.findObjects(session_token=chunk.session_token, **find_opts)
-                chunk = parse_xml_object(SearchResults, data, url)
+                r = self.api.findObjects(session_token=chunk.session_token, **find_opts)
+                chunk = parse_xml_object(SearchResults, r.content, r.url)
             else:
                 break
 

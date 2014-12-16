@@ -73,6 +73,7 @@ class FedoraViewsTest(unittest.TestCase):
         # DC
         response = raw_datastream(rqst, self.obj.pid, 'DC')
         expected, got = 200, response.status_code
+        content = response.content
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream view of DC' \
                 % (expected, got))
@@ -83,7 +84,7 @@ class FedoraViewsTest(unittest.TestCase):
         self.assertEqual(self.obj.dc.checksum, response['ETag'],
             'datastream checksum should be set as ETag header in the response')
         self.assertEqual(self.obj.dc.checksum, response['Content-MD5'])
-        self.assert_('<dc:title>%s</dc:title>' % self.obj.dc.content.title in response.content)
+        self.assert_('<dc:title>%s</dc:title>' % self.obj.dc.content.title in content)
 
         # RELS-EXT
         response = raw_datastream(rqst, self.obj.pid, 'RELS-EXT')
@@ -175,9 +176,10 @@ class FedoraViewsTest(unittest.TestCase):
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream range request' \
                 % (expected, got))
-        self.assertEqual(self.obj.image.size, len(response.content),
+        content = response.content
+        self.assertEqual(self.obj.image.size, len(content),
             'range request of bytes=0- should return entire content (expected %d, got %d)' \
-            % (self.obj.image.size, len(response.content)))
+            % (self.obj.image.size, len(content)))
         self.assertEqual(self.obj.image.size, int(response['Content-Length']),
             'content-length header should be size of entire content (expected %d, got %d)' \
             % (self.obj.image.size, int(response['Content-Length'])))

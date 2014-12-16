@@ -14,9 +14,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from test.test_fedora.test_server import *
-from test.test_fedora.test_api import *
-from test.test_fedora.test_models import *
-from test.test_fedora.test_cryptutil import *
-from test.test_fedora.test_templatetags import *
-from test.test_fedora.test_views import *
+# from test.test_fedora.test_server import *
+# from test.test_fedora.test_api import *
+# from test.test_fedora.test_models import *
+# from test.test_fedora.test_cryptutil import *
+# from test.test_fedora.test_templatetags import *
+# from test.test_fedora.test_views import *

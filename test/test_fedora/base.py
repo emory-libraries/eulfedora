@@ -68,8 +68,8 @@ class FedoraTestCase(unittest.TestCase):
     def setUp(self):
         # NOTE: queries require RI flush=True or test objects will not show up in RI
         self.repo.risearch.RISEARCH_FLUSH_ON_QUERY = True
-        self.opener = self.repo.opener
-        self.api = ApiFacade(self.opener)
+        self.api = self.repo.api
+        # self.api = ApiFacade(self.opener)
         fixtures = getattr(self, 'fixtures', [])
         for fixture in fixtures:
             self.ingestFixture(fixture)

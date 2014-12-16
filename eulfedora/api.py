@@ -1,5 +1,5 @@
 # file eulfedora/api.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,30 +16,20 @@
 
 import csv
 import logging
-from os import path
 from urllib import urlencode
-from urlparse import urlsplit
-import time
+from urlparse import urljoin
 import warnings
+import requests
+from requests_toolbelt import MultipartEncoder
+from StringIO import StringIO
 
-from poster.encode import multipart_encode, MultipartParam
-
+from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import auth_headers, datetime_to_fedoratime, \
-     RequestFailed, parse_rdf
+    RequestFailed, ChecksumMismatch, parse_rdf
 
 logger = logging.getLogger(__name__)
 
 # low-level wrappers
-
-def _safe_urlencode(query, doseq=0):
-    # utf-8 encode unicode values before passing them to urlencode.
-    # urllib.urlencode just passes its keys and values directly to str(),
-    # which raises exceptions on non-ascii values. this function exposes the
-    # same interface as urllib.urlencode, encoding unicode values in utf-8
-    # before passing them to urlencode
-    wrapped = [(_safe_str(k), _safe_str(v))
-               for k, v in _get_items(query, doseq)]
-    return urlencode(wrapped, doseq)
 
 def _safe_str(s):
     # helper for _safe_urlencode: utf-8 encode unicode strings, convert
@@ -64,14 +54,81 @@ def _get_items(query, doseq):
 
 
 class HTTP_API_Base(object):
-    def __init__(self, opener):
-        self.opener = opener
+    def __init__(self, base_url, username=None, password=None):
+        # standardize url format; ensure we have a trailing slash,
+        # adding one if necessary
+        if not base_url.endswith('/'):
+            base_url = base_url + '/'
 
-    def open(self, method, rel_url, body=None, headers={}, throw_errors=True):
-        return self.opener.open(method, rel_url, body, headers, throw_errors)
+        # TODO: can we re-use sessions safely across instances?
 
-    def read(self, rel_url, data=None, **kwargs):
-        return self.opener.read(rel_url, data, **kwargs)
+        # create a new session and add to global sessions
+        self.session = requests.Session()
+        # Set headers to be passed with every request
+        # NOTE: only headers that will be common for *all* requests
+        # to this fedora should be set in the session
+        # (i.e., do NOT include auth information here)
+        self.session.headers = {
+            'user-agent': 'eulfedora/%s (python-requests/%s)' % \
+                (eulfedora_version, requests.__version__),
+            'verify': True,  # verify SSL certs by default
+        }
+
+        self.base_url = base_url
+        self.username = username
+        self.password = password
+        self.request_options = {}
+        if self.username is not None:
+            # store basic auth option to pass when making requests
+            self.request_options['auth'] = (self.username, self.password)
+
+    def absurl(self, rel_url):
+        return urljoin(self.base_url, rel_url)
+
+    def prep_url(self, url):
+        return self.absurl(url)
+
+    # thinnest possible wrappers around requests calls
+    # - add auth, make urls absolute
+
+    def _make_request(self, reqmeth, url, *args, **kwargs):
+        # copy base request options and update with any keyword args
+        rqst_options = self.request_options.copy()
+        rqst_options.update(kwargs)
+        response = reqmeth(self.prep_url(url), *args, **rqst_options)
+
+        # FIXME: handle 3xx (?) [possibly handled for us by requests]
+        if response.status_code >= requests.codes.bad:  # 400 or worse
+            # separate out 401 and 403 (permission errors) to enable
+            # special handling in client code.
+            if response.status_code in (requests.codes.unauthorized,
+                                        requests.codes.forbidden):
+                raise PermissionDenied(response)
+            elif response.status_code == requests.codes.server_error:
+                # check response content to determine if this is a
+                # ChecksumMismatch or a more generic error
+                if 'ValidationException: Checksum Mismatch' in response.content:
+                    raise ChecksumMismatch(response)
+                else:
+                    raise RequestFailed(response)
+            else:
+                raise RequestFailed(response)
+
+        return response
+
+    def get(self, *args, **kwargs):
+        return self._make_request(self.session.get, *args, **kwargs)
+
+    def put(self, *args, **kwargs):
+        return self._make_request(self.session.put, *args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        return self._make_request(self.session.post, *args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        return self._make_request(self.session.delete, *args, **kwargs)
+
+    # also available: head, patch
 
 
 class REST_API(HTTP_API_Base):
@@ -82,7 +139,7 @@ class REST_API(HTTP_API_Base):
     # always return xml response instead of html version
     format_xml = { 'format' : 'xml'}
 
-    ### API-A methods (access) #### 
+    ### API-A methods (access) ####
     # describeRepository not implemented in REST, use API-A-LITE version
 
     def findObjects(self, query=None, terms=None, pid=True, chunksize=None, session_token=None):
@@ -103,7 +160,7 @@ class REST_API(HTTP_API_Base):
         """
         if query is not None and terms is not None:
             raise Exception("Cannot findObject with both query ('%s') and terms ('%s')" % (query, terms))
-        
+
         http_args = {'resultFormat': 'xml'}
         if query is not None:
             http_args['query'] = query
@@ -116,9 +173,9 @@ class REST_API(HTTP_API_Base):
             http_args['sessionToken'] = session_token
         if chunksize:
             http_args['maxResults'] = chunksize
-        return self.read('objects?' + _safe_urlencode(http_args))
+        return self.get('objects', params=http_args)
 
-    def getDatastreamDissemination(self, pid, dsID, asOfDateTime=None, return_http_response=False):
+    def getDatastreamDissemination(self, pid, dsID, asOfDateTime=None, stream=False):
         """Get a single datastream on a Fedora object; optionally, get the version
         as of a particular date time.
 
@@ -126,12 +183,6 @@ class REST_API(HTTP_API_Base):
         :param dsID: datastream id
         :param asOfDateTime: optional datetime; ``must`` be a non-naive datetime
             so it can be converted to a date-time format Fedora can understand
-
-        :param return_http_response: optional parameter; if True, the
-           actual :class:`httlib.HttpResponse` instance generated by
-           the request will be returned, instead of just the contents
-           (e.g., if you want to deal with large datastreams in
-           chunks).  Defaults to False.
         """
         # TODO: Note that this loads the entire datastream content into
         # memory as a Python string. This will suck for very large
@@ -143,20 +194,21 @@ class REST_API(HTTP_API_Base):
         http_args = {}
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
-        url = 'objects/%s/datastreams/%s/content?%s' % (pid, dsID, _safe_urlencode(http_args))
-        return self.read(url, return_http_response=return_http_response)
+        url = 'objects/%(pid)s/datastreams/%(dsid)s/content' %  \
+            {'pid': pid, 'dsid': dsID}
+        return self.get(url, params=http_args, stream=stream)
 
     # NOTE: getDissemination was not available in REST API until Fedora 3.3
-    def getDissemination(self, pid, sdefPid, method, method_params={}, return_http_response=False):        
-        # /objects/{pid}/methods/{sdefPid}/{method} ? [method parameters]        
-        uri = 'objects/%s/methods/%s/%s' % (pid, sdefPid, method)
-        if method_params:
-            uri += '?' + _safe_urlencode(method_params)
-        return self.read(uri, return_http_response=return_http_response)
+    def getDissemination(self, pid, sdefPid, method, method_params={}, return_http_response=False):
+        # /objects/{pid}/methods/{sdefPid}/{method} ? [method parameters]
+        uri = 'objects/%(pid)s/methods/%(sdefpid)s/%(method)s' % \
+            {'pid': pid, 'sdefpid': sdefPid, 'method': method}
+        return self.get(uri, params=method_params)
 
     def getObjectHistory(self, pid):
         # /objects/{pid}/versions ? [format]
-        return self.read('objects/%s/versions?%s' % (pid, _safe_urlencode(self.format_xml)))
+        return self.get('objects/%(pid)s/versions' % {'pid': pid},
+                        params=self.format_xml)
 
     def getObjectProfile(self, pid, asOfDateTime=None):
         """Get top-level information aboug a single Fedora object; optionally,
@@ -171,8 +223,8 @@ class REST_API(HTTP_API_Base):
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
         http_args.update(self.format_xml)
-        url = 'objects/%s?%s' % (pid, _safe_urlencode(http_args))
-        return self.read(url)
+        url = 'objects/%(pid)s' % {'pid': pid}
+        return self.get(url, params=http_args)
 
     def listDatastreams(self, pid):
         """
@@ -185,25 +237,26 @@ class REST_API(HTTP_API_Base):
                       raw string data
         :rtype: string xml data
         """
-        # /objects/{pid}/datastreams ? [format, datetime]        
-        return self.read('objects/%s/datastreams?%s' % (pid, _safe_urlencode(self.format_xml)))
+        # /objects/{pid}/datastreams ? [format, datetime]
+        return self.get('objects/%(pid)s/datastreams' % {'pid': pid},
+                        params=self.format_xml)
 
     def listMethods(self, pid, sdefpid=None):
         # /objects/{pid}/methods ? [format, datetime]
         # /objects/{pid}/methods/{sdefpid} ? [format, datetime]
-        
+
         ## NOTE: getting an error when sdefpid is specified; fedora issue?
-        
-        uri = 'objects/%s/methods' % pid
+
+        uri = 'objects/%(pid)s/methods' % {'pid': pid}
         if sdefpid:
             uri += '/' + sdefpid
-        return self.read(uri + '?' + _safe_urlencode(self.format_xml))
+        return self.get(uri, params=self.format_xml)
 
     ### API-M methods (management) ####
 
     def addDatastream(self, pid, dsID, dsLabel=None,  mimeType=None, logMessage=None,
         controlGroup=None, dsLocation=None, altIDs=None, versionable=None,
-        dsState=None, formatURI=None, checksumType=None, checksum=None, filename=None, content=None):
+        dsState=None, formatURI=None, checksumType=None, checksum=None, content=None):
         # objects/{pid}/datastreams/NEWDS? [opts]
         # content via multipart file in request content, or dsLocation=URI
         # one of dsLocation or filename must be specified
@@ -213,7 +266,7 @@ class REST_API(HTTP_API_Base):
         if checksum is not None and checksumType is None:
             warnings.warn('Fedora will ignore the checksum (%s) because no checksum type is specified' \
                           % checksum)
-            
+
         http_args = {'dsLabel': dsLabel, 'mimeType': mimeType}
         if logMessage:
             http_args['logMessage'] = logMessage
@@ -234,42 +287,37 @@ class REST_API(HTTP_API_Base):
         if checksum:
             http_args['checksum'] = checksum
 
-        #Legacy code for files.
-        fp = None
-        if filename:
-            fp = open(filename, 'rb')
-            body = fp
-            headers = {'Content-Type': mimeType}
-            # because file-like objects are posted in chunks, this file object has to stay open until the post
-            # completes - close it after we get a response
 
-        #Added code to match how content is now handled, see modifyDatastream.
-        elif content:
+        # Added code to match how content is now handled, see modifyDatastream.
+        extra_args = {}
+        # could be a string or a file-like object
+        if content:
             if hasattr(content, 'read'):    # if content is a file-like object, warn if no checksum
                 if not checksum:
                     logging.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s." % (pid, dsID))
 
-            body = content  # could be a string or a file-like object
-            headers = { 'Content-Type' : mimeType,
-                        # - don't attempt to calculate length here (will fail on files)
-                        # the http connection class will calculate & set content-length for us
-                        #'Content-Length' : str(len(body))
-            }
-        else:
-            headers = {}
-            body = None
+                extra_args['files'] = {'file': content}
 
-        url = 'objects/%s/datastreams/%s?' % (pid, dsID) + _safe_urlencode(http_args)
-        with self.open('POST', url, body, headers) as response:
-            # if a file object was opened to post data, close it now
-            if fp is not None:
-                fp.close()
+                # m = MultipartEncoder(fields={'file': content})
+                # extra_args.update({
+                #     'data': m,
+                #     'headers': {'Content-Type': m.content_type}
+                # })
 
-            # expected response: 201 Created (on success)
-            # when pid is invalid, response body contains error message
-            #  e.g., no path in db registry for [bogus:pid]
-            # return success/failure and any additional information
-            return (response.status == 201, response.read())
+            else:
+                extra_args['data'] = content
+                # extra_args['data']
+                # extra_args['files'] = StringIO(content)
+
+            # set content-type header ?
+
+        url = 'objects/%s/datastreams/%s' % (pid, dsID)
+        return self.post(url, params=http_args, **extra_args)
+        # expected response: 201 Created (on success)
+        # when pid is invalid, response body contains error message
+        #  e.g., no path in db registry for [bogus:pid]
+        # return success/failure and any additional information
+        # return (r.status_code == requests.codes.created, r.content)
 
     def addRelationship(self, pid, subject, predicate, object, isLiteral=False,
                         datatype=None):
@@ -283,7 +331,7 @@ class REST_API(HTTP_API_Base):
         :param isLiteral: true if object is literal, false if it is a URI;
             Fedora has no default; this method defaults to False
         :param datatype: optional datatype for literal objects
-        
+
         :returns: boolean success
         """
 
@@ -291,10 +339,10 @@ class REST_API(HTTP_API_Base):
                      'object': object, 'isLiteral': isLiteral}
         if datatype is not None:
             http_args['datatype'] = datatype
-        
-        url = 'objects/%s/relationships/new?' % (pid, ) + _safe_urlencode(http_args)
-        with self.open('POST', url, None, {}) as response:
-            return response.status == 200
+
+        url = 'objects/%(pid)s/relationships/new' % {'pid': pid}
+        r = self.post(url, params=http_args)
+        return r.status_code == requests.codes.ok
 
     def compareDatastreamChecksum(self, pid, dsID, asOfDateTime=None): # date time
         # special case of getDatastream, with validateChecksum = true
@@ -314,9 +362,7 @@ class REST_API(HTTP_API_Base):
         if encoding:
             http_args['encoding'] = encoding
         uri = 'objects/%s/export' % pid
-        if http_args:
-            uri += '?' + _safe_urlencode(http_args)
-        return self.read(uri)
+        return self.get(uri, params=http_args)
 
     def getDatastream(self, pid, dsID, asOfDateTime=None, validateChecksum=False):
         """Get information about a single datastream on a Fedora object; optionally,
@@ -334,11 +380,9 @@ class REST_API(HTTP_API_Base):
             http_args['validateChecksum'] = str(validateChecksum).lower()
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
-        http_args.update(self.format_xml)        
-        uri = 'objects/%s/datastreams/%s' % (pid, dsID)
-        if http_args:
-            uri += '?' + _safe_urlencode(http_args)
-        return self.read(uri)
+        http_args.update(self.format_xml)
+        uri = 'objects/%(pid)s/datastreams/%(dsid)s' % {'pid': pid, 'dsid': dsID}
+        return self.get(uri, params=http_args)
 
     def getDatastreamHistory(self, pid, dsid, format=None):
         http_args = {}
@@ -347,10 +391,9 @@ class REST_API(HTTP_API_Base):
         # Fedora docs say the url should be:
         #   /objects/{pid}/datastreams/{dsid}/versions
         # In Fedora 3.4.3, that 404s but /history does not
-        uri = 'objects/%s/datastreams/%s/history' % (pid, dsid)
-        if http_args:
-            uri += '?' +  _safe_urlencode(http_args)
-        return self.read(uri)
+        uri = 'objects/%(pid)s/datastreams/%(dsid)s/history' % \
+            {'pid': pid, 'dsid': dsid}
+        return self.get(uri, params=http_args)
 
     # getDatastreams not implemented in REST API
 
@@ -369,8 +412,8 @@ class REST_API(HTTP_API_Base):
         if namespace:
             http_args['namespace'] = namespace
 
-        rel_url = 'objects/nextPID?' + _safe_urlencode(http_args)
-        return self.read(rel_url, data='')
+        rel_url = 'objects/nextPID'
+        return self.post(rel_url, params=http_args)
 
     def getObjectXML(self, pid):
         """
@@ -382,14 +425,14 @@ class REST_API(HTTP_API_Base):
            :rtype: string xml content of entire object
         """
         # /objects/{pid}/objectXML
-        return self.read('objects/%s/objectXML' % (pid,))
+        return self.get('objects/%(pid)s/objectXML' % {'pid': pid})
 
     def getRelationships(self, pid, subject=None, predicate=None, format=None):
         '''
         Get information about relationships on an object.
 
         Wrapper function for `Fedora REST API getRelationships <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-getRelationships>`_
-        
+
         '''
         http_args = {}
         if subject is not None:
@@ -398,11 +441,9 @@ class REST_API(HTTP_API_Base):
             http_args['predicate'] = predicate
         if format is not None:
             http_args['format'] = format
-        
-        url = 'objects/%s/relationships?' % (pid, ) + _safe_urlencode(http_args)
-        return self.read(url)
 
-
+        url = 'objects/%(pid)s/relationships' % {'pid': pid}
+        return self.get(url, params=http_args)
 
     def ingest(self, text, logMessage=None):
         """
@@ -420,20 +461,19 @@ class REST_API(HTTP_API_Base):
         if logMessage:
             http_args['logMessage'] = logMessage
 
-        headers = { 'Content-Type': 'text/xml' }
+        headers = {'Content-Type': 'text/xml'}
 
-        url = 'objects/new?' + _safe_urlencode(http_args)
-        with self.open('POST', url, text, headers) as response:
-            pid = response.read()
-
-        return pid
+        url = 'objects/new'
+        return self.post(url, data=text, params=http_args, headers=headers)
+        # FIXME: check response status code first?
+        # return r.content  # content is new pid
 
     def modifyDatastream(self, pid, dsID, dsLabel=None, mimeType=None, logMessage=None, dsLocation=None,
         altIDs=None, versionable=None, dsState=None, formatURI=None, checksumType=None,
-        checksum=None, content=None, force=False):   
+        checksum=None, content=None, force=False):
         # /objects/{pid}/datastreams/{dsID} ? [dsLocation] [altIDs] [dsLabel] [versionable] [dsState] [formatURI] [checksumType] [checksum] [mimeType] [logMessage] [force] [ignoreContent]
         # NOTE: not implementing ignoreContent (unneeded)
-        
+
         # content via multipart file in request content, or dsLocation=URI
         # if dsLocation or content is not specified, datastream content will not be updated
         # content can be string or a file-like object
@@ -468,27 +508,27 @@ class REST_API(HTTP_API_Base):
         if force:
             http_args['force'] = force
 
-        headers = {}
-        body = None
+        content_args = {}
         if content:
+            # content can be either a string or a file-like object
             if hasattr(content, 'read'):    # allow content to be a file
                 # warn about missing checksums for files
                 if not checksum:
-                    logging.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s." % (pid, dsID))
-            # body can be either a string or a file-like object (http connection class will handle either)
-            body = content
-            headers = { 'Content-Type' : mimeType,
-                        # let http connection class calculate the content-length for us (deal with file or string)
-                        #'Content-Length' : str(len(body))
-                        }
+                    logging.warning("Updating datastream %s/%s with a file, but no checksum passed" \
+                                    % (pid, dsID))
 
+            # either way (string or file-like object), set content as request data
+            # (file-like objects supported in requests as of 0.13.1)
+            content_args['data'] = content
 
-        url = 'objects/%s/datastreams/%s?' % (pid, dsID) + _safe_urlencode(http_args)
-        with self.open('PUT', url, body, headers) as response:
-            # expected response: 200 (success)
-            # response body contains error message, if any
-            # return success/failure and any additional information
-            return (response.status == 200, response.read())        
+        url = 'objects/%s/datastreams/%s' % (pid, dsID)
+        return self.put(url, params=http_args, **content_args)
+
+        # expected response: 200 (success)
+        # response body contains error message, if any
+        # return success/failure and any additional information
+        # return r.content
+        # return (r.status_code == requests.codes.ok, r.content)
 
     def modifyObject(self, pid, label, ownerId, state, logMessage=None):
         # /objects/{pid} ? [label] [ownerId] [state] [logMessage]
@@ -497,10 +537,10 @@ class REST_API(HTTP_API_Base):
                     'state' : state}
         if logMessage is not None:
             http_args['logMessage'] = logMessage
-        url = 'objects/%s' % (pid,) + '?' + _safe_urlencode(http_args)
-        with self.open('PUT', url, '', {}) as response:
-            # returns response code 200 on success
-            return response.status == 200
+        url = 'objects/%(pid)s' % {'pid': pid}
+        return self.put(url, params=http_args)
+        # returns response code 200 on success
+        # return r.status_code == requests.codes.ok
 
     def purgeDatastream(self, pid, dsID, startDT=None, endDT=None, logMessage=None,
             force=False):
@@ -527,8 +567,9 @@ class REST_API(HTTP_API_Base):
         if force:
             http_args['force'] = force
 
-        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
-        with self.open('DELETE', url, '', {}) as response:
+        url = 'objects/%(pid)s/datastreams/%(dsid)s' % {'pid': pid, 'dsid': dsID}
+        return self.delete(url, params=http_args)
+
             # as of Fedora 3.4, returns 200 on success with a list of the
             # timestamps for the versions deleted as response content
             # NOTE: response content may be useful on error, e.g.
@@ -538,7 +579,9 @@ class REST_API(HTTP_API_Base):
             # - reported here: http://www.fedora-commons.org/jira/browse/FCREPO-690
             # - as a possible work-around, could return false when status = 200
             #   but response body is an empty list (i.e., no datastreams/versions purged)
-            return response.status == 200, response.read()
+
+            # NOTE: previously returned this
+            # return r.status_code == 200, response.read()
 
     def purgeObject(self, pid, logMessage=None):
         """
@@ -554,10 +597,10 @@ class REST_API(HTTP_API_Base):
         if logMessage:
             http_args['logMessage'] = logMessage
 
-        url = 'objects/' + pid  + '?' + _safe_urlencode(http_args)
-        with self.open('DELETE', url, '', {}) as response:
-            # as of Fedora 3.4, returns 200 on success; response content is timestamp
-            return response.status == 200, response.read()
+        url = 'objects/%(pid)s' % {'pid': pid}
+        return self.delete(url, params=http_args)
+        # as of Fedora 3.4, returns 200 on success; response content is timestamp
+        # return response.status == requests.codes.ok, response.content
 
     def purgeRelationship(self, pid, subject, predicate, object, isLiteral=False,
                         datatype=None):
@@ -568,64 +611,63 @@ class REST_API(HTTP_API_Base):
 
         :returns: boolean; indicates whether or not a relationship was
             removed
-        
+
         '''
 
         http_args = {'subject': subject, 'predicate': predicate,
                      'object': object, 'isLiteral': isLiteral}
         if datatype is not None:
             http_args['datatype'] = datatype
-        
-        url = 'objects/%s/relationships?' % (pid, ) + _safe_urlencode(http_args)
-        with self.open('DELETE', url, None, {}) as response:
-            # should have a status code of 200;
-            # response body text indicates if a relationship was purged or not
-            return response.status == 200 and response.read() == 'true'
 
-        
+        url = 'objects/%(pid)s/relationships' % {'pid': pid}
+        r = self.delete(url, params=http_args)
+        # should have a status code of 200;
+        # response body text indicates if a relationship was purged or not
+        return r.status_code == requests.codes.ok and r.content == 'true'
+
     def setDatastreamState(self, pid, dsID, dsState):
         # /objects/{pid}/datastreams/{dsID} ? [dsState]
-        http_args = { 'dsState' : dsState }
-        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
-        with self.open('PUT', url, '', {}) as response:
-            # returns response code 200 on success
-            return response.status == 200
+        http_args = {'dsState' : dsState}
+        url = 'objects/%(pid)s/datastreams/%(dsid)s' % {'pid': pid, 'dsid': dsID}
+        r = self.put(url, params=http_args)
+        # returns response code 200 on success
+        return r.status_code == requests.codes.ok
 
     def setDatastreamVersionable(self, pid, dsID, versionable):
         # /objects/{pid}/datastreams/{dsID} ? [versionable]
         http_args = { 'versionable' : versionable }
-        url = 'objects/%s/datastreams/%s' % (pid, dsID) + '?' + _safe_urlencode(http_args)
-        with self.open('PUT', url, '', {}) as response:
-            # returns response code 200 on success
-            return response.status == 200
-
+        url = 'objects/%(pid)s/datastreams/%(dsid)s' % {'pid': pid, 'dsid': dsID}
+        r = self.put(url, params=http_args)
+        # returns response code 200 on success
+        return r.status_code == requests.codes.ok
 
 
     ### utility methods
 
-        
+
     def upload(self, data):
         '''
         Upload a multi-part file for content to ingest.  Returns a
         temporary upload id that can be used as a datstream location.
         '''
-        
         url = 'upload'
+        # fedora only expects content uploaded as multipart file
+        # - make string content into a file-like object so requests.post
+        # sends it the way Fedora expects.
+        if not hasattr(data, 'read'):
+            data = StringIO(data)
 
-        # use poster multi-part encode to build the headers and a generator
-        # for body content, in order to handle posting large files that
-        # can't be read into memory all at once. use _NamedMultipartParam to
-        # force a filename as described above.
-        post_params = _NamedMultipartParam.from_params({'file':data})
-        body, headers = multipart_encode(post_params)
+        m = MultipartEncoder(fields={'file': data})
+            # example from docs
+            # 'field2': ('filename', open('file.py', 'rb'), 'text/plain')}
 
-        with self.open('POST', url, body, headers=headers) as response:
+        r = self.post(url, data=m, headers={'Content-Type': m.content_type})
+        if r.status_code == requests.codes.accepted:
+            return r.content.strip()
             # returns 202 Accepted on success
-            # return response.status == 202 
             # content of response should be upload id, if successful
-            resp_data = response.read()
-            return resp_data.strip()
-
+            # resp_data = response.read()
+            # return resp_data.strip()
 
 
 # NOTE: the "LITE" APIs are planned to be phased out; when that happens, these functions
@@ -642,29 +684,28 @@ class API_A_LITE(HTTP_API_Base):
         :rtype: string
         """
         http_args = { 'xml': 'true' }
-        return self.read('describe?' + _safe_urlencode(http_args))
+        return self.get('describe', params=http_args)
 
 
-class _NamedMultipartParam(MultipartParam):
-    # Fedora API_M_LITE upload fails (as of v3.2.1) if passed a file with no
-    # filename in its Content-Disposition. This MultipartParam forces a
-    # filename of 'None' if none is specified to work around that problem.
-    # This is necessary for calling API_M_LITE.upload on string data, since
-    # poster otherwise encodes those without any filename.
-    def __init__(self, name, value=None, filename=None, *args, **kwargs):
-        if filename is None:
-            filename = 'None'
+# class _NamedMultipartParam(MultipartParam):
+#     # Fedora API_M_LITE upload fails (as of v3.2.1) if passed a file with no
+#     # filename in its Content-Disposition. This MultipartParam forces a
+#     # filename of 'None' if none is specified to work around that problem.
+#     # This is necessary for calling API_M_LITE.upload on string data, since
+#     # poster otherwise encodes those without any filename.
+#     def __init__(self, name, value=None, filename=None, *args, **kwargs):
+#         if filename is None:
+#             filename = 'None'
 
-        super_init = super(_NamedMultipartParam, self).__init__
-        super_init(name, value, filename, *args, **kwargs)
+#         super_init = super(_NamedMultipartParam, self).__init__
+#         super_init(name, value, filename, *args, **kwargs)
 
 
-class ApiFacade(REST_API, API_A_LITE): 
+class ApiFacade(REST_API, API_A_LITE):
     """Pull together all Fedora APIs into one place."""
     # as of 3.4, REST API covers everything except describeRepository
-    def __init__(self, opener):
-        HTTP_API_Base.__init__(self, opener)
-
+    def __init__(self, base_url, username=None, password=None):
+        HTTP_API_Base.__init__(self, base_url, username, password)
 
 
 class UnrecognizedQueryLanguage(EnvironmentError):
@@ -733,11 +774,11 @@ class ResourceIndex(HTTP_API_Base):
         if flush is None:
             flush = self.RISEARCH_FLUSH_ON_QUERY
         http_args['flush'] = 'true' if flush else 'false'
-        
-        risearch_url = 'risearch?'
-        rel_url = risearch_url + urlencode(http_args)
+
+        url = 'risearch'
         try:
-            data, abs_url = self.read(rel_url)
+            r = self.get(url, params=http_args)
+            data, abs_url = r.content, r.url
             # parse the result according to requested format
             if format == 'N-Triples':
                 return parse_rdf(data, abs_url, format='n3')
@@ -747,15 +788,15 @@ class ResourceIndex(HTTP_API_Base):
                 return csv.DictReader(data.split('\n'))
             elif format == 'count':
                 return int(data)
-            
-            # should we return the response as fallback? 
+
+            # should we return the response as fallback?
         except RequestFailed, f:
             if 'Unrecognized query language' in f.detail:
                 raise UnrecognizedQueryLanguage(f.detail)
-            # could also see 'Unsupported output format' 
+            # could also see 'Unsupported output format'
             else:
                 raise f
-        
+
 
     def spo_search(self, subject=None, predicate=None, object=None):
         """
