@@ -16,7 +16,6 @@
 
 import csv
 import logging
-from urllib import urlencode
 from urlparse import urljoin
 import warnings
 import requests
@@ -24,7 +23,7 @@ from requests_toolbelt import MultipartEncoder
 from StringIO import StringIO
 
 from eulfedora import __version__ as eulfedora_version
-from eulfedora.util import auth_headers, datetime_to_fedoratime, \
+from eulfedora.util import datetime_to_fedoratime, \
     RequestFailed, ChecksumMismatch, parse_rdf
 
 logger = logging.getLogger(__name__)
@@ -52,6 +51,7 @@ def _get_items(query, doseq):
         else:
             yield k, str(v)
 
+_sessions = {}
 
 class HTTP_API_Base(object):
     def __init__(self, base_url, username=None, password=None):
@@ -61,18 +61,25 @@ class HTTP_API_Base(object):
             base_url = base_url + '/'
 
         # TODO: can we re-use sessions safely across instances?
+        global _sessions
 
-        # create a new session and add to global sessions
-        self.session = requests.Session()
-        # Set headers to be passed with every request
-        # NOTE: only headers that will be common for *all* requests
-        # to this fedora should be set in the session
-        # (i.e., do NOT include auth information here)
-        self.session.headers = {
-            'user-agent': 'eulfedora/%s (python-requests/%s)' % \
-                (eulfedora_version, requests.__version__),
-            'verify': True,  # verify SSL certs by default
-        }
+        # check for an existing session for this fedora
+        if base_url in _sessions:
+            self.session = _sessions[base_url]
+        else:
+            # create a new session and add to global sessions
+            self.session = requests.Session()
+            # Set headers to be passed with every request
+            # NOTE: only headers that will be common for *all* requests
+            # to this fedora should be set in the session
+            # (i.e., do NOT include auth information here)
+            self.session.headers = {
+                'user-agent': 'eulfedora/%s (python-requests/%s)' % \
+                    (eulfedora_version, requests.__version__),
+                'verify': True,  # verify SSL certs by default
+            }
+
+            _sessions[base_url] = self.session
 
         self.base_url = base_url
         self.username = username
