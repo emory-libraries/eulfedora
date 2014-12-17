@@ -21,6 +21,7 @@ import warnings
 import requests
 from requests_toolbelt import MultipartEncoder
 from StringIO import StringIO
+import time
 
 from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import datetime_to_fedoratime, \
@@ -102,7 +103,11 @@ class HTTP_API_Base(object):
         # copy base request options and update with any keyword args
         rqst_options = self.request_options.copy()
         rqst_options.update(kwargs)
+        start = time.time()
         response = reqmeth(self.prep_url(url), *args, **rqst_options)
+        logger.debug('%s %s=>%d: %f sec' % (reqmeth.__name__.upper(), url,
+            response.status_code, time.time() - start))
+
 
         # FIXME: handle 3xx (?) [possibly handled for us by requests]
         if response.status_code >= requests.codes.bad:  # 400 or worse
