@@ -54,9 +54,8 @@ setup(
             'sphinx',
             'nose',
             'coverage',
-            'Django>=1.4',
+            'Django<1.7',
             'mock',
-            'unittest2',  # optional testrunner in testutil
             'pyPdf',
             'progressbar',
         ]
