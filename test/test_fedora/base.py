@@ -18,7 +18,6 @@ import os
 import unittest
 import logging
 from eulxml import xmlmap
-from eulfedora.api import ApiFacade
 from eulfedora.server import Repository
 from eulfedora.util import RequestFailed
 

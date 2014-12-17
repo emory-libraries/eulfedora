@@ -363,14 +363,15 @@ class DatastreamObject(object):
             # if this datastream already exists, use modifyDatastream API call
             r = self.obj.api.modifyDatastream(self.obj.pid, self.id,
                     logMessage=logmessage, **save_opts)
-            success = r.status_code == requests.codes.ok
+            # expects 200 ok
+            success = (r.status_code == requests.codes.ok)
         else:
             # if this datastream does not yet exist, add it
             r = self.obj.api.addDatastream(self.obj.pid, self.id,
                     controlGroup=self.defaults['control_group'],
                     logMessage=logmessage, **save_opts)
-
-            success = r.status_code == requests.codes.ok
+            # expects 201 created
+            success = (r.status_code == requests.codes.created)
             # clean-up required for object info after adding a new datastream
             if success:
                 # update exists flag - if add succeeded, the datastream exists now
@@ -435,7 +436,7 @@ class DatastreamObject(object):
                 args.update(self._info_backup)
             r = self.obj.api.modifyDatastream(self.obj.pid, self.id,
                             logMessage=logMessage, **args)
-            return r.status_code == requests.status.ok
+            return r.status_code == requests.codes.ok
 
     def get_chunked_content(self, chunksize=4096):
         '''Generator that returns the datastream content in chunks, so
@@ -1154,7 +1155,7 @@ class DigitalObject(object):
     def risearch(self):
         "Instance of :class:`eulfedora.api.ResourceIndex`, with the same root url and credentials"
         if self._risearch is None:
-            self._risearch = ResourceIndex(self.api.opener)
+            self._risearch = ResourceIndex(self.api.base_url, self.api.username, self.api.password)
         return self._risearch
 
     def get_object(self, pid, type=None):
@@ -1460,6 +1461,9 @@ class DigitalObject(object):
         if r.status_code == requests.codes.ok:
             # profile info is no longer different than what is in Fedora
             self.info_modified = False
+            saved = True
+        else:
+            saved = False
         return saved
 
     def save(self, logMessage=None):

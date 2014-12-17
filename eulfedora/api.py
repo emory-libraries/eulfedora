@@ -24,7 +24,7 @@ from StringIO import StringIO
 
 from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import datetime_to_fedoratime, \
-    RequestFailed, ChecksumMismatch, parse_rdf
+    RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf
 
 logger = logging.getLogger(__name__)
 
@@ -490,7 +490,6 @@ class REST_API(HTTP_API_Base):
         # with no checksum type) - it seems to use the existing
         # checksum type if a new type is not specified.
 
-
         http_args = {}
         if dsLabel:
             http_args['dsLabel'] = dsLabel
@@ -530,7 +529,6 @@ class REST_API(HTTP_API_Base):
 
         url = 'objects/%s/datastreams/%s' % (pid, dsID)
         return self.put(url, params=http_args, **content_args)
-
         # expected response: 200 (success)
         # response body contains error message, if any
         # return success/failure and any additional information
@@ -692,20 +690,6 @@ class API_A_LITE(HTTP_API_Base):
         """
         http_args = { 'xml': 'true' }
         return self.get('describe', params=http_args)
-
-
-# class _NamedMultipartParam(MultipartParam):
-#     # Fedora API_M_LITE upload fails (as of v3.2.1) if passed a file with no
-#     # filename in its Content-Disposition. This MultipartParam forces a
-#     # filename of 'None' if none is specified to work around that problem.
-#     # This is necessary for calling API_M_LITE.upload on string data, since
-#     # poster otherwise encodes those without any filename.
-#     def __init__(self, name, value=None, filename=None, *args, **kwargs):
-#         if filename is None:
-#             filename = 'None'
-
-#         super_init = super(_NamedMultipartParam, self).__init__
-#         super_init(name, value, filename, *args, **kwargs)
 
 
 class ApiFacade(REST_API, API_A_LITE):

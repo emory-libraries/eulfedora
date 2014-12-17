@@ -17,7 +17,6 @@
 
 from datetime import datetime, timedelta
 from dateutil.tz import tzutc
-import httplib
 from lxml import etree
 import md5
 from rdflib import URIRef
@@ -100,6 +99,7 @@ Hey, nonny-nonny."""
 
         # search by terms
         r = self.rest_api.findObjects(terms="more dat? in it than a *")
+        print r.content
         self.assert_('<pid>%s</pid>' % self.pid in r.content)
 
         # NOTE: not testing resumeFind here because it would require parsing the xml

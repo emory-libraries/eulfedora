@@ -19,5 +19,3 @@ import os
 # must be set before importing anything from django
 os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
 
-# import test_fedora
-# import test_indexdata
