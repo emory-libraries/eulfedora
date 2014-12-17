@@ -56,6 +56,7 @@ setup(
             'coverage',
             'Django<1.7',
             'mock',
+            'unittest2<0.7',  # optional testrunner in testutil
             'pyPdf',
             'progressbar',
         ]
