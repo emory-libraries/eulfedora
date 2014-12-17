@@ -27,7 +27,8 @@ requirements = [
     'eulxml>=0.18.0',
     'rdflib>=3.0',
     'python-dateutil',
-    'poster',
+    'requests>=2.5.0',
+    'requests-toolbelt',
     'pycrypto',
 ]
 
