@@ -314,8 +314,8 @@ Hey, nonny-nonny."""
                       modelns.hasModel,
                       URIRef('info:fedora/pid:123')) in graph)
 
-        self.assertEqual('johndoe', graph.value(subject=URIRef('info:fedora/%s' % self.pid),
-                                                predicate=URIRef(self.rel_owner)))
+        self.assertEqual('johndoe', str(graph.value(subject=URIRef('info:fedora/%s' % self.pid),
+                                                predicate=URIRef(self.rel_owner))))
 
         # get rels for a single predicate
         r = self.rest_api.getRelationships(self.pid, predicate=self.rel_owner)
