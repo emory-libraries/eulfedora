@@ -323,8 +323,8 @@ Hey, nonny-nonny."""
         # should include just the one we asked for
         self.assertEqual(1, len(list(graph)))
 
-        self.assertEqual('johndoe', graph.value(subject=URIRef('info:fedora/%s' % self.pid),
-                                                predicate=URIRef(self.rel_owner)))
+        self.assertEqual('johndoe', str(graph.value(subject=URIRef('info:fedora/%s' % self.pid),
+                                                predicate=URIRef(self.rel_owner))))
 
     def test_compareDatastreamChecksum(self):
         # create datastream with checksum
