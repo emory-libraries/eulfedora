@@ -65,31 +65,10 @@ import warnings
 from eulfedora.rdfns import model as modelns
 from eulfedora.api import ApiFacade, ResourceIndex
 from eulfedora.models import DigitalObject
-from eulfedora.util import RelativeServerConnection, parse_xml_object, RequestFailed
+from eulfedora.util import parse_xml_object, RequestFailed
 from eulfedora.xml import SearchResults, NewPids
 
 logger = logging.getLogger(__name__)
-
-_connection = None
-
-def init_pooled_connection(fedora_root=None):
-    '''Initialize pooled connection for use with :class:`Repository`.
-
-    :param fedora_root: base fedora url to use for connection.  If not specified,
-        uses FEDORA_ROOT from django settings
-    '''
-    global _connection
-    if fedora_root is None:
-        try:
-            from django.conf import settings
-            fedora_root = settings.FEDORA_ROOT
-        except ImportError:
-            raise Exception('Cannot initialize a Fedora connection without specifying ' +
-                            'Fedora root url directly or in Django settings as FEDORA_ROOT')
-
-    if not fedora_root.endswith('/'):
-        fedora_root = fedora_root + '/'
-    _connection = RelativeServerConnection(fedora_root)
 
 
 # a repository object, basically a handy facade for easy api access
