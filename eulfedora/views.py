@@ -78,6 +78,25 @@ def datastream_etag(request, pid, dsid, type=None, repo=None,
 
     return None
 
+def datastream_lastmodified(request, pid, dsid, type=None, repo=None,
+    *args, **kwargs):
+    '''Method suitable for use as a a last-modified function with
+    :class:`django.views.decorators.http.condition`.  Takes basically
+    the same arguments as :meth:`~eulfedora.views.raw_datastream`.
+    '''
+    try:
+        if repo is None:
+            repo = Repository()
+        get_obj_opts = {}
+        if type is not None:
+            get_obj_opts['type'] = type
+        obj = repo.get_object(pid, **get_obj_opts)
+        ds = obj.getDatastreamObject(dsid)
+        if ds and ds.exists:
+            return ds.created
+    except RequestFailed:
+        pass
+
 
 @condition(etag_func=datastream_etag)
 @require_http_methods(['GET', 'HEAD'])
