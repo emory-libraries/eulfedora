@@ -19,7 +19,8 @@ import logging
 from urlparse import urljoin
 import warnings
 import requests
-from requests_toolbelt import MultipartEncoder
+from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor, \
+    user_agent
 from StringIO import StringIO
 import time
 
@@ -75,8 +76,9 @@ class HTTP_API_Base(object):
             # to this fedora should be set in the session
             # (i.e., do NOT include auth information here)
             self.session.headers = {
-                'user-agent': 'eulfedora/%s (python-requests/%s)' % \
-                    (eulfedora_version, requests.__version__),
+                'User-Agent': user_agent('eulfedora', eulfedora_version),
+                # 'user-agent': 'eulfedora/%s (python-requests/%s)' % \
+                    # (eulfedora_version, requests.__version__),
                 'verify': True,  # verify SSL certs by default
             }
 
@@ -654,30 +656,49 @@ class REST_API(HTTP_API_Base):
 
     ### utility methods
 
-
-    def upload(self, data):
+    def upload(self, data, callback=None):
         '''
         Upload a multi-part file for content to ingest.  Returns a
         temporary upload id that can be used as a datstream location.
+
+        :param data: content string or file-like object to be uploaded
+        :param callback: optional callback method to monitor the upload;
+            see :mod:`requests-toolbelt` documentation for more
+            details: https://toolbelt.readthedocs.org/en/latest/user.html#uploading-data
+
+        :returns: upload id on success
         '''
         url = 'upload'
-        # fedora only expects content uploaded as multipart file
-        # - make string content into a file-like object so requests.post
+        # fedora only expects content uploaded as multipart file;
+        # make string content into a file-like object so requests.post
         # sends it the way Fedora expects.
         if not hasattr(data, 'read'):
             data = StringIO(data)
 
+        # use requests-toolbelt multipart encoder to avoid reading
+        # the full content of large files into memory
         m = MultipartEncoder(fields={'file': data})
-            # example from docs
-            # 'field2': ('filename', open('file.py', 'rb'), 'text/plain')}
 
-        r = self.post(url, data=m, headers={'Content-Type': m.content_type})
+        if callback is not None:
+            m = MultipartEncoderMonitor(m, callback)
+
+        try:
+            r = self.post(url, data=m, headers={'Content-Type': m.content_type})
+        except OverflowError as err:
+            print err
+            # Python __len__ uses integer so it is limited to system maxint,
+            # and requests and requests-toolbelt use len() throughout.
+            # This results in an overflow error when trying to upload a file
+            # larger than system maxint (2GB on 32-bit OSes).
+            # See http://bugs.python.org/issue12159
+            msg = 'upload content larger than system maxint (32-bit OS limitation)'
+            logger.error('OverflowError: %s', msg)
+            raise OverflowError(msg)
+
         if r.status_code == requests.codes.accepted:
             return r.content.strip()
             # returns 202 Accepted on success
             # content of response should be upload id, if successful
-            # resp_data = response.read()
-            # return resp_data.strip()
 
 
 # NOTE: the "LITE" APIs are planned to be phased out; when that happens, these functions
