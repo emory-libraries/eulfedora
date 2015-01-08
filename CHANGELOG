@@ -5,6 +5,29 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+1.0 (preliminary)
+-----------------
+
+* API methods have been overhauled to use `python-requests <http://python-requests.org>`_
+  and `requests-toolbelt <http://toolbelt.readthedocs.org>`_
+
+.. Note::
+
+   API methods that previously returned a tuple of response content and the url
+   now simply return the response object, which provides access to both content
+   and url (among other information).  Server and DigitalObject classes should
+   behave as before, but API methods are **not** backward-compatible.
+
+.. Warning::
+
+   The API upload method filesize is limited by the system maxint (2GB on 32-bit OSes)
+   due to a `limitation with the Python len() method <http://bugs.python.org/issue12159>`_
+   (possibly dependent on your Python implementation).  If you need large file
+   upload support on a 32-bit OS, you should use an earlier version of eulfedora.
+
+* New script **test-upload.py** for testing upload behavior on your platform;
+  also provides an example of an upload callback method.
+
 0.23
 ----
 
