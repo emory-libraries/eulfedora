@@ -5,6 +5,12 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+0.24 (prelim)
+-------------
+
+* bugfix: relationship methods on :class:`~eulfedora.models.DigitalObject` now
+  recognize unicode as well as string pids as resources.
+
 0.23
 ----
 
