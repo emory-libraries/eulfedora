@@ -785,6 +785,17 @@ class TestDigitalObject(FedoraTestCase):
         self.assertEqual("text datastream", text.label)
         self.assertEqual("text/plain", text.mimeType)
 
+    def test_get_datastream_object(self):
+        # NOTE: this is not an exhaustive test of getDatastreamObject, but
+        # is a test for a particular error introduced somewhere between eulfedora
+        # 0.20 and 0.23
+
+        # error when using defined datastreams - e.g. returns xmldatastream instead of
+        # XmlDatastreamObject
+        ds = self.obj.getDatastreamObject('extradc')
+        self.assert_(isinstance(ds, models.DatastreamObject))
+        self.assertFalse(ds.exists)
+
     def test_history(self):
         self.assert_(isinstance(self.obj.history, list))
         self.assert_(isinstance(self.obj.history[0], datetime))

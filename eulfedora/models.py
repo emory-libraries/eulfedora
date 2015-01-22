@@ -1793,14 +1793,16 @@ class DigitalObject(object):
             be returned
         '''
 
+        # NOTE: disabling this option because it returns a Datastream instead of
+        # a DatastreamObject, which is unexpected
         # if the requested datastream is a defined datastream, return it
-        if dsid in self._defined_datastreams:
-            return self._defined_datastreams[dsid]
+        # if dsid in self._defined_datastreams:
+            # return self._defined_datastreams[dsid]
 
         if dsid in self._adhoc_datastreams:
             return self._adhoc_datastreams[dsid]
 
-        if dsid in self.ds_list:   # FIXME: should this also check _defined_datastreams?
+        if dsid in self.ds_list:
             ds_info = self.ds_list[dsid]
             # FIXME: can we take advantage of Datastream descriptor? or at least use dscache ?
 
@@ -1930,11 +1932,11 @@ class DigitalObject(object):
 
         :param rel_uri: URI for the existing relationship
         :param old_object: previous target object for relationship; can be
-        				:class:`DigitalObject` or string; if string begins with info:fedora/ it
-        				will be treated as a resource, otherwise it will be treated as a literal
+                        :class:`DigitalObject` or string; if string begins with info:fedora/ it
+                        will be treated as a resource, otherwise it will be treated as a literal
         :param new_object: new target object for relationship; can be
-        				:class:`DigitalObject` or string; if string begins with info:fedora/ it
-        				will be treated as a resource, otherwise it will be treated as a literal
+                        :class:`DigitalObject` or string; if string begins with info:fedora/ it
+                        will be treated as a resource, otherwise it will be treated as a literal
         :rtype: boolean
         """
 
@@ -1965,14 +1967,14 @@ class DigitalObject(object):
 
         # attempt purge
         if self.api.purgeRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal) != True:
-        	return False
+            return False
         # attempt add
         elif self.api.addRelationship(self.pid, self.uri, rel_uri, new_object, obj_new_is_literal) != True:
-        	# if addRelationship fails, rollback to old_object
-        	self.api.addRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal)
-        	return False
-    	else:
-    		return True
+            # if addRelationship fails, rollback to old_object
+            self.api.addRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal)
+            return False
+        else:
+            return True
 
     def has_model(self, model):
         """
