@@ -66,10 +66,13 @@ from django.conf import settings
 from django.core.management import call_command
 from django.test.simple import DjangoTestSuiteRunner
 
-from eulfedora.server import Repository, init_pooled_connection
+from eulfedora.server import Repository
 from eulfedora.util import RequestFailed
 
 logger = logging.getLogger(__name__)
+
+# set a flag to indicate to nosetests that this should not be run as a test
+__test__ = False
 
 
 class FedoraTestWrapper(object):
@@ -97,9 +100,6 @@ class FedoraTestWrapper(object):
         if getattr(settings, "FEDORA_TEST_ROOT", None):
             settings.FEDORA_ROOT = settings.FEDORA_TEST_ROOT
             print >> sys.stderr, "Switching to test Fedora: %s" % settings.FEDORA_ROOT
-            # pooled fedora connection gets initialized before this change;
-            # re-initialize connection with new fedora root configured
-            init_pooled_connection()
         else:
             print >> sys.stderr, "FEDORA_TEST_ROOT is not configured in settings; tests will run against %s" % \
                 settings.FEDORA_ROOT
@@ -128,8 +128,6 @@ class FedoraTestWrapper(object):
         if self.stored_default_fedora_root is not None:
             msgs.append("Restoring Fedora root: %s" % self.stored_default_fedora_root)
             settings.FEDORA_ROOT = self.stored_default_fedora_root
-            # re-initialize pooled connection with restored fedora root
-            init_pooled_connection()
         if msgs:
             print >> sys.stderr, '\n', '\n'.join(msgs)
 

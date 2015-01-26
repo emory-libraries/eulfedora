@@ -14,27 +14,12 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from StringIO import StringIO
 import unittest
+from mock import Mock
 
 from django.template import Context, Template
 
 from eulfedora.util import RequestFailed, PermissionDenied
-
-
-class MockFedoraResponse(StringIO):
-    # The simplest thing that can possibly look like a Fedora response to
-    # eulcore.fedora.util
-    def __init__(self, status=500, reason='Cuz I said so',
-                 mimetype='text/plain', content=''):
-        StringIO.__init__(self, content)
-        self.status = status
-        self.reason = reason
-        self.mimetype = mimetype
-        self.msg = self  # for self.msg.gettype()
-
-    def gettype(self):
-        return self.mimetype
 
 
 class MockFedoraObject(object):
@@ -68,12 +53,15 @@ class TemplateTagTest(unittest.TestCase):
         val = t.render(ctx)
         self.assertEqual(val.strip(), 'sample text')
 
-        response = MockFedoraResponse(status=401)
+        response = Mock()
+        response.status_code = 401
+        response.headers = {'content-type': 'text/plain'}
+        response.content = ''
         test_obj._value = PermissionDenied(response)  # force test_obj.value to fail
         val = t.render(ctx)
         self.assertEqual(val.strip(), 'permission fallback')
 
-        response = MockFedoraResponse()
+        response.status_code = 500
         test_obj._value = RequestFailed(response)  # force test_obj.value to fail
         val = t.render(ctx)
         self.assertEqual(val.strip(), 'connection fallback')

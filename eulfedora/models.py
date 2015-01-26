@@ -17,6 +17,7 @@
 import cStringIO
 import hashlib
 import logging
+import requests
 
 from rdflib import URIRef, Graph as RdfGraph, Literal
 
@@ -144,8 +145,8 @@ class DatastreamObject(object):
             if not self.exists:
                 self._content = self._bootstrap_content()
             else:
-                data, url = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id)
-                self._content = self._convert_content(data, url)
+                r = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id)
+                self._content = self._convert_content(r.content, r.url)
                 # calculate and store a digest of the current datastream text content
                 self.digest = self._content_digest()
         return self._content
@@ -312,8 +313,8 @@ class DatastreamObject(object):
         '''Get history/version information for this datastream and
         return as an instance of
         :class:`~eulfedora.xml.DatastreamHistory`.'''
-        data, url = self.obj.api.getDatastreamHistory(self.obj.pid, self.id, format='xml')
-        return parse_xml_object(DatastreamHistory, data, url)
+        r = self.obj.api.getDatastreamHistory(self.obj.pid, self.id, format='xml')
+        return parse_xml_object(DatastreamHistory, r.content, r.url)
 
     def save(self, logmessage=None):
         """Save datastream content and any changed datastream profile
@@ -360,14 +361,17 @@ class DatastreamObject(object):
                 self._backup()
 
             # if this datastream already exists, use modifyDatastream API call
-            success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id,
+            r = self.obj.api.modifyDatastream(self.obj.pid, self.id,
                     logMessage=logmessage, **save_opts)
+            # expects 200 ok
+            success = (r.status_code == requests.codes.ok)
         else:
             # if this datastream does not yet exist, add it
-            success, msg = self.obj.api.addDatastream(self.obj.pid, self.id,
+            r = self.obj.api.addDatastream(self.obj.pid, self.id,
                     controlGroup=self.defaults['control_group'],
                     logMessage=logmessage, **save_opts)
-
+            # expects 201 created
+            success = (r.status_code == requests.codes.created)
             # clean-up required for object info after adding a new datastream
             if success:
                 # update exists flag - if add succeeded, the datastream exists now
@@ -399,8 +403,8 @@ class DatastreamObject(object):
                              'checksumType': info.checksum_type,
                              'checksum': info.checksum}
 
-        data, url = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id)
-        self._content_backup = data
+        r = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id)
+        self._content_backup = r.content
 
     def undo_last_save(self, logMessage=None):
         """Undo the last change made to the datastream content and profile, effectively
@@ -418,10 +422,10 @@ class DatastreamObject(object):
             # if this is a versioned datastream, get datastream history
             # and purge the most recent version
             last_save = self.history().versions[0].created  # fedora returns most recent first
-            success, timestamps = self.obj.api.purgeDatastream(self.obj.pid, self.id,
+            r = self.obj.api.purgeDatastream(self.obj.pid, self.id,
                                                 datetime_to_fedoratime(last_save),
                                                 logMessage=logMessage)
-            return success
+            return r.status_code == requests.codes.ok
         else:
             # for an unversioned datastream, update with any content and info
             # backups that were pulled from Fedora before any modifications were made
@@ -430,26 +434,21 @@ class DatastreamObject(object):
                 args['content'] = self._content_backup
             if self._info_backup is not None:
                 args.update(self._info_backup)
-            success, msg = self.obj.api.modifyDatastream(self.obj.pid, self.id,
+            r = self.obj.api.modifyDatastream(self.obj.pid, self.id,
                             logMessage=logMessage, **args)
-            return success
+            return r.status_code == requests.codes.ok
 
     def get_chunked_content(self, chunksize=4096):
         '''Generator that returns the datastream content in chunks, so
         larger datastreams can be used without reading the entire
         contents into memory.'''
-        from contextlib import closing
 
         # get the datastream dissemination, but return the actual http response
-        with closing(self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
-                                                           return_http_response=True)) \
-          as response:
-            # read and yield the response in chunks
-            while True:
-                chunk = response.read(chunksize)
-                if not chunk:
-                    return
-                yield chunk
+        r = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
+            stream=True)
+        # read and yield the response in chunks
+        for chunk in r.iter_content(chunksize):
+            yield chunk
 
     def validate_checksum(self, date=None):
         '''Check if this datastream has a valid checksum in Fedora, by
@@ -460,9 +459,9 @@ class DatastreamObject(object):
         :param date: (optional) check the datastream validity at a
             particular date/time (e.g., for versionable datastreams)
         '''
-        response, uri = self.obj.api.compareDatastreamChecksum(self.obj.pid, self.id,
+        r = self.obj.api.compareDatastreamChecksum(self.obj.pid, self.id,
                                                                asOfDateTime=date)
-        dsprofile = parse_xml_object(DatastreamProfile, response, uri)
+        dsprofile = parse_xml_object(DatastreamProfile, r.content, r.url)
         return dsprofile.checksum_valid
 
 
@@ -1156,7 +1155,7 @@ class DigitalObject(object):
     def risearch(self):
         "Instance of :class:`eulfedora.api.ResourceIndex`, with the same root url and credentials"
         if self._risearch is None:
-            self._risearch = ResourceIndex(self.api.opener)
+            self._risearch = ResourceIndex(self.api.base_url, self.api.username, self.api.password)
         return self._risearch
 
     def get_object(self, pid, type=None):
@@ -1200,8 +1199,8 @@ class DigitalObject(object):
         kwargs = {}
         if self.default_pidspace is not None:
             kwargs['namespace'] = self.default_pidspace
-        data, url = self.api.getNextPID(**kwargs)
-        nextpids = parse_xml_object(NewPids, data, url)
+        r = self.api.getNextPID(**kwargs)
+        nextpids = parse_xml_object(NewPids, r.content, r.url)
         return nextpids.pids[0]
 
     @property
@@ -1369,8 +1368,8 @@ class DigitalObject(object):
         if self._create:
             return None
 
-        data, url = self.api.getDatastream(self.pid, dsid)
-        return parse_xml_object(DatastreamProfile, data, url)
+        r = self.api.getDatastream(self.pid, dsid)
+        return parse_xml_object(DatastreamProfile, r.content, r.url)
 
     @property
     def history(self):
@@ -1382,8 +1381,8 @@ class DigitalObject(object):
         if self._create:
             return None
         else:
-            data, url = self.api.getObjectHistory(self.pid)
-            history = parse_xml_object(ObjectHistory, data, url)
+            r = self.api.getObjectHistory(self.pid)
+            history = parse_xml_object(ObjectHistory, r.content, r.url)
         self._history = [c for c in history.changed]
         return history
 
@@ -1400,8 +1399,8 @@ class DigitalObject(object):
         if self._create:
             return None
         else:
-            data, url = self.api.getObjectXML(self.pid)
-            self._object_xml = parse_xml_object(FoxmlDigitalObject, data, url)
+            r = self.api.getObjectXML(self.pid)
+            self._object_xml = parse_xml_object(FoxmlDigitalObject, r.content, r.url)
             return self._object_xml
 
     @property
@@ -1451,17 +1450,20 @@ class DigitalObject(object):
         if self._create:
             return ObjectProfile()
         else:
-            data, url = self.api.getObjectProfile(self.pid)
-            return parse_xml_object(ObjectProfile, data, url)
+            r = self.api.getObjectProfile(self.pid)
+            return parse_xml_object(ObjectProfile, r.content, r.url)
 
     def _saveProfile(self, logMessage=None):
         if self._create:
             raise Exception("can't save profile information for a new object before it's ingested.")
 
-        saved = self.api.modifyObject(self.pid, self.label, self.owner, self.state, logMessage)
-        if saved:
+        r = self.api.modifyObject(self.pid, self.label, self.owner, self.state, logMessage)
+        if r.status_code == requests.codes.ok:
             # profile info is no longer different than what is in Fedora
             self.info_modified = False
+            saved = True
+        else:
+            saved = False
         return saved
 
     def save(self, logMessage=None):
@@ -1568,12 +1570,11 @@ class DigitalObject(object):
 
     def _ingest(self, logMessage):
         foxml = self._build_foxml_for_ingest()
-        returned_pid = self.api.ingest(foxml, logMessage)
-
-        if returned_pid != self.pid:
+        r = self.api.ingest(foxml, logMessage)
+        if r.status_code != requests.codes.created or r.content != self.pid:
             msg = ('fedora returned unexpected pid "%s" when trying to ' +
-                   'ingest object with pid "%s"') % \
-                  (returned_pid, self.pid)
+                   'ingest object with pid "%s" (status code: %s)') % \
+                   (r.content, self.pid, r.status_code)
             raise Exception(msg)
 
         # then clean up the local object so that self knows it's dealing
@@ -1736,8 +1737,8 @@ class DigitalObject(object):
             return {}
         else:
             # NOTE: can be accessed as a cached class property via ds_list
-            data, url = self.api.listDatastreams(self.pid)
-            dsobj = parse_xml_object(ObjectDatastreams, data, url)
+            r = self.api.listDatastreams(self.pid)
+            dsobj = parse_xml_object(ObjectDatastreams, r.content, r.url)
             return dict([(ds.dsid, ds) for ds in dsobj.datastreams])
 
     @property
@@ -1765,15 +1766,14 @@ class DigitalObject(object):
         if self._create:
             return {}
 
-        data, url = self.api.listMethods(self.pid)
-        methods = parse_xml_object(ObjectMethods, data, url)
+        r = self.api.listMethods(self.pid)
+        methods = parse_xml_object(ObjectMethods, r.content, r.url)
         self._methods = dict((sdef.pid, sdef.methods)
                              for sdef in methods.service_definitions)
         return self._methods
 
     def getDissemination(self, service_pid, method, params={}, return_http_response=False):
-        return self.api.getDissemination(self.pid, service_pid, method, method_params=params,
-                                         return_http_response=return_http_response)
+        return self.api.getDissemination(self.pid, service_pid, method, method_params=params)
 
     def getDatastreamObject(self, dsid, dsobj_type=None):
         '''Get any datastream on this object as a :class:`DatastreamObject`
@@ -1793,14 +1793,16 @@ class DigitalObject(object):
             be returned
         '''
 
+        # NOTE: disabling this option because it returns a Datastream instead of
+        # a DatastreamObject, which is unexpected
         # if the requested datastream is a defined datastream, return it
-        if dsid in self._defined_datastreams:
-            return self._defined_datastreams[dsid]
+        # if dsid in self._defined_datastreams:
+            # return self._defined_datastreams[dsid]
 
         if dsid in self._adhoc_datastreams:
             return self._adhoc_datastreams[dsid]
 
-        if dsid in self.ds_list:   # FIXME: should this also check _defined_datastreams?
+        if dsid in self.ds_list:
             ds_info = self.ds_list[dsid]
             # FIXME: can we take advantage of Datastream descriptor? or at least use dscache ?
 
