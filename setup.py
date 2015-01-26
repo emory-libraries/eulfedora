@@ -27,7 +27,8 @@ requirements = [
     'eulxml>=0.18.0',
     'rdflib>=3.0',
     'python-dateutil',
-    'poster',
+    'requests>=2.5.0',
+    'requests-toolbelt',
     'pycrypto',
 ]
 
@@ -53,9 +54,9 @@ setup(
             'sphinx',
             'nose',
             'coverage',
-            'Django>=1.4',
+            'Django<1.7',
             'mock',
-            'unittest2',  # optional testrunner in testutil
+            'unittest2<0.7',  # optional testrunner in testutil
             'pyPdf',
             'progressbar',
         ]

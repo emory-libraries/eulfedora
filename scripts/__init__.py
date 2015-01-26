@@ -76,7 +76,7 @@ more details, see the script usage for the appropriate mode::
 ----
 
 validate-checksums
-----------------
+------------------
 
 **validate-checksums** is a command line utility script intended for
 regularly, periodically checking that datastream checksums are valid for

@@ -24,7 +24,7 @@ from django.http import Http404
 from eulfedora.models import DigitalObject, Datastream, FileDatastream
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.views import raw_datastream, login_and_store_credentials_in_session, \
-     datastream_etag, raw_audit_trail
+     datastream_etag, datastream_lastmodified, raw_audit_trail
 from eulfedora import cryptutil
 
 
@@ -73,6 +73,7 @@ class FedoraViewsTest(unittest.TestCase):
         # DC
         response = raw_datastream(rqst, self.obj.pid, 'DC')
         expected, got = 200, response.status_code
+        content = response.content
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream view of DC' \
                 % (expected, got))
@@ -83,7 +84,7 @@ class FedoraViewsTest(unittest.TestCase):
         self.assertEqual(self.obj.dc.checksum, response['ETag'],
             'datastream checksum should be set as ETag header in the response')
         self.assertEqual(self.obj.dc.checksum, response['Content-MD5'])
-        self.assert_('<dc:title>%s</dc:title>' % self.obj.dc.content.title in response.content)
+        self.assert_('<dc:title>%s</dc:title>' % self.obj.dc.content.title in content)
 
         # RELS-EXT
         response = raw_datastream(rqst, self.obj.pid, 'RELS-EXT')
@@ -175,9 +176,10 @@ class FedoraViewsTest(unittest.TestCase):
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream range request' \
                 % (expected, got))
-        self.assertEqual(self.obj.image.size, len(response.content),
+        content = response.content
+        self.assertEqual(self.obj.image.size, len(content),
             'range request of bytes=0- should return entire content (expected %d, got %d)' \
-            % (self.obj.image.size, len(response.content)))
+            % (self.obj.image.size, len(content)))
         self.assertEqual(self.obj.image.size, int(response['Content-Length']),
             'content-length header should be size of entire content (expected %d, got %d)' \
             % (self.obj.image.size, int(response['Content-Length'])))
@@ -291,6 +293,27 @@ class FedoraViewsTest(unittest.TestCase):
         rqst.META = {'HTTP_RANGE': 'bytes=300-500'}
         etag = datastream_etag(rqst, self.obj.pid, 'DC', accept_range_request=True)
         self.assertEqual(None, etag)
+
+    def test_datastream_lastmodified(self):
+        rqst = Mock()
+        rqst.META = {}
+        # DC
+        lastmod = datastream_lastmodified(rqst, self.obj.pid, 'DC')
+        self.assertEqual(self.obj.dc.created, lastmod)
+
+        # bogus dsid should not error
+        lastmod = datastream_lastmodified(rqst, self.obj.pid, 'bogus-datastream-id')
+        self.assertEqual(None, lastmod)
+
+        # range request should not affect last modification time
+        rqst.META = {'HTTP_RANGE': 'bytes=1-'}
+        lastmod = datastream_lastmodified(rqst, self.obj.pid, 'DC')
+        self.assertEqual(self.obj.dc.created, lastmod)
+
+        # any other range request should still return last modification time
+        rqst.META = {'HTTP_RANGE': 'bytes=300-500'}
+        lastmod = datastream_lastmodified(rqst, self.obj.pid, 'DC', accept_range_request=True)
+        self.assertEqual(self.obj.dc.created, lastmod)
 
 
     def test_raw_audit_trail(self):
