@@ -49,6 +49,7 @@ class FedoraChecksums(object):
     # URI for Fedora object content model
     object_model = 'info:fedora/fedora-system:FedoraObject-3.0'
 
+    args = None
 
     def config_arg_parser(self):
         # configure argument parser
@@ -74,13 +75,13 @@ class FedoraChecksums(object):
                                  help='list specific pids to be checked (optional)')
 
         # actual main argument parser
-        self.parser = argparse.ArgumentParser(description='''Validate or repair datastream
-        checksums for Fedora repository content.  By default, iterates through all content
-        objects that are findable via RIsearch and checks or repairs all datastreams.
-        ''')
+        parser = argparse.ArgumentParser(description='''Validate or repair datastream
+            checksums for Fedora repository content.  By default, iterates through all content
+            objects that are findable via RIsearch and checks or repairs all datastreams.
+            ''')
 
         # add subcommands for script modes
-        subparsers = self.parser.add_subparsers(dest='mode', title='subcommands')
+        subparsers = parser.add_subparsers(dest='mode', title='subcommands')
         # validate
         v_parser = subparsers.add_parser('validate',
                                          help='check for invalid and missing checksums',
