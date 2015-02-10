@@ -50,6 +50,7 @@ class FedoraChecksums(object):
     object_model = 'info:fedora/fedora-system:FedoraObject-3.0'
 
     args = None
+    parser = None
 
     def config_arg_parser(self):
         # configure argument parser
@@ -75,13 +76,13 @@ class FedoraChecksums(object):
                                  help='list specific pids to be checked (optional)')
 
         # actual main argument parser
-        parser = argparse.ArgumentParser(description='''Validate or repair datastream
+        self.parser = argparse.ArgumentParser(description='''Validate or repair datastream
             checksums for Fedora repository content.  By default, iterates through all content
             objects that are findable via RIsearch and checks or repairs all datastreams.
             ''')
 
         # add subcommands for script modes
-        subparsers = parser.add_subparsers(dest='mode', title='subcommands')
+        subparsers = self.parser.add_subparsers(dest='mode', title='subcommands')
         # validate
         v_parser = subparsers.add_parser('validate',
                                          help='check for invalid and missing checksums',
@@ -120,7 +121,7 @@ class FedoraChecksums(object):
             self.csv_file = open(self.args.csv_file, 'wb')
             self.csv = csv.writer(self.csv_file,  quoting=csv.QUOTE_ALL)
             self.csv.writerow(['pid', 'datastream id', 'date created', 'status',
-                               'mimetype', 'versioned'])
+                               'mimetype', 'versioned', 'control group'])
 
         # TODO: needs fedora error handling (e.g., bad password, hostname, etc)
         repo = Repository(self.args.fedora_root,
@@ -170,7 +171,7 @@ class FedoraChecksums(object):
                 break
 
         if pid_pbar and not self.interrupted:
-           pid_pbar.finish()
+            pid_pbar.finish()
 
         # summarize what was done
         if self.args.mode == 'validate':
@@ -232,7 +233,7 @@ class FedoraChecksums(object):
 
             if self.csv:
                 self.csv.writerow([dsobj.obj.pid, dsobj.id, date or dsobj.created, status,
-                                   dsobj.mimetype, dsobj.versionable])
+                                   dsobj.mimetype, dsobj.versionable, dsobj.control_group])
 
     def validation_summary(self):
         '''Summarize what was done when the script was run in
