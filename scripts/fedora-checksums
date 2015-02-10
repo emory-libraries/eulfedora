@@ -27,8 +27,12 @@ from eulfedora.server import Repository
 from eulfedora.rdfns import model as modelns
 from getpass import getpass
 import os
+from Queue import Queue, Empty as EmptyQueue
 import signal
 import sys
+import threading
+from time import sleep
+
 
 try:
     from progressbar import ProgressBar, Bar, Percentage, ETA, SimpleProgress
@@ -71,7 +75,8 @@ class FedoraChecksums(object):
                                  help='Quiet mode: only output summary report')
         common_args.add_argument('--max', '-m', type=int, metavar='N',
                                  help='Stop after processing the first %(metavar)s objects')
-
+        common_args.add_argument('--concurrency', type=int, metavar='N', default=5,
+                                 help='Number of concurrent validation/repair threads to run (default: %(default)d)')
         common_args.add_argument('pids', metavar='PID', nargs='*',
                                  help='list specific pids to be checked (optional)')
 
@@ -144,6 +149,76 @@ class FedoraChecksums(object):
                        Bar(), ETA()]
             pid_pbar = ProgressBar(widgets = widgets, maxval=total).start()
 
+        self.todo_queue = Queue()
+        self.done_queue = Queue()
+
+        # count of # datastreams queued for processing, keyed on pid
+        # (used to determine when an object is finished)
+        self.queued = {}
+
+        # determine worker and reporter to use for requested items
+        if self.args.mode == 'validate':
+            worker = ValidationWorker
+            reporter = ValidationReporter
+        elif self.args.mode == 'repair':
+            worker = RepairWorker
+            reporter = RepairReporter
+
+        # start the requested number of worker threads
+        # NOTE: might not want multiple threads for just a few pids...
+        for i in range(self.args.concurrency):
+            v = worker(self.todo_queue, self.done_queue,
+                                 self.args, self.queued, self.stats)
+            v.start()
+
+        # start a single reporter thread to pick up completed items
+        vr = reporter(self.done_queue, self.args, self.stats,
+                                self.queued, pid_pbar, self.csv)
+        vr.start()
+
+        # keep track of number of jobs queued per item
+        for pid in object_pids:
+            obj = repo.get_object(pid=pid)
+            if not obj.exists:
+                print "Error: %s does not exist or is inaccessible" % pid
+                continue
+
+            self.queued[obj.pid] = 0
+
+            for dsid in obj.ds_list.iterkeys():
+                dsobj = obj.getDatastreamObject(dsid)
+                self.stats['ds'] += 1
+
+                if self.args.mode == 'validate':
+                    self.queue_validation(dsobj)
+
+                elif self.args.mode == 'repair':
+                    self.queue_repair(dsobj)
+
+            # if interrupted or at a specified max, quit
+            if self.interrupted or \
+                   self.args.max and len(self.queued.keys()) >= self.args.max:
+
+                if self.interrupted:
+                    # update progressbar to show queued items
+                    pid_pbar.maxval = max(len(self.queued.keys()), self.stats['objects'])
+                    pid_pbar.update(self.stats['objects'])
+                break
+
+        # queue.join blocks; check periodically if the need to check/sleep/interrupt
+        while not self.todo_queue.empty():
+            sleep(1)
+        self.todo_queue.join()
+
+        while not self.done_queue.empty():
+            sleep(1)
+        self.done_queue.join()
+
+        if pid_pbar and not self.interrupted:
+            pid_pbar.finish()
+
+
+        # OLD/unthreaded code
         for pid in object_pids:
             obj = repo.get_object(pid = pid)
             if not obj.exists:
@@ -170,9 +245,6 @@ class FedoraChecksums(object):
                    self.args.max and self.stats['objects'] == self.args.max:
                 break
 
-        if pid_pbar and not self.interrupted:
-            pid_pbar.finish()
-
         # summarize what was done
         if self.args.mode == 'validate':
             self.validation_summary()
@@ -183,6 +255,28 @@ class FedoraChecksums(object):
         if self.csv_file:
             self.csv_file.close()
 
+    def queue_validation(self, dsobj):
+        '''Add information to the ``to-do`` queue for datastreams
+        versions to be validated.
+        '''
+        pid = dsobj.obj.pid
+        if pid not in self.queued:
+            self.queued[pid] = 0
+
+        if self.args.all_versions:
+            # check every version of this datastream
+            try:
+                for ds in dsobj.history().versions:
+                    self.todo_queue.put((pid, dsobj.id, ds.created))
+                    self.queued[pid] += 1
+                    self.stats['ds_versions'] += 1
+            except Exception as e:
+                print "error getting history for %s %r" % (pid, e)
+
+        else:
+            # current version only
+            self.todo_queue.put((pid, dsobj.id, None))
+            self.queued[pid] += 1
 
     def validate_datastream(self, dsobj):
         if self.args.all_versions:
@@ -246,6 +340,15 @@ class FedoraChecksums(object):
             print '%(invalid)d invalid checksum(s)' % self.stats
         print '%(missing)d datastream(s) with no checksum' % self.stats
 
+    def queue_repair(self, dsobj):
+        '''Add information to the ``to-do`` queue for datastream
+        to be checked for repair.'''
+        pid = dsobj.obj.pid
+        if pid not in self.queued:
+            self.queued[pid] = 0
+        self.queued[pid] += 1
+        self.todo_queue.put((pid, dsobj.id))
+
 
     def repair_datastream(self, dsobj):
         '''Check for and repair a missing checksum on a single
@@ -289,6 +392,205 @@ class FedoraChecksums(object):
             # report if script is in the middle of an object
             print 'Script will exit after processing the current object.'
             print '(Ctrl-C / Interrupt again to quit immediately)'
+
+class DatastreamWorker(threading.Thread):
+    '''Thread class with common logic for processing items in the
+    ``to-do`` queue and adding results to the ``done`` queue. '''
+    daemon = True
+
+    def __init__(self, todo_queue, done_queue, options, queued, stats):
+        threading.Thread.__init__(self)
+        self.todo = todo_queue
+        self.done = done_queue
+        self.repo = Repository(options.fedora_root,
+                          options.fedora_user, options.fedora_password)
+        self.queued = queued
+        self.stats = stats
+        self.options = options
+
+    def run(self):
+        while True:
+            try:
+                item = self.todo.get()
+                # queued item is a tuple; first element should always be pid
+                pid = item[0]
+                self.done.put(self.process_queued_item(item))
+
+                self.queued[pid] -= 1
+                if self.queued[pid] == 0:
+                    self.stats['objects'] += 1
+
+                self.todo.task_done()
+            except EmptyQueue:
+                sleep(1)
+
+    def process_queued_item(self, *args, **kwargs):
+        # processing logic goes here
+        pass
+
+
+class Reporter(threading.Thread):
+    '''Thread class with common logic for handling items in the
+    ``done`` queue and reporting where appropriate.'''
+
+    daemon = True
+
+    def __init__(self, done_queue, options, stats, queued,
+                 pbar=None, csv=None):
+        threading.Thread.__init__(self)
+        self.done = done_queue
+        self.quiet = options.quiet
+        self.csv = csv
+        self.pbar = pbar
+        self.stats = stats
+        self.queued = queued
+
+    def run(self):
+        while True:
+            try:
+                self.process_finished_item(self.done.get())
+
+                if self.pbar:
+                    # maxval/stats could get out of sync when interrupted
+                    self.pbar.maxval = max(self.pbar.maxval, self.stats['objects'])
+                    self.pbar.update(self.stats['objects'])
+
+                self.done.task_done()
+
+            except EmptyQueue:
+                sleep(1)
+
+    def process_finished_item(self, *args, **kwargs):
+        # result processing logic goes here
+        pass
+
+
+class ValidationResult(object):
+    '''Result object for communicating validation outcome.'''
+
+    def __init__(self, pid, dsid, date, status, mimetype, versionable,
+                 control_group):
+        self.pid = pid
+        self.dsid = dsid
+        self.date = date
+        self.status = status
+        self.mimetype = mimetype
+        self.versionable = versionable
+        self.control_group = control_group
+
+    @property
+    def valid(self):
+        'boolean property indicating if the datastream was valid'
+        return self.status == 'ok'
+
+    def msg(self):
+        'Information to be displayed for verbose output'
+        return "%s/%s - %s checksum (%s)" % \
+               (self.pid, self.dsid,
+                self.status, self.date)
+
+    def csv_data(self):
+        'List of data fields to be added to CSV file'
+        return [self.pid, self.dsid, self.date,
+                self.status, self.mimetype, self.versionable, self.control_group]
+
+
+class ValidationWorker(DatastreamWorker):
+
+    def process_queued_item(self, item):
+        '''Validate the checksum and set status to one of ``invalid``,
+        ``missing``, or ``ok``.'''
+        pid, dsid, date = item
+
+        obj = self.repo.get_object(pid)
+        dsobj = obj.getDatastreamObject(dsid)
+
+        try:
+            if not dsobj.validate_checksum(date=date):
+                status = 'invalid'
+
+            # if the checksum in fedora is stored as DISABLED/none,
+            # validate_checksum will return True - but that may not be
+            # what we want, so report as missing.
+            elif dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
+                status = 'missing'
+
+            else:
+                status = 'ok'
+        except Exception as e:
+            status = 'error'
+            print "error validating checksum %s %s %r" % (pid, dsid, e)
+
+        return ValidationResult(pid, dsid, date or dsobj.created, status,
+                                dsobj.mimetype, dsobj.versionable,
+                                dsobj.control_group)
+
+
+class ValidationReporter(Reporter):
+
+    def process_finished_item(self, result):
+        self.stats[result.status] += 1
+
+        if not result.valid:
+            if not self.quiet:
+                print result.msg()
+            if self.csv:
+                self.csv.writerow(result.csv_data())
+
+
+class RepairResult(object):
+    '''Result object for communicating repair outcome.'''
+
+    def __init__(self, pid, dsid, saved, error):
+        self.pid = pid
+        self.dsid = dsid
+        self.saved = saved
+        self.error = error
+
+
+class RepairWorker(DatastreamWorker):
+
+    def process_queued_item(self, item):
+        '''Check for and repair a missing checksum on a single
+        datastream.  If checksum type is ``DISABLED`` and checksum
+        value is ``none``, update the checksum type and save the
+        datastream, prompting Fedora to calculate a new checksum of
+        the requested type.
+
+        :param pid: object pid
+        :param dsid: datastream id to be checked
+        '''
+
+        pid, dsid = item
+        obj = self.repo.get_object(pid)
+        dsobj = obj.getDatastreamObject(dsid)
+        saved = False
+        err = None
+
+        if dsobj.checksum_type == 'DISABLED' or dsobj.checksum == 'none':
+            dsobj.checksum_type = self.options.checksum_type
+
+            saved = False
+            err = None
+
+            try:
+                saved = dsobj.save('updating missing checksum')
+            except Exception as e:
+                err = 'Error saving %s/%s : %r' % (pid, dsid, e)
+
+        # return result even if nothing was done, so reporter thread
+        # can update status
+        return RepairResult(pid, dsid, saved, err)
+
+
+class RepairReporter(Reporter):
+
+    def process_finished_item(self, result):
+        if result.saved:
+            self.stats['ds_updated'] += 1
+        if result.error:
+            print result.error
+            self.stats['ds_err'] += 1
 
 
 class PasswordAction(argparse.Action):
