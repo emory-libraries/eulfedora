@@ -94,6 +94,8 @@ class FedoraChecksums(object):
                                          parents=[common_args])
         v_parser.add_argument('--csv-file', dest='csv_file', default=None,
                               help='Output results to the specified CSV file')
+        v_parser.add_argument('--csv-all', dest='csv_all', action='store_true', default=False,
+                              help='Include all results (valid/invalid/missing) in CSV output')
         v_parser.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
                               help='''Check all versions of datastreams
                               (by default, only current versions are checked)''')
@@ -444,6 +446,7 @@ class Reporter(threading.Thread):
         self.pbar = pbar
         self.stats = stats
         self.queued = queued
+        self.options = options
 
     def run(self):
         while True:
@@ -534,8 +537,9 @@ class ValidationReporter(Reporter):
         if not result.valid:
             if not self.quiet:
                 print result.msg()
-            if self.csv:
-                self.csv.writerow(result.csv_data())
+        # output to csv if requested and result is invalid or all output requested
+        if self.csv and not result.valid or self.options.csv_all:
+            self.csv.writerow(result.csv_data())
 
 
 class RepairResult(object):
