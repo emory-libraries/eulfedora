@@ -131,7 +131,7 @@ class FedoraChecksums(object):
             self.csv_file = open(self.args.csv_file, 'wb')
             self.csv = csv.writer(self.csv_file,  quoting=csv.QUOTE_ALL)
             self.csv.writerow(['pid', 'datastream id', 'date created', 'status',
-                               'mimetype', 'versioned', 'control group'])
+                               'mimetype', 'versioned', 'control group', 'content models'])
 
         # TODO: needs fedora error handling (e.g., bad password, hostname, etc)
         repo = Repository(self.args.fedora_root,
@@ -402,7 +402,7 @@ class ValidationResult(object):
     '''Result object for communicating validation outcome.'''
 
     def __init__(self, pid, dsid, date, status, mimetype, versionable,
-                 control_group):
+                 control_group, content_models):
         self.pid = pid
         self.dsid = dsid
         self.date = date
@@ -410,6 +410,7 @@ class ValidationResult(object):
         self.mimetype = mimetype
         self.versionable = versionable
         self.control_group = control_group
+        self.content_models = ', '.join(content_models)
 
     @property
     def valid(self):
@@ -425,7 +426,8 @@ class ValidationResult(object):
     def csv_data(self):
         'List of data fields to be added to CSV file'
         return [self.pid, self.dsid, self.date,
-                self.status, self.mimetype, self.versionable, self.control_group]
+                self.status, self.mimetype, self.versionable, self.control_group,
+                self.content_models]
 
 
 class ValidationWorker(DatastreamWorker):
@@ -456,7 +458,7 @@ class ValidationWorker(DatastreamWorker):
 
         return ValidationResult(pid, dsid, date or dsobj.created, status,
                                 dsobj.mimetype, dsobj.versionable,
-                                dsobj.control_group)
+                                dsobj.control_group, obj.get_models())
 
 
 class ValidationReporter(Reporter):
