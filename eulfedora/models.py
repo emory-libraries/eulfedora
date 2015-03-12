@@ -837,16 +837,21 @@ class Relation(object):
         related name will be ``classname_set``; a value of ``+``
         indicates no :class:`ReverseRelation` should be created
 
+    :param related_order: optional URI for sorting related objects
+        in the auto-generated :class:`ReverseRelation` property.
+
     '''
 
     def __init__(self, relation, type=None, ns_prefix={}, rdf_type=None,
-                 related_name=None):
+                 related_name=None, related_order=None):
         self.relation = relation
         self.object_type = type
         self.ns_prefix = ns_prefix
         self.rdf_type = rdf_type
         self.related_name = related_name
+        self.related_order = related_order
         self.uri_val = None
+
 
     def __get__(self, obj, objtype):
         if obj is None:
@@ -928,36 +933,57 @@ class ReverseRelation(object):
     This descriptor *only* provides read access; there is no
     functionality for setting or deleting reverse-related objects.
 
-    It is highly recommended to use :class:`Relation` and let the
+    It is recommended to use :class:`Relation` and let the
     corresponding :class:`ReverseRelation` be automatically generated
     for you.
-
-    .. Note::
-
-       There is currently no support for sorting when multiple items
-       are returned; items are currently returned in whatever order
-       the :class:`~eulfedora.api.ResourceIndex` returns them.
 
     Example use::
 
         class Volume(DigitalObject):
             pages = ReverseRelation(relsext.isConstituentOf, type=Page, multiple=True)
 
+    :param relation: RDF relation to be used for querying to find the items
+    :param type: object type for the related item or items
+    :param multiple: set to true if there multiple related items, which will be returned
+        as a list (defaults to false)
+    :param order_by: RDF predicate to be used for sorting multiple items
+        (must be available for query in the RIsearch, as a property of
+        the items being returned)
+
     '''
-    def __init__(self, relation, type=None, multiple=False):
+    def __init__(self, relation, type=None, multiple=False, order_by=None):
         self.relation = relation
         self.object_type = type
         self.multiple = multiple
+        self.order_by = order_by
 
     def __get__(self, obj, objtype):
         if obj is None:
             return self
         # query RIsearch for subjects based on configured relation and current object
-        uris = list(obj.risearch.get_subjects(self.relation, obj.uriref))
+
+        # if a sort property is specified, use sparql to find *and* sort
+        if self.order_by is not None:
+            sparql_query = '''SELECT ?pid ?order
+                WHERE {
+                    ?pid <%(rel)s> <%(uri)s> .
+                    ?pid <%(sort_rel)s> ?order
+                } ORDER BY ?order''' % {
+                    'rel': self.relation,
+                    'uri': obj.uriref,
+                    'sort_rel': self.order_by
+                }
+            results = obj.risearch.sparql_query(sparql_query)
+            uris = [r['pid'] for r in results]
+
+        # otherwise, just do a simple SPO search to get the objects
+        else:
+            uris = list(obj.risearch.get_subjects(self.relation, obj.uriref))
+
         if self.multiple:
             return [self._init_val(obj, uri) for uri in uris]
         elif uris:
-                return self._init_val(obj, uris[0])
+            return self._init_val(obj, uris[0])
 
     def _init_val(self, obj, val):
         # initialize the desired return type, based on configuration
@@ -1034,7 +1060,7 @@ class DigitalObjectType(type):
             # add the reverse relation to the other class
             setattr(rel.object_type, reverse_name,
                     ReverseRelation(rel.relation, type=new_class,
-                                    multiple=True))
+                                    multiple=True, order_by=rel.related_order))
 
         return new_class
 
