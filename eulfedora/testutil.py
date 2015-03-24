@@ -61,7 +61,11 @@ automatically enabled.
 import logging
 import sys
 
-import unittest2 as unittest
+try:
+    import unittest2 as unittest
+except ImportError:
+    unittest = None
+
 from django.conf import settings
 from django.core.management import call_command
 from django.test.simple import DjangoTestSuiteRunner
@@ -166,13 +170,15 @@ class FedoraTestWrapper(object):
 alternate_test_fedora = FedoraTestWrapper
 
 
-class FedoraTextTestRunner(unittest.TextTestRunner):
-    '''A :class:`unittest.TextTestRunner` that wraps test execution in a
-    :class:`FedoraTestWrapper`.
-    '''
-    def run(self, test):
-        wrapped_test = alternate_test_fedora.wrap_test(test)
-        return super(FedoraTextTestRunner, self).run(wrapped_test)
+if unittest is not None:
+
+    class FedoraTextTestRunner(unittest.TextTestRunner):
+        '''A :class:`unittest.TextTestRunner` that wraps test execution in a
+        :class:`FedoraTestWrapper`.
+        '''
+        def run(self, test):
+            wrapped_test = alternate_test_fedora.wrap_test(test)
+            return super(FedoraTextTestRunner, self).run(wrapped_test)
 
 class FedoraTextTestSuiteRunner(DjangoTestSuiteRunner):
     '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup and
