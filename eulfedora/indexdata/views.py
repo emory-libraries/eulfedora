@@ -65,7 +65,6 @@ applications.
 import logging
 import os
 import json
-from django.utils import simplejson
 from django.conf import settings
 from django.http import HttpResponse, Http404, HttpResponseForbidden, \
     HttpResponseBadRequest
@@ -111,7 +110,7 @@ def index_config(request):
         'SOLR_URL': settings.SOLR_SERVER_URL
     }
 
-    return HttpResponse(simplejson.dumps(response), content_type='application/json')
+    return HttpResponse(json.dumps(response), content_type='application/json')
 
 def index_data(request, id, repo=None):
     '''Return the fields and values to be indexed for a single object
@@ -138,7 +137,7 @@ def index_data(request, id, repo=None):
         repo = TypeInferringRepository(**repo_opts)
     try:
         obj = repo.get_object(id)
-        return HttpResponse(simplejson.dumps(obj.index_data()),
+        return HttpResponse(json.dumps(obj.index_data()),
                             content_type='application/json')
     except RequestFailed:
         # for now, treat any failure getting the object from Fedora as a 404
