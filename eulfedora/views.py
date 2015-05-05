@@ -210,7 +210,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
                 # not using serialize(pretty=True) for XML/RDF datastreams, since
                 # we actually want the raw datstream content.
 
-            response = HttpResponse(content, mimetype=ds.mimetype)
+            response = HttpResponse(content, content_type=ds.mimetype)
             # NOTE: might want to use StreamingHttpResponse here, at least
             # over some size threshold or for range requests
 
@@ -365,7 +365,7 @@ def raw_audit_trail(request, pid, type=None, repo=None):
     # object exists and has a non-empty audit trail
     if obj.exists and obj.has_requisite_content_models and obj.audit_trail:
         response = HttpResponse(obj.audit_trail.serialize(),
-                            mimetype='text/xml')
+                            content_type='text/xml')
         # audit trail is updated every time the object gets modified
         response['Last-Modified'] = obj.modified
         return response
