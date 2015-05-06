@@ -68,7 +68,7 @@ except ImportError:
 
 from django.conf import settings
 from django.core.management import call_command
-from django.test.simple import DjangoTestSuiteRunner
+from django.test.runner import DiscoverRunner
 
 from eulfedora.server import Repository
 from eulfedora.util import RequestFailed
@@ -180,7 +180,7 @@ if unittest is not None:
             wrapped_test = alternate_test_fedora.wrap_test(test)
             return super(FedoraTextTestRunner, self).run(wrapped_test)
 
-class FedoraTextTestSuiteRunner(DjangoTestSuiteRunner):
+class FedoraTextTestSuiteRunner(DiscoverRunner):
     '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup and
     teardown the Fedora test environment.'''
     def run_suite(self, suite, **kwargs):
