@@ -792,6 +792,10 @@ class ResourceIndex(HTTP_API_Base):
             flush = self.RISEARCH_FLUSH_ON_QUERY
         http_args['flush'] = 'true' if flush else 'false'
 
+        # log the actual query so it's easier to see what's happening
+        logger.debug('risearch query type=%(type)s language=%(lang)s format=%(format)s flush=%(flush)s\n%(query)s' % \
+            http_args)
+
         url = 'risearch'
         try:
             r = self.get(url, params=http_args)
