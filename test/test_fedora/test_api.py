@@ -1,4 +1,4 @@
-# file test_fedora/test_api.py
+    # file test_fedora/test_api.py
 #
 #   Copyright 2011 Emory University Libraries
 #
@@ -229,7 +229,7 @@ Hey, nonny-nonny."""
             % ds in r.content)
         r = self.rest_api.getDatastream(self.pid, ds['id'])
         ds_profile = r.content
-        self.assert_('dsID="%s" ' % ds['id'] in ds_profile)
+        self.assert_('dsID="%s"' % ds['id'] in ds_profile)
         self.assert_('<dsLabel>%s</dsLabel>' % ds['label'] in ds_profile)
         self.assert_('<dsVersionID>%s.0</dsVersionID>' % ds['id'] in ds_profile)
         self.assert_('<dsCreateDate>%s' % self.today in ds_profile)
@@ -366,7 +366,7 @@ Hey, nonny-nonny."""
         ds_profile = r.content
         self.assert_('<datastreamProfile' in ds_profile)
         self.assert_('pid="%s"' % self.pid in ds_profile)
-        self.assert_('dsID="DC" ' in ds_profile)
+        self.assert_('dsID="DC"' in ds_profile)
         self.assert_('<dsLabel>Dublin Core</dsLabel>' in ds_profile)
         self.assert_('<dsVersionID>DC.0</dsVersionID>' in ds_profile)
         self.assert_('<dsCreateDate>%s' % self.today in ds_profile)
