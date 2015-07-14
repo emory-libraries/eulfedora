@@ -308,7 +308,7 @@ class REST_API(HTTP_API_Base):
         if content:
             if hasattr(content, 'read'):    # if content is a file-like object, warn if no checksum
                 if not checksum:
-                    logging.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s." % (pid, dsID))
+                    logger.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s." % (pid, dsID))
 
                 extra_args['files'] = {'file': content}
 
@@ -527,7 +527,7 @@ class REST_API(HTTP_API_Base):
             if hasattr(content, 'read'):    # allow content to be a file
                 # warn about missing checksums for files
                 if not checksum:
-                    logging.warning("Updating datastream %s/%s with a file, but no checksum passed" \
+                    logger.warning("Updating datastream %s/%s with a file, but no checksum passed" \
                                     % (pid, dsID))
 
             # either way (string or file-like object), set content as request data
@@ -685,7 +685,6 @@ class REST_API(HTTP_API_Base):
         try:
             r = self.post(url, data=m, headers={'Content-Type': m.content_type})
         except OverflowError as err:
-            print err
             # Python __len__ uses integer so it is limited to system maxint,
             # and requests and requests-toolbelt use len() throughout.
             # This results in an overflow error when trying to upload a file
