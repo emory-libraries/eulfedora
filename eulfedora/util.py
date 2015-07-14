@@ -55,7 +55,7 @@ class RequestFailed(IOError):
                 content = response.content
             # when Fedora gives a 500 error, it includes a stack-trace - pulling first line as detail
             # NOTE: this is likely to break if and when Fedora error responses change
-            if response.headers['content-type'] == 'text/plain':
+            if 'content-type' in response.headers and response.headers['content-type'] == 'text/plain':
                 # for plain text, first line of stack-trace is first line of text
                 self.detail = content.split('\n')[0]
             else:
