@@ -15,12 +15,12 @@
 #   limitations under the License.
 
 import base64
+import json
 from mock import patch
 import unittest
 
 from django.conf import settings
 from django.http import Http404, HttpRequest
-from django.utils import simplejson
 from django.test import TestCase
 from django.test.utils import override_settings
 
@@ -95,10 +95,8 @@ class IndexDataViewsTest(TestCase):
                 'Expected %s but returned %s for mimetype on indexdata/index_details view' \
                 % (expected, got))
             # load json content so we can inspect the result
-            content = simplejson.loads(response.content)
+            content = json.loads(response.content)
             self.assertEqual(TEST_SOLR_URL, content['SOLR_URL'])
-            print '** list of cmodels is ', content['CONTENT_MODELS']
-            print '*** looking for ', SimpleObject.CONTENT_MODELS
             self.assert_(SimpleObject.CONTENT_MODELS in content['CONTENT_MODELS'])
             self.assert_(LessSimpleDigitalObject.CONTENT_MODELS in content['CONTENT_MODELS'])
             self.assert_(ContentModel.CONTENT_MODELS not in content['CONTENT_MODELS'],
@@ -126,7 +124,7 @@ class IndexDataViewsTest(TestCase):
                 'Expected %s but returned %s for mimetype on indexdata/index_details view' \
                 % (expected, got))
             # load json content so we can inspect the result
-            content = simplejson.loads(response.content)
+            content = json.loads(response.content)
             self.assertEqual(settings.EUL_INDEXER_CONTENT_MODELS,
                 content['CONTENT_MODELS'])
 
@@ -158,7 +156,7 @@ class IndexDataViewsTest(TestCase):
             self.assertEqual(expected, got,
                 'Expected %s but returned %s for mimetype on index_data view' \
                 % (expected, got))
-            response_data = simplejson.loads(response.content)
+            response_data = json.loads(response.content)
             self.assertEqual(testobj.index_data(), response_data,
                'Response content loaded from JSON should be equal to object indexdata')
 
