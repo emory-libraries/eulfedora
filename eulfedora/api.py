@@ -121,7 +121,7 @@ class HTTP_API_Base(object):
             elif response.status_code == requests.codes.server_error:
                 # check response content to determine if this is a
                 # ChecksumMismatch or a more generic error
-                if 'ValidationException: Checksum Mismatch' in response.content:
+                if 'Checksum Mismatch' in response.content:
                     raise ChecksumMismatch(response)
                 else:
                     raise RequestFailed(response)
