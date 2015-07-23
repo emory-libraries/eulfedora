@@ -248,8 +248,9 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
             for header, val in headers.iteritems():
                 response[header] = val
 
-            # Fix for old Fedora data bug where the `Content-Lenght`
+            # Fix for old Fedora data bug where the `Content-Length`
             # was -1. IF it is -1 we're just going to get rid of it.
+            # Setting the value to an arbitrary value led to issues.
             if int(response['Content-Length']) < 0:
                 del response['Content-Length']
 
