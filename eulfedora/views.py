@@ -248,6 +248,11 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
             for header, val in headers.iteritems():
                 response[header] = val
 
+            # Fix for old Fedora data bug where the `Content-Lenght`
+            # was -1. IF it is -1 we're just going to get rid of it.
+            if int(response['Content-Length']) < 0:
+                del response['Content-Length']
+
             return response
         else:
             raise Http404
@@ -388,7 +393,7 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
     pick up user credentials, you must pass the request object in (so
     it will have access to the session).  Example::
 
-    	from eulcore.django.fedora.server import Repository
+        from eulcore.django.fedora.server import Repository
 
         def my_view(rqst):
             repo = Repository(request=rqst)
