@@ -6,8 +6,8 @@ The following is a summary of changes and improvements to
 any necessary information about installation or upgrade notes.
 
 
-1.1 (prelim)
--------------
+1.1
+---
 
 * :class:`~eulfedora.models.ReverseRelation` now includes an option for specifying
   a property to be used for sorting resulting items.  Can also be specified
@@ -16,6 +16,8 @@ any necessary information about installation or upgrade notes.
 * Use python :mod:`json` for :mod:`eulfedora.indexdata.views` instead
   of the simplejson that used to be included with Django
 * Support for Fedora 3.8.
+* Update :meth:`eulfedora.views.raw_datastream` to handle old Fedora
+  datstreams with invalid content size.
 
 .. Note::
 
