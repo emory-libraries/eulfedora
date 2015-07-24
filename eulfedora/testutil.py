@@ -61,10 +61,8 @@ automatically enabled.
 import logging
 import sys
 
-import unittest2 as unittest
 from django.conf import settings
 from django.core.management import call_command
-from django.test.simple import DjangoTestSuiteRunner
 
 from eulfedora.server import Repository
 from eulfedora.util import RequestFailed
@@ -166,53 +164,60 @@ class FedoraTestWrapper(object):
 alternate_test_fedora = FedoraTestWrapper
 
 
-class FedoraTextTestRunner(unittest.TextTestRunner):
-    '''A :class:`unittest.TextTestRunner` that wraps test execution in a
-    :class:`FedoraTestWrapper`.
-    '''
-    def run(self, test):
-        wrapped_test = alternate_test_fedora.wrap_test(test)
-        return super(FedoraTextTestRunner, self).run(wrapped_test)
-
-class FedoraTextTestSuiteRunner(DjangoTestSuiteRunner):
-    '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup and
-    teardown the Fedora test environment.'''
-    def run_suite(self, suite, **kwargs):
-        return FedoraTextTestRunner(verbosity=self.verbosity,
-                                    failfast=self.failfast).run(suite)
-
 try:
-    # when xmlrunner is available, define xmltest variants
+    import unittest2
+    from django.test.runner import DiscoverRunner
 
-    import xmlrunner
-
-    class FedoraXmlTestRunner(xmlrunner.XMLTestRunner):
-        '''A :class:`xmlrunner.XMLTestRunner` that wraps test execution in a
+    class FedoraTextTestRunner(unittest.TextTestRunner):
+        '''A :class:`unittest.TextTestRunner` that wraps test execution in a
         :class:`FedoraTestWrapper`.
         '''
-        def __init__(self):
-            # pick up settings as expected by django xml test runner
-            verbose = getattr(settings, 'TEST_OUTPUT_VERBOSE', False)
-            descriptions = getattr(settings, 'TEST_OUTPUT_DESCRIPTIONS', False)
-            output = getattr(settings, 'TEST_OUTPUT_DIR', 'test-results')
-
-            super_init = super(FedoraXmlTestRunner, self).__init__
-            super_init(verbose=verbose, descriptions=descriptions, output=output)
-
         def run(self, test):
             wrapped_test = alternate_test_fedora.wrap_test(test)
-            return super(FedoraXmlTestRunner, self).run(wrapped_test)
+            return super(FedoraTextTestRunner, self).run(wrapped_test)
 
-    class FedoraXmlTestSuiteRunner(FedoraTextTestSuiteRunner):
-        '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup
-        and teardown the Fedora test environment and export test results in
-        XML.'''
+    class FedoraTextTestSuiteRunner(DiscoverRunner):
+        '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup and
+        teardown the Fedora test environment.'''
         def run_suite(self, suite, **kwargs):
-            return FedoraXmlTestRunner().run(suite)
+            return FedoraTextTestRunner(verbosity=self.verbosity,
+                failfast=self.failfast).run(suite)
 
+    try:
+
+        # when xmlrunner is available, define xmltest variants
+        import xmlrunner
+
+        class FedoraXmlTestRunner(xmlrunner.XMLTestRunner):
+            '''A :class:`xmlrunner.XMLTestRunner` that wraps test execution in a
+            :class:`FedoraTestWrapper`.
+            '''
+            def __init__(self):
+                # pick up settings as expected by django xml test runner
+                verbose = getattr(settings, 'TEST_OUTPUT_VERBOSE', False)
+                descriptions = getattr(settings, 'TEST_OUTPUT_DESCRIPTIONS', False)
+                output = getattr(settings, 'TEST_OUTPUT_DIR', 'test-results')
+
+                super_init = super(FedoraXmlTestRunner, self).__init__
+                super_init(verbose=verbose, descriptions=descriptions, output=output)
+
+            def run(self, test):
+                wrapped_test = alternate_test_fedora.wrap_test(test)
+                return super(FedoraXmlTestRunner, self).run(wrapped_test)
+
+        class FedoraXmlTestSuiteRunner(FedoraTextTestSuiteRunner):
+            '''Extend :class:`django.test.simple.DjangoTestSuiteRunner` to setup
+            and teardown the Fedora test environment and export test results in
+            XML.'''
+            def run_suite(self, suite, **kwargs):
+                return FedoraXmlTestRunner().run(suite)
+
+    except ImportError:
+        # xmlrunner not available. don't define xml test runner variants
+        pass
 
 except ImportError:
-    # xmlrunner not available. simply don't define those classes
+    # unittest2 or django runner not available; don't define test runners
     pass
 
 

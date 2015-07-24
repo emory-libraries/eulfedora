@@ -210,7 +210,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
                 # not using serialize(pretty=True) for XML/RDF datastreams, since
                 # we actually want the raw datstream content.
 
-            response = HttpResponse(content, mimetype=ds.mimetype)
+            response = HttpResponse(content, content_type=ds.mimetype)
             # NOTE: might want to use StreamingHttpResponse here, at least
             # over some size threshold or for range requests
 
@@ -247,6 +247,12 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
             # set any user-specified headers that were passed in
             for header, val in headers.iteritems():
                 response[header] = val
+
+            # Fix for old Fedora data bug where the `Content-Length`
+            # was -1. IF it is -1 we're just going to get rid of it.
+            # Setting the value to an arbitrary value led to issues.
+            if int(response['Content-Length']) < 0:
+                del response['Content-Length']
 
             return response
         else:
@@ -365,7 +371,7 @@ def raw_audit_trail(request, pid, type=None, repo=None):
     # object exists and has a non-empty audit trail
     if obj.exists and obj.has_requisite_content_models and obj.audit_trail:
         response = HttpResponse(obj.audit_trail.serialize(),
-                            mimetype='text/xml')
+                            content_type='text/xml')
         # audit trail is updated every time the object gets modified
         response['Last-Modified'] = obj.modified
         return response
@@ -388,7 +394,7 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
     pick up user credentials, you must pass the request object in (so
     it will have access to the session).  Example::
 
-    	from eulcore.django.fedora.server import Repository
+        from eulcore.django.fedora.server import Repository
 
         def my_view(rqst):
             repo = Repository(request=rqst)

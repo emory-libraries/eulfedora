@@ -1,5 +1,5 @@
 # file eulfedora/management/commands/syncrepo.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,18 +46,18 @@ class Command(BaseCommand):
             action='callback', callback=get_password_option,
             help='''Prompt for password required when username used'''),
         )
-        
+
 
     def __init__(self, *args, **kwargs):
         super(Command, self).__init__(*args, **kwargs)
-                
+
 
     def handle(self, *args, **options):
 
         repo_args = {}
-        if  options.get('username') is not None: 
+        if  options.get('username') is not None:
 		repo_args['username'] = options.get('username')
-        if options.get('password') is not None: 
+        if options.get('password') is not None:
 		repo_args['password'] = options.get('password')
 
         self.repo = Repository(**repo_args)
@@ -70,9 +70,9 @@ class Command(BaseCommand):
             print "Generating content models for %d classes" % len(DigitalObject.defined_types)
         for cls in DigitalObject.defined_types.itervalues():
             self.process_class(cls)
-            
+
         self.load_initial_objects()
-            
+
     def process_class(self, cls):
         try:
             ContentModel.for_class(cls, self.repo)
@@ -95,7 +95,7 @@ class Command(BaseCommand):
                 else:
                     # if there is a detail message, display that
                     print "Error ingesting ContentModel for %s: %s" % (cls, rf.detail)
-            
+
 
     def load_initial_objects(self):
         # look for any .xml files in apps under fixtures/initial_objects
@@ -115,12 +115,12 @@ class Command(BaseCommand):
                 # It's a models.py module
                 app_module_paths.append(app.__file__)
 
-        app_fixture_paths = [os.path.join(os.path.dirname(path), 
+        app_fixture_paths = [os.path.join(os.path.dirname(path),
                                             'fixtures', 'initial_objects', '*.xml')
                                             for  path in app_module_paths]
         fixture_count = 0
         load_count = 0
-        
+
         for path in app_fixture_paths:
             fixtures = glob.iglob(path)
             for f in fixtures:
@@ -136,7 +136,8 @@ class Command(BaseCommand):
                         load_count += 1
                     except RequestFailed, rf:
                         if hasattr(rf, 'detail'):
-                            if 'ObjectExistsException' in rf.detail:
+                            if 'ObjectExistsException' in rf.detail or \
+                              'already exists in the registry; the object can\'t be re-created' in rf.detail:
                                 if self.verbosity > 1:
                                     print "Fixture %s has already been loaded" % f
                             elif 'ObjectValidityException' in rf.detail:

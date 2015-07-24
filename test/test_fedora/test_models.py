@@ -1112,7 +1112,7 @@ class RelatorObject(MyDigitalObject):
 
     # test variant options for automatic reverse relations
     other = models.Relation(relsext.isMemberOfCollection, type=SimpleDigitalObject,
-                                 related_name='related_items')
+                                 related_name='related_items', related_order=DCNS.title)
     parent1 = models.Relation(relsext.isMemberOfCollection, type=models.DigitalObject,
                               related_name='my_custom_rel')
     sib = models.Relation(relsext.isMemberOf, type=SiblingObject,
@@ -1123,6 +1123,8 @@ class ReverseRelator(MyDigitalObject):
     member = models.ReverseRelation(relsext.isMemberOfCollection, type=RelatorObject)
     members = models.ReverseRelation(relsext.isMemberOfCollection,
                                      type=RelatorObject, multiple=True)
+    sorted_members = models.ReverseRelation(relsext.isMemberOfCollection,
+        type=RelatorObject, multiple=True, order_by=DCNS.title)
 
 
 class TestRelation(FedoraTestCase):
@@ -1217,6 +1219,7 @@ class TestRelation(FedoraTestCase):
         rev = ReverseRelator(self.api, pid=self.getNextPid())
         # add a relation to the object and save so we can query risearch
         self.obj.parent = rev
+        self.obj.dc.content.title = 'title b'
         self.obj.save()
 
         # run an risearch query with flush updates true
@@ -1230,13 +1233,38 @@ class TestRelation(FedoraTestCase):
         self.assert_(isinstance(rev.member, RelatorObject),
             'ReverseRelation returns correct object type')
 
+        obj2 = RelatorObject(self.api)
+        obj2.parent = rev
+        obj2.dc.content.title = 'title a'
+        obj2.save()
+        # run an risearch query with flush updates true
+        # so that tests do not require syncUpdates to be enabled
+        self.repo.risearch.count_statements('<%s> * *' % self.obj.pid,
+            flush=True)
+
         self.assert_(isinstance(rev.members, list),
             'ReverseRelation returns list when multiple=True')
         pids = [m.pid for m in rev.members]
         self.assertTrue(self.obj.pid in pids,
-            'ReverseRelation list includes correct item')
+            'ReverseRelation list includes expected object')
+        self.assertTrue(obj2.pid in pids,
+            'ReverseRelation list includes expected object')
         self.assert_(isinstance(rev.members[0], RelatorObject),
             'ReverseRelation list items initialized as correct object type')
+
+        # test order by
+        self.assert_(isinstance(rev.sorted_members, list),
+            'ReverseRelation returns list for multiple=True with order_by')
+        pids = [m.pid for m in rev.sorted_members]
+        self.assertTrue(self.obj.pid in pids,
+            'ReverseRelation list includes expected object')
+        self.assertTrue(obj2.pid in pids,
+            'ReverseRelation list includes expected object')
+        self.assert_(isinstance(rev.sorted_members[0], RelatorObject),
+            'ReverseRelation list items initialized as correct object type')
+        self.assertEqual(obj2.pid, rev.sorted_members[0].pid,
+            'ReverseRelation items are sorted correctly by specified field')
+
 
     def test_auto_reverse_relation(self):
         # default reverse name based on classname
@@ -1250,9 +1278,15 @@ class TestRelation(FedoraTestCase):
                          SimpleDigitalObject.relatorobject_set.object_type)
         self.assertEqual(True,
                          SimpleDigitalObject.relatorobject_set.multiple)
+        # reverse order not set
+        self.assertEqual(None,
+                         SimpleDigitalObject.relatorobject_set.order_by)
 
         # explicitly named reverse rel
         self.assert_(hasattr(SimpleDigitalObject, 'related_items'))
+        # reverse rel order passed through
+        self.assertEqual(DCNS.title,
+                         SimpleDigitalObject.related_items.order_by)
 
         # generic digital object should *NOT* get reverse rels
         self.assertFalse(hasattr(models.DigitalObject, 'my_custom_rel'))
