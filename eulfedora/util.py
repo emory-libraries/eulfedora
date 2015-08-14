@@ -17,6 +17,7 @@
 from contextlib import contextmanager
 from datetime import datetime
 from dateutil.tz import tzutc
+import hashlib
 import logging
 import re
 import requests
@@ -121,3 +122,30 @@ def fedoratime_to_datetime(rep):
         return datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond, tz)
     else:
         raise Exception("Cannot parse '%s' as a Fedora datetime" % rep)
+
+def file_md5sum(filename):
+    '''Calculate and returns an MD5 checksum for the specified file.  Any file
+    errors (non-existent file, read error, etc.) are not handled here but should
+    be caught where this method is called.
+
+    :param filename: full path to the file for which a checksum should be calculated
+    :returns: hex-digest formatted MD5 checksum as a string
+    '''
+    # duplicated from keep.common.utils
+    # possibly at some point this should be moved to a common codebase/library
+    md5 = hashlib.md5()
+    with open(filename,'rb') as f:
+        for chunk in iter(lambda: f.read(128 * md5.block_size), ''):
+            md5.update(chunk)
+    return md5.hexdigest()
+
+def md5sum(content):
+    '''Calculate and returns an MD5 checksum for the specified content.
+
+    :param content: text content
+    :returns: hex-digest formatted MD5 checksum as a string
+    '''
+    md5 = hashlib.md5()
+    md5.update(content)
+    return md5.hexdigest()
+

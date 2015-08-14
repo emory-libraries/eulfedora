@@ -21,12 +21,13 @@ from mock import patch, Mock
 import os
 from rdflib import URIRef, Graph as RdfGraph, XSD, Literal
 from rdflib.namespace import Namespace
+import re
 import tempfile
 
 from eulfedora import models
 from eulfedora.api import ApiFacade
 from eulfedora.rdfns import relsext, model as modelns
-from eulfedora.util import RequestFailed, fedoratime_to_datetime
+from eulfedora.util import RequestFailed, fedoratime_to_datetime, md5sum
 from eulfedora.xml import ObjectDatastream, FEDORA_MANAGE_NS, FoxmlDigitalObject, \
      AuditTrail, AuditTrailRecord
 from eulxml.xmlmap.dc import DublinCore
@@ -178,6 +179,9 @@ class TestDatastreams(FedoraTestCase):
         self.assert_("<dsVersionable>false</dsVersionable>" in dsinfo)
         self.assert_("<dsState>I</dsState>" in dsinfo)
         self.assert_("<dsFormatURI>some.format.uri</dsFormatURI>" in dsinfo)
+        # checksum not sent - fedora should calculate one for us
+        self.assert_("<dsChecksum>%s</dsChecksum>" % md5sum(new_text)
+            in dsinfo)
         # look for log message ?
 
         self.obj.dc.content.title = "this is a new title"
@@ -372,6 +376,14 @@ class TestNewObject(FedoraTestCase):
 
         fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
         self.assertEqual(fetched.dc.content.identifier, obj.pid)
+
+        # confirm that fedora generates a checksum for us
+        r = obj.api.getDatastream(obj.pid, obj.dc.id)
+        dsinfo = r.content
+        self.assert_(re.search("<dsChecksum>[0-9a-f]+</dsChecksum>", dsinfo),
+            'Fedora should automatically generated a datastream checksum on ingest ' +
+            '(requires auto-checksum enabled and Fedora 3.7+)')
+
 
     def test_ingest_content_uri(self):
         obj = self.repo.get_object(type=MyDigitalObject)
