@@ -1694,11 +1694,14 @@ class DigitalObject(object):
         if dsobj.label:
             ver_xml.set('LABEL', dsobj.label)
 
-        # Set the checksum, if available.
-        #FIXME: Do this somewhere stuff somewhere else? Currently outside where the actual file content is attached....
-        # if *either* a checksum or a checksum type is specified, set the contentDigest
-        # - if checksum_type is set but not the actual checksum, Fedora should calculate it for us
-        if dsobj.checksum or dsobj.checksum_type:
+        # I BOTH checksum and checksum type are specified, set contentDigest.
+        # NOTE: this is a change from eulfedora 1.1 and previous, where
+        # a checksum type could be passed and Fedora would automatically calculate
+        # a checksum value of the requested type; that does *not* work in
+        # Fedora 3.8, so instead we rely on the auto-checksumming functionality.
+        # (But also note that auto-checksumming on ingest was broken in Fedora
+        # until Fedora 3.7 - https://jira.duraspace.org/browse/FCREPO-1047)
+        if dsobj.checksum and dsobj.checksum_type:
             digest_xml = E('contentDigest')
             if dsobj.checksum_type:
                 digest_xml.set('TYPE', dsobj.checksum_type)

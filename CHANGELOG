@@ -6,6 +6,29 @@ The following is a summary of changes and improvements to
 any necessary information about installation or upgrade notes.
 
 
+1.2
+---
+
+* Change checksum handling to cue Fedora to auto-generating checksums
+  on ingest.
+* **Recommended**: Fedora 3.7+ for automatic checksum support on ingest
+
+.. Note::
+
+   This checksum change in this release is a work-around for a Fedora bug
+   present in 3.8 (at least, possibly 3.7), where passing a checksum type
+   with no checksum value results in in Fedora storing an empty checksum,
+   where previously it would calculate and store a checksum.  On ingest, if
+   a checksum type but no checksum value is specified, *no* checksum
+   information will be sent to  Fedora (when checksum type and checksum
+   value are both specified, they will be passed through to Fedora
+   normally).  If you have auto-checksumming configured in Fedora, then
+   your checksums should be generated automatically.  Note that auto-
+   checksum functionality on ingest was broken until Fedora 3.7 (see
+   https://jira.duraspace.org/browse/FCREPO-1047); if you are still using
+   an older version of Fedora and need checksums generated at ingest, you
+   should use eulfedora 1.1.
+
 1.1
 ---
 
