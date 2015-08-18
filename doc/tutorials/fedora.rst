@@ -40,7 +40,12 @@ install that now too::
 We'll use `Django <http://www.djangoproject.org/>`_, a popular web framework,
 for the web components of this tutorial::
 
-    $ pip install django
+    $ pip install django==1.8.3
+
+.. Note::
+
+   You are free to use latest version of django. But this tutorial is updated
+   using django v1.8.3.
     
 Now, let's go ahead and create a new Django project.  We'll call it
 *simplerepo*::
@@ -106,7 +111,7 @@ to access existing Fedora objects.  Using the Repository object allows us to sea
 connection configuration that the Repository object picks up from your django ``settings.py``::
 
     >>> from eulfedora.server import Repository
-    >>> from simplerepo.repo.models import FileObject
+    >>> from repo.models import FileObject
 
     # initialize a connection to the configured Fedora repository instance
     >>> repo = Repository()
@@ -205,13 +210,13 @@ for our repo app and hook that into the main project urls.  Create
 
     from django.conf.urls.defaults import *
 
-    urlpatterns = patterns('simplerepo.repo.views',
+    urlpatterns = patterns('repo.views',
         url(r'^upload/$', 'upload', name='upload'),
     )
 
 Then include that in your project ``urls.py``::
 
-    (r'^', include('simplerepo.repo.urls')),
+    (r'^', include('repo.urls')),
 
 Now, let's define a simple upload form and a view method to correspond
 to that url.  First, for the form, create a file named
@@ -235,7 +240,7 @@ moment.  Edit ``repo/views.py`` and add::
 
     from django.shortcuts import render_to_response
     from django.template import RequestContext
-    from simplerepo.repo.forms import UploadForm
+    from repo.forms import UploadForm
 
     def upload(request):
         if request.method == 'GET':
@@ -245,10 +250,17 @@ moment.  Edit ``repo/views.py`` and add::
                {'form': form}, context_instance=RequestContext(request))
 
 But we still need a template to display our form.  Create a template
-directory and add it to your ``TEMPLATE_DIRS`` configuration in
-``settings.py``.  Create a ``repo`` directory inside your template
-directory, and then create ``upload.html`` inside that directory and
-give it this content:
+directory and add it to your ``TEMPLATES`` configuration in
+``settings.py``::
+
+    TEMPLATES = [
+        {
+          ...
+            'DIRS': [os.path.join(BASE_DIR, 'templates')], # for example
+        }
+
+Create a ``repo`` directory inside your template directory, and then 
+create ``upload.html`` inside that directory and give it this content:
 
 .. code-block:: django
 
@@ -280,8 +292,8 @@ we were investigating FileObject in the console.  Modify your
     
     from eulfedora.server import Repository
 
-    from simplerepo.repo.forms import UploadForm
-    from simplerepo.repo.models import FileObject
+    from repo.forms import UploadForm
+    from repo.models import FileObject
 
     def upload(request):
         obj = None
@@ -376,7 +388,7 @@ some code to output some information from the object:
             <tr><th>title:</th><td>{{ dc.title }}</td></tr>
             <tr><th>creator:</th><td>{{ dc.creator }}</td></tr>
             <tr><th>date:</th><td>{{ dc.date }}</td></tr>
-     {% endwith %}
+        {% endwith %}
     </table>
 
 We're just using a simple table layout for now, but of course you can
@@ -490,7 +502,7 @@ and turn the original filename into a link:
 
 .. code-block:: django
 
-	<a href="{% url download obj.pid %}">{{ obj.file.label }}</a> 
+	<a href="{% url 'download' obj.pid %}">{{ obj.file.label }}</a> 
 
 Now, try it out!  You should be able to download the file you
 originally uploaded.
@@ -564,7 +576,7 @@ another url to ``repo/urls.py``::
 And then define the corresponding method in ``repo/views.py``.  We
 need to import our new form::
 
-	from simplerepo.repo.forms import DublinCoreEditForm
+	from repo.forms import DublinCoreEditForm
 
 Then, use it in a view method. For now, we'll just instantiate the
 form, bind it to our content, and pass it to a template::
@@ -699,6 +711,19 @@ lines in your ``repo/display.html`` template with this:
         <tr><th>{{ el.name }}:</th><td>{{el}}</td</tr>
     {% endfor %}
 
+And then add an extra parameter 'dc' to render_to_response in display 
+function:
+
+.. code-block:: django
+   :emphasize-lines: 5
+
+    def display(request, pid):
+        repo = Repository()
+        obj = repo.get_object(pid, type=FileObject)
+        return render_to_response('display.html', {'obj': obj, 'pid': pid,
+                                                   'dc': obj.dc.content})
+
+
 Now when you load the object page in your browser, you should see all
 of the fields that you entered data for on the edit page.
 
@@ -736,7 +761,7 @@ Add a search url to ``repo/urls.py``::
 Then import the new form into ``repo/views.py`` and define the view
 that will actually do the searching::
 
-    from simplerepo.repo.forms import SearchForm
+    from repo.forms import SearchForm
 
     def search(request):
         objects = None
@@ -777,7 +802,7 @@ add this:
     {% if objects %}
         <hr/>
         {% for obj in objects %}
-            <p><a href="{% url display obj.pid %}">{{ obj.label }}</a></p>
+            <p><a href="{% url 'display' obj.pid %}">{{ obj.label }}</a></p>
         {% endfor %}
     {% endif %}
 
@@ -811,7 +836,7 @@ that!  Let's rewrite the search template to use it:
         <hr/>
         {% for obj in objects %}
           {% fedora_access %}
-            <p><a href="{% url display obj.pid %}">{{ obj.label }}</a></p>
+            <p><a href="{% url 'display' obj.pid %}">{{ obj.label }}</a></p>
           {% permission_denied %}
             <p>You don't have permission to view this object.</p>
           {% fedora_failed %}
