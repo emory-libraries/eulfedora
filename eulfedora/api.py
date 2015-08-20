@@ -795,7 +795,7 @@ class ResourceIndex(HTTP_API_Base):
         http_args['flush'] = 'true' if flush else 'false'
 
         # log the actual query so it's easier to see what's happening
-        logger.debug('risearch query type=%(type)s language=%(lang)s format=%(format)s flush=%(flush)s limit=%(limit)s\n%(query)s' % \
+        logger.debug('risearch query type=%(type)s language=%(lang)s format=%(format)s flush=%(flush)s\n%(query)s' % \
             http_args)
 
         url = 'risearch'
