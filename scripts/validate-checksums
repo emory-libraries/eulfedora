@@ -368,6 +368,10 @@ class ValidateChecksums(object):
                 # track of when we hit a result with rows and bail out
                 has_results = False
                 for row in results:
+                    # if a pid failed to save, it could show up again
+                    # skip it and don't count it as having results
+                    if row['pid'] in self.save_errors:
+                        continue
                     yield row['pid']
                     has_results = True
 
@@ -395,6 +399,10 @@ class ValidateChecksums(object):
             while results:
                 has_results = False
                 for row in results:
+                    # if a pid failed to save, it could show up again
+                    # skip it and don't count it as having results
+                    if row['pid'] in self.save_errors:
+                        continue
                     yield row['pid']
                     has_results = True
 
