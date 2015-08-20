@@ -344,28 +344,66 @@ class ValidateChecksums(object):
            FILTER (?checked < xsd:dateTime('%%s'))
         } ORDER BY ?checked ''' % (REPOMGMT, )
 
+    # number of results to grab at a time from risearch (10, 100, 1000)
+    RISEARCH_CHUNKSIZE = 100
+
     def pids_to_check(self, days):
         '''Generator that returns a list of pids where the object has never had
         a fixity check recorded'''
         '''Generator that returns a list of pids where the object has not
         been checked since the specified number of days.'''
 
+        unchecked_count = self.repo.risearch.sparql_count(self.SPARQL_FIND_UNCHECKED)
         if not self.args.quiet:
-            print '\nLooking for unchecked pids...'
-        results = self.repo.risearch.sparql_query(self.SPARQL_FIND_UNCHECKED)
-        for row in results:
-            yield row['pid']
+            print '\nFound %d unchecked pids.' % unchecked_count
 
-        if not self.args.quiet:
-            print '\nLooking for pids not checked in the last %d days...' % \
-                self.args.since
+        if unchecked_count:
+            # Iterate over unchecked items in chunks so we don't load too many
+            # pids at once. NOTE: this relies on pids getting successfully
+            # updated and removed from the unchecked list.
+            results = self.repo.risearch.sparql_query(self.SPARQL_FIND_UNCHECKED,
+                limit=self.RISEARCH_CHUNKSIZE)
+            while results:
+                # dictreader doesn't provide a built in count, so keep
+                # track of when we hit a result with rows and bail out
+                has_results = False
+                for row in results:
+                    yield row['pid']
+                    has_results = True
+
+                if not has_results:
+                    break
+                results = self.repo.risearch.sparql_query(self.SPARQL_FIND_UNCHECKED,
+                    limit=self.RISEARCH_CHUNKSIZE)
+
         delta = datetime.timedelta(days=days)
         datesince = datetime.datetime.now() - delta
         query = self.SPARQL_FIND_UNCHECKED_SINCE % datesince.strftime('%Y-%m-%dT%H:%M:%S')
+        unchecked_since_count = self.repo.risearch.sparql_count(query)
 
-        results = self.repo.risearch.sparql_query(query)
-        for row in results:
-            yield row['pid']
+        if not self.args.quiet:
+            print '\nFound %d pids not checked in the last %d days.' % \
+                (unchecked_since_count, self.args.since)
+
+        if unchecked_since_count:
+            # Iterate over recently unchecked items in chunks so we don't
+            # load too many pids at once.
+            # NOTE: this relies on pids getting successfully updated
+            # so they will no longer match this query.
+            results = self.repo.risearch.sparql_query(query,
+                limit=self.RISEARCH_CHUNKSIZE)
+            while results:
+                has_results = False
+                for row in results:
+                    yield row['pid']
+                    has_results = True
+
+                # if this query had no results, bail out - we've hit the end
+                if not has_results:
+                    break
+
+                results = self.repo.risearch.sparql_query(query,
+                    limit=self.RISEARCH_CHUNKSIZE)
 
     def validate_datastream(self, dsobj):
         '''returns a status (valid/invalid/missing) or list of statuses for
