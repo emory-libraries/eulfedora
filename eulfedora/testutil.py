@@ -168,7 +168,7 @@ try:
     import unittest2
     from django.test.runner import DiscoverRunner
 
-    class FedoraTextTestRunner(unittest.TextTestRunner):
+    class FedoraTextTestRunner(unittest2.TextTestRunner):
         '''A :class:`unittest.TextTestRunner` that wraps test execution in a
         :class:`FedoraTestWrapper`.
         '''

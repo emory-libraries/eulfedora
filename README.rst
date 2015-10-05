@@ -1,5 +1,14 @@
-README
-======
+EULFedora
+=========
+
+   
+.. image:: https://img.shields.io/pypi/v/eulfedora.svg  
+   :target: https://pypi.python.org/pypi/eulfedora
+
+.. image:: https://img.shields.io/pypi/l/eulfedora.svg
+
+.. image:: https://img.shields.io/pypi/dm/eulfedora.svg
+
 
 EULfedora is a `Python <http://www.python.org/>`_ module that provides
 utilities, API wrappers, and classes for interacting with the
