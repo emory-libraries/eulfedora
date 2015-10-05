@@ -790,7 +790,6 @@ class Relation(object):
     This would allow us to access ``total`` as an integer on a MyObj
     object, e.g.::
 
-
         myobj.total = 3
 
     and when the RELS-EXT is serialized it will use the
@@ -812,31 +811,25 @@ class Relation(object):
         but it may be less readable than a custom namespace.
 
 
-
     Initialization options:
 
     :param relation: the RDF predicate URI as a :class:`rdflib.URIRef`
-
     :param type: optional :class:`~eulfedora.models.DigitalObject`
         subclass to initialize (for object relations); use
         ``type="self"`` to specify that the current DigitalObject
         class should be used (currently no reverse relation will be
         created for recursive relations).
-
     :param ns_prefix: optional dictionary to configure namespace
         prefixes to be used for serialization; key should be the
         desired prefix, value should be an instance of
         :class:`rdflib.namespace.Namespace`
-
     :param rdf_type: optional rdf type for literal values (passed
         to :class:`rdflib.Literal` as the datatype option)
-
     :param related_name: optional name for the auto-generated
         :class:`ReverseRelation` property, when the relation is to a
         subclass of :class:`DigitalObject`; if not specified, the
         related name will be ``classname_set``; a value of ``+``
         indicates no :class:`ReverseRelation` should be created
-
     :param related_order: optional URI for sorting related objects
         in the auto-generated :class:`ReverseRelation` property.
 
