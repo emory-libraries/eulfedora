@@ -6,6 +6,12 @@ The following is a summary of changes and improvements to
 any necessary information about installation or upgrade notes.
 
 
+1.3
+---
+
+* Tutorial updated to be compatible with Django 1.8 thanks to
+  Contributed by `jaska @chfw <https://github.com/chfw>`_.
+
 1.2
 ---
 
