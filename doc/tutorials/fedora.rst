@@ -737,10 +737,9 @@ Fedora.
 
   For this tutorial, we'll us the Fedora **findObjects** API method.
   This search is quite limited, and for a production system, you'll
-  probably want to use something more powerful, such as GSearch or
-  Solr, but findObjects is enough to get you started.
+  probably want to use something more powerful, such Solr, but
+  findObjects is enough to get you started.
 
-.. TODO: link gsearch
 
 The built-in fedora search can either do a keyword search across all
 indexed fields *or* a fielded search.  For the purposes of this
