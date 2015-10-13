@@ -10,12 +10,14 @@ any necessary information about installation or upgrade notes.
 ---
 
 * Tutorial updated to be compatible with Django 1.8 thanks to
-  Contributed by `jaska @chfw <https://github.com/chfw>`_.
+  `jaska @chfw <https://github.com/chfw>`_.
+* New class-based view :class:`eulfedora.views.RawDatastreamView`,
+  equivalent to :meth:`eulfedora.views.raw_datastream`.
 
 1.2
 ---
 
-* Change checksum handling to cue Fedora to auto-generating checksums
+* Change checksum handling to cue Fedora to auto-generate checksums
   on ingest.
 * **Recommended**: Fedora 3.7+ for automatic checksum support on ingest
 
