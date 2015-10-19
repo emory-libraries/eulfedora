@@ -52,7 +52,8 @@ class HttpResponseRangeNotSatisfiable(HttpResponseBadRequest):
 
 
 def datastream_etag(request, pid, dsid, type=None, repo=None,
-                    accept_range_request=False, **kwargs):
+                    accept_range_request=False, as_of_date=None,
+                    **kwargs):
     '''Method suitable for use as an etag function with
     :class:`django.views.decorators.http.condition`.  Takes the same
     arguments as :meth:`~eulfedora.views.raw_datastream`.
@@ -71,7 +72,7 @@ def datastream_etag(request, pid, dsid, type=None, repo=None,
         if type is not None:
             get_obj_opts['type'] = type
         obj = repo.get_object(pid, **get_obj_opts)
-        ds = obj.getDatastreamObject(dsid)
+        ds = obj.getDatastreamObject(dsid, as_of_date=as_of_date)
         if ds and ds.exists and ds.checksum_type != 'DISABLED':
             return ds.checksum
     except RequestFailed:
@@ -80,7 +81,7 @@ def datastream_etag(request, pid, dsid, type=None, repo=None,
     return None
 
 def datastream_lastmodified(request, pid, dsid, type=None, repo=None,
-    *args, **kwargs):
+    as_of_date=None, *args, **kwargs):
     '''Method suitable for use as a a last-modified function with
     :class:`django.views.decorators.http.condition`.  Takes basically
     the same arguments as :meth:`~eulfedora.views.raw_datastream`.
@@ -92,7 +93,7 @@ def datastream_lastmodified(request, pid, dsid, type=None, repo=None,
         if type is not None:
             get_obj_opts['type'] = type
         obj = repo.get_object(pid, **get_obj_opts)
-        ds = obj.getDatastreamObject(dsid)
+        ds = obj.getDatastreamObject(dsid, as_of_date=as_of_date)
         if ds and ds.exists:
             return ds.created
     except RequestFailed:
@@ -103,7 +104,7 @@ def datastream_lastmodified(request, pid, dsid, type=None, repo=None,
 @condition(etag_func=datastream_etag)
 @require_http_methods(['GET', 'HEAD'])
 def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
-                   accept_range_request=False):
+                   accept_range_request=False, as_of_date=None):
     '''View to display a raw datastream that belongs to a Fedora Object.
     Returns an :class:`~django.http.HttpResponse` with the response content
     populated with the content of the datastream.  The following HTTP headers
@@ -131,7 +132,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
         in case your application requires custom repository initialization (optional)
     :param headers: dictionary of additional headers to include in the response
     :param accept_range_request: enable HTTP Range requests (disabled by default)
-
+    :param as_of_date: access a historical version of the datastream
     '''
 
     if repo is None:
@@ -151,7 +152,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
         # an extra API call for every datastream but RELS-EXT
         # Leaving out for now, for efficiency
 
-        ds = obj.getDatastreamObject(dsid)
+        ds = obj.getDatastreamObject(dsid, as_of_date=as_of_date)
 
         if ds and ds.exists:
             # because retrieving the content is expensive and checking
@@ -431,6 +432,8 @@ class RawDatastreamView(View):
     accept_range_request = False
     #: url kwarg term for retrieving object pid (default: pid)
     pid_url_kwarg = 'pid'
+    #: url kwarg term for retrieving date time, if used (default: date)
+    as_of_date_url_kwarg = 'date'
     #: Repository class to use, if needed
     repository_class = Repository
     #: extra http headers to include
@@ -442,6 +445,7 @@ class RawDatastreamView(View):
         conditional processing; calls :meth:`datastream_etag` with
         class configuration.'''
         pid = kwargs[cls.pid_url_kwarg]
+        date = kwargs.get(cls.as_of_date_url_kwarg, None)
         return datastream_etag(request, pid, cls.datastream_id,
             type=cls.object_type, repo=cls.repository_class(request=request),
                     accept_range_request=cls.accept_range_request)
@@ -452,6 +456,7 @@ class RawDatastreamView(View):
         conditional processing; calls :meth:`datastream_lastmodified` with
         class configuration.'''
         pid = kwargs[cls.pid_url_kwarg]
+        date = kwargs.get(cls.as_of_date_url_kwarg, None)
         return datastream_lastmodified(request, pid, cls.datastream_id,
             type=cls.object_type, repo=cls.repository_class(request=request),
                     accept_range_request=cls.accept_range_request)
@@ -483,7 +488,9 @@ class RawDatastreamView(View):
 
     def get(self, request, *args, **kwargs):
         pid = kwargs[self.pid_url_kwarg]
+        date = kwargs.get(cls.as_of_date_url_kwarg, None)
         return raw_datastream(request, pid, self.get_datastream_id(),
             type=self.object_type, repo=self.get_repository(),
             headers=self.get_headers(),
-            accept_range_request=self.accept_range_request)
+            accept_range_request=self.accept_range_request,
+            as_of_date=date)

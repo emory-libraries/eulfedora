@@ -13,6 +13,9 @@ any necessary information about installation or upgrade notes.
   `jaska @chfw <https://github.com/chfw>`_.
 * New class-based view :class:`eulfedora.views.RawDatastreamView`,
   equivalent to :meth:`eulfedora.views.raw_datastream`.
+* Access to historical versions of datastreams now available in
+  :meth:`eulfedora.models.DigitalObject.getDatastreamObject` and
+  :meth:`eulfedora.views.raw_datastream`.
 
 1.2
 ---
