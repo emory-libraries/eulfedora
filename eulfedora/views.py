@@ -488,7 +488,7 @@ class RawDatastreamView(View):
 
     def get(self, request, *args, **kwargs):
         pid = kwargs[self.pid_url_kwarg]
-        date = kwargs.get(cls.as_of_date_url_kwarg, None)
+        date = kwargs.get(self.as_of_date_url_kwarg, None)
         return raw_datastream(request, pid, self.get_datastream_id(),
             type=self.object_type, repo=self.get_repository(),
             headers=self.get_headers(),
