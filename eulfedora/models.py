@@ -59,6 +59,9 @@ class DatastreamObject(object):
         :param checksum: default configuration for datastream checksum
         :param checksum_type: default configuration for datastream checksum type
             (default: MD5)
+        :param as_of_date: load a historical version of this datastream as of
+            a particular date time. (Note that historical datastream versions
+            are for access only, and cannot be saved.)
     """
     default_mimetype = "application/octet-stream"
 
@@ -69,11 +72,16 @@ class DatastreamObject(object):
     rather than posting via :attr:`content`.  If :attr:`ds_location`
     is set, it takes precedence over :attr:`content`.'''
 
+    as_of_date = None
+    'optional datetime for accessing a historical datastream version'
+
     def __init__(self, obj, id, label, mimetype=None, versionable=False,
-            state='A', format=None, control_group='M', checksum=None, checksum_type="MD5"):
+            state='A', format=None, control_group='M', checksum=None, checksum_type="MD5",
+            as_of_date=None):
 
         self.obj = obj
         self.id = id
+        self.as_of_date = as_of_date
 
         if mimetype is None:
             mimetype = self.default_mimetype
@@ -116,7 +124,8 @@ class DatastreamObject(object):
             if not self.exists:
                 self._info = self._bootstrap_info()
             else:
-                self._info = self.obj.getDatastreamProfile(self.id)
+                self._info = self.obj.getDatastreamProfile(self.id,
+                    date=self.as_of_date)
         return self._info
 
     def _bootstrap_info(self):
@@ -145,7 +154,8 @@ class DatastreamObject(object):
             if not self.exists:
                 self._content = self._bootstrap_content()
             else:
-                r = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id)
+                r = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
+                    asOfDateTime=self.as_of_date)
                 self._content = self._convert_content(r.content, r.url)
                 # calculate and store a digest of the current datastream text content
                 self.digest = self._content_digest()
@@ -322,6 +332,9 @@ class DatastreamObject(object):
 
         :rtype: boolean for success
         """
+        if self.as_of_date is not None:
+            raise RuntimeError('Saving is not implemented for datastream versions')
+
         save_opts = {}
         if self.info_modified:
             if self.label:
@@ -445,7 +458,7 @@ class DatastreamObject(object):
 
         # get the datastream dissemination, but return the actual http response
         r = self.obj.api.getDatastreamDissemination(self.obj.pid, self.id,
-            stream=True)
+            stream=True,  asOfDateTime=self.as_of_date)
         # read and yield the response in chunks
         for chunk in r.iter_content(chunksize):
             yield chunk
@@ -790,7 +803,6 @@ class Relation(object):
     This would allow us to access ``total`` as an integer on a MyObj
     object, e.g.::
 
-
         myobj.total = 3
 
     and when the RELS-EXT is serialized it will use the
@@ -812,31 +824,25 @@ class Relation(object):
         but it may be less readable than a custom namespace.
 
 
-
     Initialization options:
 
     :param relation: the RDF predicate URI as a :class:`rdflib.URIRef`
-
     :param type: optional :class:`~eulfedora.models.DigitalObject`
         subclass to initialize (for object relations); use
         ``type="self"`` to specify that the current DigitalObject
         class should be used (currently no reverse relation will be
         created for recursive relations).
-
     :param ns_prefix: optional dictionary to configure namespace
         prefixes to be used for serialization; key should be the
         desired prefix, value should be an instance of
         :class:`rdflib.namespace.Namespace`
-
     :param rdf_type: optional rdf type for literal values (passed
         to :class:`rdflib.Literal` as the datatype option)
-
     :param related_name: optional name for the auto-generated
         :class:`ReverseRelation` property, when the relation is to a
         subclass of :class:`DigitalObject`; if not specified, the
         related name will be ``classname_set``; a value of ``+``
         indicates no :class:`ReverseRelation` should be created
-
     :param related_order: optional URI for sorting related objects
         in the auto-generated :class:`ReverseRelation` property.
 
@@ -1384,7 +1390,7 @@ class DigitalObject(object):
                 return False
         return True
 
-    def getDatastreamProfile(self, dsid):
+    def getDatastreamProfile(self, dsid, date=None):
         """Get information about a particular datastream belonging to this object.
 
         :param dsid: datastream id
@@ -1394,7 +1400,7 @@ class DigitalObject(object):
         if self._create:
             return None
 
-        r = self.api.getDatastream(self.pid, dsid)
+        r = self.api.getDatastream(self.pid, dsid, asOfDateTime=date)
         return parse_xml_object(DatastreamProfile, r.content, r.url)
 
     @property
@@ -1557,7 +1563,6 @@ class DigitalObject(object):
             try:
                 profile_saved = self._saveProfile(logMessage)
             except RequestFailed as rf:
-                print rf.detail
                 logger.error('Failed to save object profile for %s' % self.pid)
                 profile_saved = False
 
@@ -1804,7 +1809,7 @@ class DigitalObject(object):
     def getDissemination(self, service_pid, method, params={}, return_http_response=False):
         return self.api.getDissemination(self.pid, service_pid, method, method_params=params)
 
-    def getDatastreamObject(self, dsid, dsobj_type=None):
+    def getDatastreamObject(self, dsid, dsobj_type=None, as_of_date=None):
         '''Get any datastream on this object as a :class:`DatastreamObject`
         **or** add a new datastream.  If the datastream id corresponds
         to a predefined datastream, the configured object will be returned
@@ -1820,6 +1825,8 @@ class DigitalObject(object):
         :param dsid: datastream id
         :param dsobj_type: optional :class:`DatastreamObject` type to
             be returned
+        :param as_of_date: optional datetime, used to load a historical
+            version of the requested datastream
         '''
 
         # NOTE: disabling this option because it returns a Datastream instead of
@@ -1848,7 +1855,8 @@ class DigitalObject(object):
                     # default to base datastream object class
                     dsobj_type = DatastreamObject
 
-            dsobj = dsobj_type(self, dsid, label=ds_info.label, mimetype=ds_info.mimeType)
+            dsobj = dsobj_type(self, dsid, label=ds_info.label, mimetype=ds_info.mimeType,
+                as_of_date=as_of_date)
 
             # add to dscache so modifications will be saved on existing object
             self.dscache[dsid] = dsobj

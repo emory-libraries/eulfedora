@@ -39,6 +39,7 @@ class SimpleDigitalObject(DigitalObject):
     # extend digital object with datastreams for testing
     text = Datastream("TEXT", "Text datastream", defaults={
             'mimetype': 'text/plain',
+            'versionable': True
         })
     image = FileDatastream('IMAGE', 'managed binary image datastream', defaults={
                 'mimetype': 'image/png'
@@ -293,6 +294,40 @@ class FedoraViewsTest(unittest.TestCase):
         rqst.META = {'HTTP_RANGE': 'bytes=300-500'}
         etag = datastream_etag(rqst, self.obj.pid, 'DC', accept_range_request=True)
         self.assertEqual(None, etag)
+
+    def test_raw_datastream_version(self):
+        rqst = Mock()
+        rqst.method = 'GET'
+        # return empty headers for ETag condition check
+        rqst.META = {}
+
+        self.obj.text.content = 'second version content'
+        self.obj.text.save()
+
+        # retrieve the view for each version and compare
+        for version in self.obj.text.history().versions:
+
+            # get the datastream version to compare with the response
+            dsversion = self.obj.getDatastreamObject(self.obj.text.id,
+                as_of_date=version.created)
+
+            response = raw_datastream(rqst, self.obj.pid, self.obj.text.id,
+                as_of_date=version.created)
+            expected, got = 200, response.status_code
+            self.assertEqual(expected, got,
+                'Expected %s but returned %s for raw_datastream as of %s' \
+                % (expected, got, version.created))
+            expected, got = 'text/plain', response['Content-Type']
+            self.assertEqual(expected, got,
+                'Expected %s but returned %s for mimetype on raw_datastream as of %s' \
+                    % (expected, got, version.created))
+            # should use version-specific checksum and size
+            self.assertEqual(dsversion.checksum, response['Content-MD5'],
+                'datastream checksum should be set as Content-MD5 header in the response')
+            self.assertEqual(dsversion.size, int(response['Content-Length']))
+            # should retrieve appropriate version of the content
+            self.assertEqual(dsversion.content, response.content)
+
 
     def test_datastream_lastmodified(self):
         rqst = Mock()

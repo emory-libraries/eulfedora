@@ -137,7 +137,9 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         self.assertEqual(1, len(objects))
 
         # search by phrase
-        objects = list(self.repo.find_objects("more dat? in it than a *"))
+        objects = self.repo.find_objects("more dat? in it than a *")
+        # filter by pidspace, since dev/test fedora could contain other objects
+        objects = [o for o in objects if o.pid.startswith('%s:' % FEDORA_PIDSPACE)]
         # should find test object
         self.assertEqual(objects[0].pid, pid)
 

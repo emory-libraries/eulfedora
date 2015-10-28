@@ -738,7 +738,8 @@ class ResourceIndex(HTTP_API_Base):
     Irrelevant if Fedora RIsearch is configured with syncUpdates = True.
     """
 
-    def find_statements(self, query, language='spo', type='triples', flush=None):
+    def find_statements(self, query, language='spo', type='triples', flush=None,
+        limit=None):
         """
         Run a query in a format supported by the Fedora Resource Index (e.g., SPO
         or Sparql) and return the results.
@@ -759,6 +760,8 @@ class ResourceIndex(HTTP_API_Base):
             format = 'N-Triples'
         elif type == 'tuples':
             format = 'CSV'
+        if limit is not None:
+            http_args['limit'] = limit
         # else - error/exception ?
         http_args['format'] = format
 
@@ -879,13 +882,24 @@ class ResourceIndex(HTTP_API_Base):
         for statement in self.spo_search(subject=subject, predicate=predicate):
             yield str(statement[2])
 
-    def sparql_query(self, query, flush=None):
+    def sparql_query(self, query, flush=None, limit=None):
         """
         Run a Sparql query.
 
         :param query: sparql query string
         :rtype: list of dictionary
         """
-        return self.find_statements(query, language='sparql', type='tuples', flush=flush)
+        return self.find_statements(query, language='sparql', type='tuples',
+            flush=flush, limit=limit)
+
+    def sparql_count(self, query, flush=None):
+        """
+        Count results for a Sparql query.
+
+        :param query: sparql query string
+        :rtype: int
+        """
+        return self.count_statements(query, language='sparql', type='tuples',
+            flush=flush)
 
 

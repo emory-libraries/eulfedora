@@ -360,6 +360,26 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.text.content[:10], chunks[0])
         self.assertEqual(self.obj.text.content[10:20], chunks[1])
 
+    def test_datastream_version(self):
+        # modify dc & save to create a second version
+        self.obj.dc.content.description = "new datastream contents"
+        self.obj.dc.save()
+
+        # get the two versions ds obj
+        dc_v0 = self.obj.getDatastreamObject(self.obj.dc.id,
+            as_of_date=self.obj.dc.history().versions[0].created)
+        dc_v1 = self.obj.getDatastreamObject(self.obj.dc.id,
+            as_of_date=self.obj.dc.history().versions[1].created)
+
+        # ds info should be different
+        self.assertNotEqual(dc_v0.created, dc_v1.created)
+        self.assertNotEqual(dc_v0.size, dc_v1.size)
+        self.assertNotEqual(dc_v0.checksum, dc_v1.checksum)
+        # ds content should be different
+        self.assertNotEqual(dc_v0.content, dc_v1.content)
+        # saving a historical version is not allowed
+        self.assertRaises(RuntimeError, dc_v0.save)
+
 
 class TestNewObject(FedoraTestCase):
     pidspace = FEDORA_PIDSPACE
