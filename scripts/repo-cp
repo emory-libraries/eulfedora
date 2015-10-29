@@ -1,0 +1,127 @@
+#!/usr/bin/env python
+
+# file scripts/repo-cp
+#
+#   Copyright 2015 Emory University Libraries & IT Services
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+
+
+import argparse
+import ConfigParser
+import os
+
+from eulxml.xmlmap import load_xmlobject_from_string
+from eulfedora.server import Repository
+from eulfedora.util import ChecksumMismatch, PermissionDenied, \
+    RequestFailed
+from eulfedora.xml import FoxmlDigitalObject
+
+
+def repo_copy():
+
+    parser = argparse.ArgumentParser()
+
+    # config file options
+    cfg_args = parser.add_argument_group('Config file options')
+    cfg_args.add_argument('--config', '-c',
+        default='$HOME/.repocpcfg',
+        help='Load the specified config file (default: %(default)s')
+
+    cfg_args.add_argument('source',
+        help='Source repository for content to be copied')
+    cfg_args.add_argument('dest',
+        help='Destination repository for content to be copied')
+
+    # list of pids
+    parser.add_argument('pids', metavar='PID', nargs='*',
+                                 help='list of pids to copy')
+
+    args = parser.parse_args()
+
+    cfg = ConfigParser.ConfigParser()
+    configfile_path = args.config.replace('$HOME', os.environ['HOME'])
+    with open(configfile_path) as cfgfile:
+            cfg.readfp(cfgfile)
+
+    if not cfg.has_section(args.source):
+        print 'Source repository %s is not configured' % args.source
+        return
+    if not cfg.has_section(args.dest):
+        print 'Destination repository %s is not configured' % args.dest
+        return
+
+    src_repo = Repository(cfg.get(args.source, 'fedora_root'),
+        cfg.get(args.source, 'fedora_user'),
+        cfg.get(args.source, 'fedora_password'))
+
+    dest_repo = Repository(cfg.get(args.dest, 'fedora_root'),
+        cfg.get(args.dest, 'fedora_user'),
+        cfg.get(args.dest, 'fedora_password'))
+
+    for pid in args.pids:
+        try:
+            response = src_repo.api.export(pid, context='migrate')
+            export = response.content
+        except RequestFailed as err:
+            err_type = 'Error'
+            if isinstance(err, PermissionDenied):
+                err_type = 'Permission denied'
+            err_msg = unicode(err)
+            if '404' in err_msg:
+                err_msg = 'object not found'
+            print '%s exporting %s from %s: %s' % \
+                (err_type, pid, args.source, err_msg)
+
+            continue
+
+        dest_obj = dest_repo.get_object(pid)
+        if dest_obj.exists:
+            print '%s already exists in %s, purging' % (pid, args.dest)
+            try:
+                dest_repo.purge_object(pid)
+            except RequestFailed as err:
+                err_type = 'Error'
+                if isinstance(err, PermissionDenied):
+                    err_type = 'Permission denied'
+                print '%s purging %s from %s: %s' % \
+                    (err_type, pid, args.dest, err)
+            # if object exists and purge fails, go to next pid
+            continue
+
+        try:
+            result = dest_repo.ingest(export)
+            print '%s copied' % result
+        except ChecksumMismatch:
+            print 'ChecksumMismatch on %s, removing checksums for DC/RELS-EXT' % pid
+            export_xml = load_xmlobject_from_string(export.content, FoxmlDigitalObject)
+            for ds in export_xml.datastreams:
+                if ds.id in ['DC', 'RELS-EXT']:
+                    for version in ds.versions:
+                        del version.content_digest
+            result = dest_repo.ingest(export_xml.serialize(pretty=True))
+            print '%s copied' % result
+
+        except RequestFailed as err:
+            err_type = 'Error'
+            if isinstance(err, PermissionDenied):
+                err_type = 'Permission denied'
+            print '%s importing %s to %s: %s' % \
+                (err_type, pid, args.dest, err)
+
+            continue
+
+
+if __name__ == '__main__':
+    repo_copy()
