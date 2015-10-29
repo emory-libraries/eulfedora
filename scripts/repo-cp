@@ -88,17 +88,24 @@ def repo_copy():
 
         dest_obj = dest_repo.get_object(pid)
         if dest_obj.exists:
-            print '%s already exists in %s, purging' % (pid, args.dest)
-            try:
-                dest_repo.purge_object(pid)
-            except RequestFailed as err:
-                err_type = 'Error'
-                if isinstance(err, PermissionDenied):
-                    err_type = 'Permission denied'
-                print '%s purging %s from %s: %s' % \
-                    (err_type, pid, args.dest, err)
-            # if object exists and purge fails, go to next pid
-            continue
+            if cfg.has_option(args.dest, 'allow_overwrite') and \
+              cfg.getboolean(args.dest, 'allow_overwrite'):
+
+                print '%s already exists in %s, purging' % (pid, args.dest)
+                try:
+                    dest_repo.purge_object(pid)
+                except RequestFailed as err:
+                    err_type = 'Error'
+                    if isinstance(err, PermissionDenied):
+                        err_type = 'Permission denied'
+                    print '%s purging %s from %s: %s' % \
+                        (err_type, pid, args.dest, err)
+                    # if object exists and purge fails, go to next pid
+                    continue
+            else:
+                print '%s already exists in %s but overwrite is not allowed; skipping'\
+                    % (pid, args.dest)
+                continue
 
         try:
             result = dest_repo.ingest(export)
