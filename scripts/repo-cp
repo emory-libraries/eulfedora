@@ -20,6 +20,7 @@
 
 import argparse
 import ConfigParser
+import math
 import os
 
 from eulxml.xmlmap import load_xmlobject_from_string
@@ -27,6 +28,14 @@ from eulfedora.server import Repository
 from eulfedora.util import ChecksumMismatch, PermissionDenied, \
     RequestFailed
 from eulfedora.xml import FoxmlDigitalObject
+
+try:
+    from progressbar import ProgressBar, Bar, Counter, ETA, \
+        FileTransferSpeed, Percentage, \
+        RotatingMarker, SimpleProgress, Timer
+except ImportError:
+    ProgressBar = None
+
 
 
 def repo_copy():
@@ -70,10 +79,47 @@ def repo_copy():
         cfg.get(args.dest, 'fedora_user'),
         cfg.get(args.dest, 'fedora_password'))
 
+    if ProgressBar:
+        widgets = [FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
+                   Timer(format='%s')] # time only, no label like "elapsed time: 00:00"
+        pbar = ProgressBar(widgets=widgets, maxval=1024*1024*1024*1024).start()
+    else:
+        pbar = None
+
+
     for pid in args.pids:
         try:
-            response = src_repo.api.export(pid, context='migrate')
-            export = response.content
+            src_obj = src_repo.get_object(pid)
+            # calculate rough estimate of object size
+            size_estimate = 250000   # start rough estimate for foxml size
+            for ds in src_obj.ds_list:
+                dsobj = src_obj.getDatastreamObject(ds)
+                for version in dsobj.history().versions:
+                    size_estimate += version.size
+            if pbar:
+                pbar.maxval = size_estimate
+
+            print 'size estimate is %d (%s)' % (size_estimate, humanize_file_size(size_estimate))
+
+            # response = src_repo.api.export(pid, context='migrate')
+            response = src_repo.api.export(pid, context='archive', stream=True)
+
+            # generator to read src repo request in chunks and stream
+            # to dest repo
+            def export_data():
+                size = 0
+                for chunk in response.iter_content(4096*1024):
+                    size += len(chunk)
+                    # update progressbar if we have one
+                    if pbar:
+                        # progressbar doesn't like it when size exceeds maxval,
+                        # but we don't actually know maxval; adjust the maxval up
+                        # when necessary
+                        if pbar.maxval < size:
+                            pbar.maxval = size
+                        pbar.update(size)
+                    yield chunk
+
         except RequestFailed as err:
             err_type = 'Error'
             if isinstance(err, PermissionDenied):
@@ -108,17 +154,25 @@ def repo_copy():
                 continue
 
         try:
-            result = dest_repo.ingest(export)
+            if pbar:
+                pbar.start()
+            result = dest_repo.ingest(export_data())
+            if pbar:
+                pbar.finish()
             print '%s copied' % result
         except ChecksumMismatch:
-            print 'ChecksumMismatch on %s, removing checksums for DC/RELS-EXT' % pid
-            export_xml = load_xmlobject_from_string(export.content, FoxmlDigitalObject)
-            for ds in export_xml.datastreams:
-                if ds.id in ['DC', 'RELS-EXT']:
-                    for version in ds.versions:
-                        del version.content_digest
-            result = dest_repo.ingest(export_xml.serialize(pretty=True))
-            print '%s copied' % result
+            # print 'ChecksumMismatch on %s, removing checksums for DC/RELS-EXT' % pid
+            print 'ChecksumMismatch on %s' % pid
+            # export_xml = load_xmlobject_from_string(export, FoxmlDigitalObject)
+            # for ds in export_xml.datastreams:
+            #     print ds.id
+            #     if ds.id in ['DC', 'RELS-EXT']:
+            #         for version in ds.versions:
+            #             del version.content_digest
+
+            # result = dest_repo.ingest(export_xml.serialize(pretty=True))
+            # print '%s copied' % result
+
 
         except RequestFailed as err:
             err_type = 'Error'
@@ -128,6 +182,26 @@ def repo_copy():
                 (err_type, pid, args.dest, err)
 
             continue
+
+
+
+def humanize_file_size(size):
+    # human-readable file size from
+    # http://stackoverflow.com/questions/1094841/reusable-library-to-get-human-readable-version-of-file-size
+    size = abs(size)
+    if size == 0:
+        return "0B"
+    units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
+    p = math.floor(math.log(size, 2)/10)
+    return "%.2f%s" % (size/math.pow(1024, p), units[int(p)])
+
+
+class FileSizeCounter(Counter):
+    # file size counter widget for progressbar
+
+    def update(self, pbar):
+        return humanize_file_size(pbar.currval)
+
 
 
 if __name__ == '__main__':
