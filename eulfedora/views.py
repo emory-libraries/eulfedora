@@ -33,7 +33,8 @@ Using these views (in the simpler cases) should be as easy as::
 import logging
 
 from django.contrib.auth import views as authviews
-from django.http import HttpResponse, Http404, HttpResponseBadRequest
+from django.http import HttpResponse, Http404, HttpResponseBadRequest, \
+    StreamingHttpResponse
 from django.views.decorators.http import require_http_methods, condition
 from django.views.generic import View
 
@@ -104,7 +105,8 @@ def datastream_lastmodified(request, pid, dsid, type=None, repo=None,
 @condition(etag_func=datastream_etag)
 @require_http_methods(['GET', 'HEAD'])
 def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
-                   accept_range_request=False, as_of_date=None):
+                   accept_range_request=False, as_of_date=None,
+                   streaming=False):
     '''View to display a raw datastream that belongs to a Fedora Object.
     Returns an :class:`~django.http.HttpResponse` with the response content
     populated with the content of the datastream.  The following HTTP headers
@@ -133,6 +135,10 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
     :param headers: dictionary of additional headers to include in the response
     :param accept_range_request: enable HTTP Range requests (disabled by default)
     :param as_of_date: access a historical version of the datastream
+    :param streaming: if True, response will be returned as an instance of
+        :class:`django.http.StreamingHttpResponse` instead of
+        :class:`django.http.HttpResponse`; intended for use with large
+        datastreams, defaults to False.
     '''
 
     if repo is None:
@@ -211,9 +217,12 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
                 # get the datastream content in chunks, to handle larger datastreams
                 content = ds.get_chunked_content()
                 # not using serialize(pretty=True) for XML/RDF datastreams, since
-                # we actually want the raw datstream content.
+                # we actually want the raw datastream content.
 
-            response = HttpResponse(content, content_type=ds.mimetype)
+            http_response_class = HttpResponse
+            if streaming:
+                http_response_class = StreamingHttpResponse
+            response = http_response_class(content, content_type=ds.mimetype)
             # NOTE: might want to use StreamingHttpResponse here, at least
             # over some size threshold or for range requests
 
@@ -266,7 +275,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
         # or the requested datastream doesn't exist, 404
         if rf.code == 404 or \
             (type is not None and not obj.has_requisite_content_models) or \
-                not getattr(obj, dsid).exists or not obj.exists :
+                not getattr(obj, dsid).exists or not obj.exists:
             raise Http404
 
         # for anything else, re-raise & let Django's default 500 logic handle it
@@ -434,6 +443,8 @@ class RawDatastreamView(View):
     pid_url_kwarg = 'pid'
     #: url kwarg term for retrieving date time, if used (default: date)
     as_of_date_url_kwarg = 'date'
+    #: streaming response option (default: False)
+    streaming = False
     #: Repository class to use, if needed
     repository_class = Repository
     #: extra http headers to include
@@ -493,4 +504,4 @@ class RawDatastreamView(View):
             type=self.object_type, repo=self.get_repository(),
             headers=self.get_headers(),
             accept_range_request=self.accept_range_request,
-            as_of_date=date)
+            as_of_date=date, streaming=self.streaming)

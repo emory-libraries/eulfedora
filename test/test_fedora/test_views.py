@@ -19,7 +19,7 @@ import os
 import unittest
 
 from django.conf import settings
-from django.http import Http404
+from django.http import Http404, HttpResponse, StreamingHttpResponse
 
 from eulfedora.models import DigitalObject, Datastream, FileDatastream
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
@@ -128,6 +128,11 @@ class FedoraViewsTest(unittest.TestCase):
             'datastream checksum should be set as Content-MD5 header in the response')
         self.assertTrue(response.has_header('Content-Length'),
             'content-length header should be set in the response for binary datastreams')
+        self.assert_(isinstance(response, HttpResponse))
+
+        # streaming
+        response = raw_datastream(rqst, self.obj.pid, 'IMAGE', streaming=True)
+        self.assert_(isinstance(response, StreamingHttpResponse))
 
         # non-existent datastream should 404
         self.assertRaises(Http404, raw_datastream, rqst, self.obj.pid, 'BOGUS-DSID')
