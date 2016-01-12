@@ -1,8 +1,8 @@
 EULFedora
 =========
 
-   
-.. image:: https://img.shields.io/pypi/v/eulfedora.svg  
+
+.. image:: https://img.shields.io/pypi/v/eulfedora.svg
    :target: https://pypi.python.org/pypi/eulfedora
 
 .. image:: https://img.shields.io/pypi/l/eulfedora.svg
@@ -12,9 +12,13 @@ EULFedora
 
 EULfedora is a `Python <http://www.python.org/>`_ module that provides
 utilities, API wrappers, and classes for interacting with the
-`Fedora-Commons Repository <http://fedora-commons.org/>`_ (versions
-3.4.x and 3.5) in a pythonic, object-oriented way, with optional
-`Django <https://www.djangoproject.com/>`_ integration.
+`Fedora-Commons Repository <http://fedora-commons.org/>`_
+in a pythonic, object-oriented way, with optional
+`Django <https://www.djangoproject.com/>`_ integration.  Current versions
+of eulfedora are intended for use with Fedora Commons 3.7.x or 3.8.x, but
+will likely work with earlier versions.  If you need support for an earlier
+version of Fedora and the latest eulfedora does not work, you may have
+success with the 1.0 release.
 
 **eulfedora.api** provides complete access to the Fedora API,
 primarily making use of Fedora's

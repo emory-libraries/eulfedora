@@ -5,6 +5,13 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+1.3.1
+-----
+
+* Require a version of python-requests earlier than 2.9 (2.9
+  includes change to upload behavior for file-like objects that
+  breaks eulfedora api uploads as currently handled in eulfedora).
+
 
 1.3
 ---
