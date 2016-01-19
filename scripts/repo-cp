@@ -55,7 +55,10 @@ def repo_copy():
 
     # list of pids
     parser.add_argument('pids', metavar='PID', nargs='*',
-                                 help='list of pids to copy')
+        help='list of pids to copy')
+    parser.add_argument('--file', '-f',
+        help='Input file with a list of pids, one pid per line',
+        required=False)
 
     args = parser.parse_args()
 
@@ -80,14 +83,23 @@ def repo_copy():
         cfg.get(args.dest, 'fedora_password'))
 
     if ProgressBar:
-        widgets = [FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
+        widgets = ['Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
                    Timer(format='%s')] # time only, no label like "elapsed time: 00:00"
-        pbar = ProgressBar(widgets=widgets, maxval=1024*1024*1024*1024).start()
     else:
         pbar = None
 
+    pids = []
+    if args.pids:
+        pids = args.pids
+    elif args.file:
+        with open(args.file) as pidlistfile:
+            pids = pidlistfile.read().splitlines()
+    else:
+        print 'Specify either one or more pids or a file with a list of pids'
+        parser.print_help()
+        return
 
-    for pid in args.pids:
+    for pid in pids:
         try:
             src_obj = src_repo.get_object(pid)
             # calculate rough estimate of object size
@@ -96,10 +108,12 @@ def repo_copy():
                 dsobj = src_obj.getDatastreamObject(ds)
                 for version in dsobj.history().versions:
                     size_estimate += version.size
-            if pbar:
-                pbar.maxval = size_estimate
-
-            print 'size estimate is %d (%s)' % (size_estimate, humanize_file_size(size_estimate))
+            if ProgressBar:
+                # create a new progress bar with current pid and size
+                current_widgets = [pid,
+                    ' Estimated size: %s || ' % humanize_file_size(size_estimate)]
+                current_widgets += widgets
+                pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
 
             # response = src_repo.api.export(pid, context='migrate')
             response = src_repo.api.export(pid, context='archive', stream=True)
