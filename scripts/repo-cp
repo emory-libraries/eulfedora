@@ -16,11 +16,12 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-
-
 import argparse
+import base64
 from copy import copy
+from cStringIO import StringIO
 import ConfigParser
+import hashlib
 from lxml import etree
 import math
 import os
@@ -118,132 +119,80 @@ def repo_copy():
                 current_widgets += widgets
                 pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
 
-            # response = src_repo.api.export(pid, context='migrate')
             response = src_repo.api.export(pid, context='archive', stream=True)
 
-
-            FOXML_NS = 'info:fedora/fedora-system:def/foxml#'
-            # context = etree.iterparse(response.raw, events=("start", ),
-            #     tag='{%s}binaryContent' % FOXML_NS)
+            # use iterparse to go through the response in chunks
             context = etree.iterparse(response.raw, events=("start", "end"),
                 huge_tree=True)
-            import hashlib
 
+            # generator to serve out foxml export in chunks
             def export_data():
-                # foxml:binaryContent
                 for action, elem in context:
-                    # print 'action = %s, elem = %s' % (action, elem)
-                    if elem.tag == '{%s}contentDigest' % FOXML_NS:
+                    if elem.tag == '{%s}contentDigest' % DigitalObject.FOXML_NS:
                         if action == 'start':
-                            # hack to test
-                            # if elem.getparent().get('ID') == 'PDF.0':
-                            #     # skip this one, because the checksum doesn't
-                            #     # match the decoded data
-                            #     continue
                             print elem.getparent().get('ID')
                             print elem.get('TYPE'), elem.get('DIGEST')
-                    if elem.tag == '{%s}binaryContent' % FOXML_NS:
-                        if action == 'end':
-                            print elem.getparent().get('ID')
-
-                            # encoded_content = IterStringIO(elem.itertext())
-                            import base64
-                            print elem.text[-20:]
-
-                            # # decoded_content = base64.b64decode(elem.text.replace(" ", ""))
-                            # try:
-                            # # decoded_content = base64.b64decode(re.sub(r"\s+", "", txt, flags=re.UNICODE))
-                            #     decoded_content = base64_decode_autopad(elem.text)
-                            #     # decoded_content = base64_decode_autopad(re.sub(pattern, elem.text, ''))
-                            #     # if elem.getparent().get('ID') != 'source-image.0':
-                            #     #     print 'decoded content'
-                            #     #     print decoded_content
-                            # except TypeError:
-                            #     print 'b64 decode failed on ', elem.getparent().get('ID')
-                            #     yield etree.tostring(elem)
-                            #     next
-
-
-                            # upload_id = dest_repo.api.upload(decoded_content)
-                            encoded_content = StringIteratorIO(elem.itertext())
-                            import base64
-                            from cStringIO import StringIO
-                            decoded_content = StringIO()
-
-                            # print 'encoded content '
-                            base64.decode(encoded_content, decoded_content)
-                            # print 'decoded content'
-                            # print decoded_content.getvalue()
-                            m = hashlib.md5()
-                            m.update(decoded_content.getvalue())
-                            # FIXME: decoded PDF has different MD5!!!!
-                            # what's going on here?
-
-                            # TODO: pull out export/base64 logic
-                            # get archive, save to file, md5, compare
-                            # to original
-
-                            print m.hexdigest()
-                            upload_id = dest_repo.api.upload(decoded_content)
-                            print 'upload id = ', upload_id
-                            # clear element contents
-                            elem.clear()
-                            # E = ElementMaker(namespace=DigitalObject.FOXML_NS,
-                            #     nsmap={'foxml': DigitalObject.FOXML_NS})
-                            content_location = elem.getparent().makeelement('{%s}contentLocation' % DigitalObject.FOXML_NS,
-                                attrib={'REF': upload_id, 'TYPE': 'URL'})
-                            # print 'content location', content_location
-                            yield etree.tostring(content_location)
-                            # content_location = E('contentLocation')
-                            # content_location.set('REF', upload_id)
-                            # content_location.set('TYPE', 'URI')
-                             # <foxml:contentLocation REF="demo:999+DRAWING-BETTER+DRAWING-BETTER.0" TYPE="INTERNAL_ID"/>
-                            # elem.getparent().replace(elem, content_location)
-                            # yield etree.tostring(content_location)
-
-                    elif elem.tag == '{%s}xmlContent' % DigitalObject.FOXML_NS:
+                    if elem.tag == '{%s}binaryContent' % DigitalObject.FOXML_NS:
+                        # when binary content is found, get the base64 encoded
+                        # content, decode it, and post to fedora, then
+                        # yield a content location tag with the upload id
 
                         if action == 'start':
-                            # print 'yielding xmlContent ', elem
+                            # NOTE: this fails on binary datastreams
+                            # (decoding fails or checksum mismatch);
+                            # possibly because the iterparse hasn't
+                            # yet handled the entire element...
+                            # print elem.getparent().get('ID')  # ds version id, for context
+                            encoded_content = StringIteratorIO(elem.itertext())
+                            decoded_content = StringIO()
+                            base64.decode(encoded_content, decoded_content)
+                            upload_id = dest_repo.api.upload(decoded_content)
+                            # clear element contents
+                            elem.clear()
+                            content_location = elem.getparent().makeelement('{%s}contentLocation' % DigitalObject.FOXML_NS,
+                                attrib={'REF': upload_id, 'TYPE': 'URL'})
+                            yield etree.tostring(content_location)
+
+                    elif elem.tag == '{%s}xmlContent' % DigitalObject.FOXML_NS:
+                        # serialize xml content unchanged, to avoid generating
+                        # xml content in a way that results in checksum mismatches
+                        if action == 'start':
                             yield etree.tostring(elem)
-                            # elem.clear()
-                            # elem.getparent().remove(elem)
                         elif action == 'end':
                             elem.clear()
 
                     else:
-                        # print 'xmlcontent ancestor = ', elem.xpath('count(ancestor::foxml:xmlContent)',
-                                                                 # namespaces={'foxml': DigitalObject.FOXML_NS})
                         if elem.xpath('count(ancestor::foxml:xmlContent)',
                                      namespaces={'foxml': DigitalObject.FOXML_NS}):
-                            # print '*** elem %s is under xmlcontent, skipping'
+                            # skip elements under xml content
+                            # - theoretically, clearing the xml element
+                            # should mean they don't get processed,
+                            # but in practice that seems not to be the case,
+                            # and clearing the node removes context that
+                            # makes it possible to determine if a node
+                            # is inside an xmlcontent block
                             continue
 
-                        # if has children, handle differently
+                        # if a node has children, handle differently
                         if list(elem):
                             output_copy = copy(elem)
                             for child in output_copy.iterchildren():
                                 output_copy.remove(child)
                             output = etree.tostring(output_copy)
-                            # print 'output = ', output
+                            # generate start and end tags for this element
                             start, end = output.split('</')
                             end = '</%s' % end
-                            # print 'start = ', start
-                            # print 'end = ', end
                             if action == 'start':
+                                # on start event, yield the open tag
                                 yield start
                             if action == 'end':
+                                # on end event, yield the closetag
                                 yield end
                         else:
+                            # otherwise (no child nodes), serialize the whole element
                             if action == 'start':
                                 yield etree.tostring(elem)
                                 elem.clear()
-
-            # with open('/tmp/export-foxml.xml', 'w') as tmpfile:
-            #     for chunk in export_data():
-            #         tmpfile.write(chunk)
-
-            # raise Exception
 
             # generator to read src repo request in chunks and stream
             # to dest repo
@@ -345,7 +294,7 @@ class FileSizeCounter(Counter):
     def update(self, pbar):
         return humanize_file_size(pbar.currval)
 
-
+# from http://stackoverflow.com/questions/12593576/adapt-an-iterator-to-behave-like-a-file-like-object-in-python
 import io
 class StringIteratorIO(io.TextIOBase):
 
@@ -400,11 +349,8 @@ class StringIteratorIO(io.TextIOBase):
                 break
         return ''.join(l)
 
-import itertools as it
-from io import TextIOBase
-
-
 # base64 decode stream to stream
+# -- should be able to generate without intervening file-like objects
 # def decode(input, output):
 #     """Decode a file."""
 #     while True:
@@ -414,49 +360,6 @@ from io import TextIOBase
 #         s = binascii.a2b_base64(line)
 #         output.write(s)
 
-
-
-# thanks to http://stackoverflow.com/questions/12593576/adapt-an-iterator-to-behave-like-a-file-like-object-in-python
-class IterStringIO(TextIOBase):
-    def __init__(self, iterable=None):
-        iterable = iterable or []
-        self.iter = it.chain.from_iterable(iterable)
-
-    def not_newline(self, s):
-        return s not in {'\n', '\r', '\r\n'}
-
-    # def write(self, iterable):
-    #     to_chain = it.chain.from_iterable(iterable)
-    #     self.iter = it.chain.from_iterable([self.iter, to_chain])
-
-    def read(self, n=None):
-        return bytearray(it.islice(self.iter, None, n))
-
-    def readline(self, n=None):
-        to_read = it.takewhile(self.not_newline, self.iter)
-        return bytearray(it.islice(to_read, None, n))
-
-# http://stackoverflow.com/questions/2941995/python-ignore-incorrect-padding-error-when-base64-decoding
-def base64_decode_autopad(s):
-    """Add missing padding to string and return the decoded base64 string."""
-    print 'len = ', len(s)
-    s = str(s).strip()
-    print 'len = ', len(s)
-    import base64
-    try:
-        return base64.b64decode(s)
-    except TypeError:
-        padding = len(s) % 4
-        print 'padding = ', padding
-        if padding == 1:
-            print "ERR Invalid base64 string"
-            # print "ERR Invalid base64 string: {}".format(s)
-            return ''
-        elif padding == 2:
-            s += b'=='
-        elif padding == 3:
-            s += b'='
-        return base64.b64decode(s)
 
 if __name__ == '__main__':
     repo_copy()
