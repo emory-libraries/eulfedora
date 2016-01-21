@@ -59,6 +59,11 @@ def repo_copy():
     parser.add_argument('--file', '-f',
         help='Input file with a list of pids, one pid per line',
         required=False)
+    parser.add_argument('--export-format', '-e',
+        choices=['migrate', 'archive'], default='migrate',
+        help='Fedora export format to use.  Use archive if migrate exports ' \
+           + 'fail with checksum errors or if content URLs are not accessible '
+           + 'to the destination server (default: %(default)s')
 
     args = parser.parse_args()
 
@@ -102,21 +107,25 @@ def repo_copy():
     for pid in pids:
         try:
             src_obj = src_repo.get_object(pid)
-            # calculate rough estimate of object size
-            size_estimate = 250000   # start rough estimate for foxml size
-            for ds in src_obj.ds_list:
-                dsobj = src_obj.getDatastreamObject(ds)
-                for version in dsobj.history().versions:
-                    size_estimate += version.size
-            if ProgressBar:
-                # create a new progress bar with current pid and size
-                current_widgets = [pid,
-                    ' Estimated size: %s || ' % humanize_file_size(size_estimate)]
-                current_widgets += widgets
-                pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
+            # size estimate / progress bar only relevant to archive exports
+            if args.export_format == 'archive':
+                # calculate rough estimate of object size
+                size_estimate = 250000   # start rough estimate for foxml size
+                for ds in src_obj.ds_list:
+                    dsobj = src_obj.getDatastreamObject(ds)
+                    for version in dsobj.history().versions:
+                        size_estimate += version.size
+                    # TODO: adjust managed datastream sizes to account
+                    # for size-increase caused by base64 encoding
 
-            # response = src_repo.api.export(pid, context='migrate')
-            response = src_repo.api.export(pid, context='archive', stream=True)
+                if ProgressBar:
+                    # create a new progress bar with current pid and size
+                    current_widgets = [pid,
+                        ' Estimated size: %s || ' % humanize_file_size(size_estimate)]
+                    current_widgets += widgets
+                    pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
+
+            response = src_repo.api.export(pid, context=args.export_format, stream=True)
 
             # generator to read src repo request in chunks and stream
             # to dest repo
@@ -124,8 +133,8 @@ def repo_copy():
                 size = 0
                 for chunk in response.iter_content(4096*1024):
                     size += len(chunk)
-                    # update progressbar if we have one
-                    if pbar:
+                    # update progressbar if we have one & export format is archive
+                    if pbar and args.export_format == 'archive':
                         # progressbar doesn't like it when size exceeds maxval,
                         # but we don't actually know maxval; adjust the maxval up
                         # when necessary
