@@ -5,6 +5,17 @@ The following is a summary of changes and improvements to
 :mod:`eulfedora`.  New features in each version should be listed, with
 any necessary information about installation or upgrade notes.
 
+1.4
+---
+
+* New **streaming** option for :class:`eulfedora.views.RawDatastreamView`
+  and :meth:`eulfedora.views.raw_datastream` to optionally return a
+  :class:`django.http.StreamingHttpResponse` (intended for use with
+  large datastream content).
+* New **repo-cp** script (*BETA*) for synchronizing content between Fedora
+  repositories (e.g., production to QA or development servers, for
+  testing purposes).
+
 1.3.1
 -----
 

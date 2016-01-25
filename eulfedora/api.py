@@ -363,7 +363,8 @@ class REST_API(HTTP_API_Base):
         # currently returns datastream info returned by getDatastream...  what should it return?
         return self.getDatastream(pid, dsID, validateChecksum=True, asOfDateTime=asOfDateTime)
 
-    def export(self, pid, context=None, format=None, encoding=None):
+    def export(self, pid, context=None, format=None, encoding=None,
+                stream=False):
         # /objects/{pid}/export ? [format] [context] [encoding]
         # - if format is not specified, use fedora default (FOXML 1.1)
         # - if encoding is not specified, use fedora default (UTF-8)
@@ -376,7 +377,7 @@ class REST_API(HTTP_API_Base):
         if encoding:
             http_args['encoding'] = encoding
         uri = 'objects/%s/export' % pid
-        return self.get(uri, params=http_args)
+        return self.get(uri, params=http_args, stream=stream)
 
     def getDatastream(self, pid, dsID, asOfDateTime=None, validateChecksum=False):
         """Get information about a single datastream on a Fedora object; optionally,

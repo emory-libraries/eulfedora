@@ -1,5 +1,5 @@
 # file eulfedora/xml.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -135,7 +135,7 @@ class DatastreamProfile(_FedoraBase):
     """:class:`~eulxml.xmlmap.XmlObject` for datastream profile information
     returned by  :meth:`REST_API.getDatastream`."""
     # default namespace is fedora manage
-    ROOT_NAME = 'datastreamProfile'    
+    ROOT_NAME = 'datastreamProfile'
     label = xmlmap.StringField('m:dsLabel')
     "datastream label"
     version_id = xmlmap.StringField('m:dsVersionID')
@@ -245,7 +245,7 @@ class DatastreamHistory(_FedoraBase):
     """:class:`~eulxml.xmlmap.XmlObject` for datastream history
     information returned by :meth:`REST_API.getDatastreamHistory`."""
     # default namespace is fedora manage
-    ROOT_NAME = 'datastreamHistory'    
+    ROOT_NAME = 'datastreamHistory'
     pid = xmlmap.StringField('@pid')
     "pid"
     dsid = xmlmap.StringField('@dsID')
@@ -291,7 +291,7 @@ class AuditTrailRecord(_FedoraBase):
     '''
     ROOT_NAME = 'record'
     ROOT_NS = FEDORA_AUDIT_NS
-    
+
     id = xmlmap.StringField('@ID')
     'id for this audit trail record'
     process_type = xmlmap.StringField('audit:process/@type')
@@ -314,6 +314,33 @@ class AuditTrail(_FedoraBase):
     records = xmlmap.NodeListField('audit:record', AuditTrailRecord)
     'list of :class:`AuditTrailRecord` entries'
 
+
+class FoxmlContentDigest(_FedoraBase):
+    'Content digest, as stored in full foxml (e.g. object export)'
+    #: digest type, e.g. MD5
+    type = xmlmap.StringField('@TYPE')
+    #: digest value
+    digest = xmlmap.StringField('@DIGEST')
+
+
+class FoxmlDatastreamVersion(_FedoraBase):
+    'Foxml datastream version in full foxml, e.g. object export'
+    #: datastream version id
+    id = xmlmap.StringField('@ID')
+    #: mimetype
+    mimetype = xmlmap.StringField('@MIMETYPE')
+    #: content digest
+    content_digest = xmlmap.NodeListField('foxml:contentDigest',
+        FoxmlContentDigest)
+
+class FoxmlDatastream(_FedoraBase):
+    'Foxml datastream in full foxml, e.g. object export'
+    #: datastream id
+    id = xmlmap.StringField('@ID')
+    #: list of versions
+    versions = xmlmap.NodeListField('foxml:datastreamVersion',
+        FoxmlDatastreamVersion)
+
 class FoxmlDigitalObject(_FedoraBase):
     '''Minimal :class:`~eulxml.xmlmap.XmlObject` for Foxml
     DigitalObject as returned by :meth:`REST_API.getObjectXML`, to
@@ -321,4 +348,4 @@ class FoxmlDigitalObject(_FedoraBase):
     '''
     audit_trail = xmlmap.NodeField('foxml:datastream[@ID="AUDIT"]/foxml:datastreamVersion/foxml:xmlContent/audit:auditTrail', AuditTrail)
     'Fedora audit trail, as instance of :class:`AuditTrail`'
-    
+    datastreams = xmlmap.NodeListField('foxml:datastream', FoxmlDatastream)

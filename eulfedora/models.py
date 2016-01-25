@@ -926,6 +926,11 @@ class Relation(object):
                 uris[0]
             ))
 
+        #  if related object has been cached, delete that as well
+        if self.uri_val is not None and self.uri_val in obj.relcache:
+            del obj.relcache[self.uri_val]
+
+
 
 class ReverseRelation(object):
     '''Descriptor for use with
