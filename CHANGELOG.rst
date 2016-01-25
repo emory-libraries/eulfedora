@@ -12,6 +12,9 @@ any necessary information about installation or upgrade notes.
   and :meth:`eulfedora.views.raw_datastream` to optionally return a
   :class:`django.http.StreamingHttpResponse` (intended for use with
   large datastream content).
+* New **repo-cp** script (*BETA*) for synchronizing content between Fedora
+  repositories (e.g., production to QA or development servers, for
+  testing purposes).
 
 1.3.1
 -----
