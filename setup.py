@@ -59,6 +59,7 @@ setup(
             'unittest2<0.7',  # optional testrunner in testutil
             'pyPdf',
             'progressbar',
+            'tox',
         ]
     },
     description='Idiomatic access to digital objects in a Fedora Commons repository',
