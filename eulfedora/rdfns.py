@@ -35,6 +35,7 @@ Example usage::
 ----
 '''
 
+from __future__ import unicode_literals
 from rdflib import URIRef
 from rdflib.namespace import ClosedNamespace
 

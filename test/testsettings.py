@@ -38,4 +38,4 @@ DATABASES = {
 
 EUL_INDEXER_ALLOWED_IPS = ['*']
 
-from localsettings import *
+from .localsettings import *

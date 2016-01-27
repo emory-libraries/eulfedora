@@ -30,6 +30,7 @@ Using these views (in the simpler cases) should be as easy as::
 
 '''
 
+from __future__ import unicode_literals
 import logging
 
 from django.contrib.auth import views as authviews

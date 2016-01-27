@@ -62,16 +62,19 @@ applications.
 
 """
 
+from __future__ import unicode_literals
+import codecs
 import logging
-import os
 import json
 from django.conf import settings
 from django.http import HttpResponse, Http404, HttpResponseForbidden, \
     HttpResponseBadRequest
 
+from six import itervalues
+
 from eulfedora.models import DigitalObject
 from eulfedora.server import TypeInferringRepository
-from eulfedora.util import RequestFailed
+from eulfedora.util import RequestFailed, force_bytes, force_text
 
 
 logger = logging.getLogger(__name__)
@@ -97,7 +100,7 @@ def index_config(request):
     # Generate an automatic list of lists of content models (one list for each defined type)
     # if no content model settings exist
     if not content_list:
-        for cls in DigitalObject.defined_types.itervalues():
+        for cls in itervalues(DigitalObject.defined_types):
             # by default, Fedora system content models are excluded
             content_group = [model for model in getattr(cls, 'CONTENT_MODELS', [])
                              if not model.startswith('info:fedora/fedora-system:')]
@@ -131,7 +134,8 @@ def index_data(request, id, repo=None):
         basic = 'Basic '
         if auth_info and auth_info.startswith(basic):
             basic_info = auth_info[len(basic):]
-            u, p = basic_info.decode('base64').split(':')
+            basic_info_decoded = codecs.decode(force_bytes(basic_info), 'base64')
+            u, p = force_text(basic_info_decoded).split(':')
             repo_opts.update({'username': u, 'password': p})
 
         repo = TypeInferringRepository(**repo_opts)

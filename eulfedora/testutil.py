@@ -58,6 +58,7 @@ automatically enabled.
 
 """
 
+from __future__ import unicode_literals
 import logging
 import sys
 
@@ -240,4 +241,3 @@ try:
 
 except ImportError:
     pass
-

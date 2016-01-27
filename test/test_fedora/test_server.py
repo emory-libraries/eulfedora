@@ -16,9 +16,13 @@
 
 from datetime import date
 
+from six.moves.builtins import bytes
+
 from eulfedora.rdfns import model as modelns
 from eulfedora.models import DigitalObject
 from eulfedora.server import Repository
+from eulfedora.util import force_bytes
+from eulfedora.util import force_text
 
 from test.test_fedora.base import FedoraTestCase, load_fixture_data
 from test.testsettings import FEDORA_ROOT_NONSSL, FEDORA_PIDSPACE, \
@@ -45,18 +49,18 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
             self.assertTrue(pid.startswith(PID_SPACE))
 
     def test_ingest_without_pid(self):
-        object = load_fixture_data('basic-object.foxml')
-        pid = self.repo.ingest(object)
+        obj = self.loadFixtureData('basic-object.foxml')
+        pid = self.repo.ingest(force_bytes(obj))
         self.assertTrue(pid)
-        self.repo.purge_object(pid)
+        self.repo.purge_object(force_text(pid))
 
         # test ingesting with log message
-        pid = self.repo.ingest(object, "this is my test ingest message")
+        pid = self.repo.ingest(obj, "this is my test ingest message")
         # ingest message is stored in AUDIT datastream
         # - can currently only be accessed by retrieving entire object xml
-        r = self.repo.api.getObjectXML(pid)
-        self.assertTrue("this is my test ingest message" in r.content)
-        purged = self.repo.purge_object(pid, "removing test ingest object")
+        r = self.repo.api.getObjectXML(force_text(pid))
+        self.assertTrue("this is my test ingest message" in r.text)
+        purged = self.repo.purge_object(force_text(pid), "removing test ingest object")
         self.assertTrue(purged)
         # FIXME: how can we test logMessage arg to purge?
         #  -- have no idea where log message is actually stored... (if anywhere)

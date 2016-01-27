@@ -16,7 +16,10 @@
 
 import unittest
 
+import six
+
 from eulfedora import cryptutil
+from eulfedora.util import force_text
 
 
 class CryptTest(unittest.TestCase):
@@ -39,10 +42,10 @@ class CryptTest(unittest.TestCase):
     def test_encrypt_decrypt(self):
         def test_encrypt_decrypt(text):
             encrypted = cryptutil.encrypt(text)
-            self.assertNotEqual(text, encrypted,
+            self.assertNotEqual(text, force_text(encrypted) if six.PY3 else encrypted,
                 "encrypted text (%s) should not match original (%s)" % (encrypted, text))
             decrypted = cryptutil.decrypt(encrypted)
-            self.assertEqual(text, decrypted,
+            self.assertEqual(text, force_text(decrypted) if six.PY3 else decrypted,
                 "decrypted text (%s) should match original encrypted text (%s)" % (decrypted, text))
 
         test_encrypt_decrypt('text')

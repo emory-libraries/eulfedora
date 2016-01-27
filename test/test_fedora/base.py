@@ -19,7 +19,7 @@ import unittest
 import logging
 from eulxml import xmlmap
 from eulfedora.server import Repository
-from eulfedora.util import RequestFailed
+from eulfedora.util import RequestFailed, force_bytes, force_text
 
 from test.localsettings import FEDORA_ROOT, \
      FEDORA_USER, FEDORA_PASSWORD, FEDORA_PIDSPACE
@@ -35,7 +35,7 @@ def fixture_path(fname):
 
 def load_fixture_data(fname):
     with open(fixture_path(fname)) as f:
-        return f.read()
+        return force_bytes(f.read())
 
 
 class _MinimalFoxml(xmlmap.XmlObject):
@@ -96,8 +96,8 @@ class FedoraTestCase(unittest.TestCase):
             return data
 
     def ingestFixture(self, fname):
-        object = self.loadFixtureData(fname)
-        pid = self.repo.ingest(object)
+        obj = self.loadFixtureData(fname)
+        pid = self.repo.ingest(force_text(obj))
         if pid:
             # we'd like this always to be true. if ingest fails we should
             # throw an exception. that probably hasn't been thoroughly
@@ -107,4 +107,4 @@ class FedoraTestCase(unittest.TestCase):
     # note: renamed from append_test_pid so that nosetests doesn't
     # autodetect and attempt to run as a unit test.
     def append_pid(self, pid):
-            self.fedora_fixtures_ingested.append(pid)
+            self.fedora_fixtures_ingested.append(force_text(pid))

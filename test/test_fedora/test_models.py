@@ -24,10 +24,12 @@ from rdflib.namespace import Namespace
 import re
 import tempfile
 
+from six import string_types
+
 from eulfedora import models
 from eulfedora.api import ApiFacade
 from eulfedora.rdfns import relsext, model as modelns
-from eulfedora.util import RequestFailed, fedoratime_to_datetime, md5sum
+from eulfedora.util import RequestFailed, fedoratime_to_datetime, md5sum, force_text
 from eulfedora.xml import ObjectDatastream, FEDORA_MANAGE_NS, FoxmlDigitalObject, \
      AuditTrail, AuditTrailRecord
 from eulxml.xmlmap.dc import DublinCore
@@ -116,7 +118,7 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(dc.identifier, self.pid)
 
         self.assert_(isinstance(self.obj.text, models.DatastreamObject))
-        self.assertEqual(self.obj.text.content, TEXT_CONTENT)
+        self.assertEqual(force_text(self.obj.text.content), TEXT_CONTENT)
 
     def test_get_ds_info(self):
         self.assertEqual(self.obj.dc.label, "Dublin Core")
@@ -171,9 +173,9 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(self.obj.text.content, new_text)
         # compare with the datastream pulled directly from Fedora
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
-        self.assertEqual(r.content, new_text)
+        self.assertEqual(r.text, new_text)
         r = self.obj.api.getDatastream(self.pid, self.obj.text.id)
-        dsinfo = r.content
+        dsinfo = r.text
         self.assert_("<dsLabel>new ds label</dsLabel>" in dsinfo)
         self.assert_("<dsMIME>text/other</dsMIME>" in dsinfo)
         self.assert_("<dsVersionable>false</dsVersionable>" in dsinfo)
@@ -188,7 +190,7 @@ class TestDatastreams(FedoraTestCase):
         saved = self.obj.dc.save("changed DC title")
         self.assertTrue(saved, "saving DC datastream should return true")
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
-        self.assert_("<dc:title>this is a new title</dc:title>" in r.content)
+        self.assert_("<dc:title>this is a new title</dc:title>" in r.text)
 
     def test_save_by_location(self):
         file_uri = 'file:///tmp/rsk-test.txt'
@@ -328,7 +330,7 @@ class TestDatastreams(FedoraTestCase):
         history = self.obj.text.history()
         self.assertEqual("text datastream", history.versions[0].label)
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
-        self.assertEqual(TEXT_CONTENT, r.content)
+        self.assertEqual(TEXT_CONTENT, r.text)
 
         # versioned datastream
         self.obj.dc.label = "DC 2.0"
@@ -339,7 +341,7 @@ class TestDatastreams(FedoraTestCase):
         self.assertEqual(1, len(history.versions))  # new datastream added, then removed - back to 1 version
         self.assertEqual("Dublin Core", history.versions[0].label)
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
-        self.assert_('<dc:title>A partially-prepared test object</dc:title>' in r.content)
+        self.assert_('<dc:title>A partially-prepared test object</dc:title>' in r.text)
 
         # unversioned - profile change only
         self.obj = MyDigitalObject(self.api, self.pid)
@@ -349,7 +351,7 @@ class TestDatastreams(FedoraTestCase):
         history = self.obj.text.history()
         self.assertEqual("text datastream", history.versions[0].label)
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
-        self.assertEqual(TEXT_CONTENT, r.content)
+        self.assertEqual(TEXT_CONTENT, r.text)
 
     def test_get_chunked_content(self):
         # get chunks - chunksize larger than entire text content
@@ -387,11 +389,11 @@ class TestNewObject(FedoraTestCase):
     def test_basic_ingest(self):
         self.repo.default_pidspace = self.pidspace
         obj = self.repo.get_object(type=MyDigitalObject)
-        self.assertFalse(isinstance(obj.pid, basestring))
+        self.assertFalse(isinstance(obj.pid, string_types))
         obj.save()
         self.append_pid(obj.pid)
 
-        self.assertTrue(isinstance(obj.pid, basestring))
+        self.assertTrue(isinstance(obj.pid, string_types))
         self.append_pid(obj.pid)
 
         fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
@@ -399,7 +401,7 @@ class TestNewObject(FedoraTestCase):
 
         # confirm that fedora generates a checksum for us
         r = obj.api.getDatastream(obj.pid, obj.dc.id)
-        dsinfo = r.content
+        dsinfo = r.text
         self.assert_(re.search("<dsChecksum>[0-9a-f]+</dsChecksum>", dsinfo),
             'Fedora should automatically generated a datastream checksum on ingest ' +
             '(requires auto-checksum enabled and Fedora 3.7+)')
@@ -615,7 +617,7 @@ class TestNewObject(FedoraTestCase):
         dsobj = fetched.getDatastreamObject(dsid)
         self.assertEqual(label, dsobj.label)
         self.assertEqual('text/plain', dsobj.mimetype)
-        self.assertEqual(content, dsobj.content)
+        self.assertEqual(content, force_text(dsobj.content))
 
         # add new datastream to existing object using the same method
         dsid2 = 'newer_ds'
@@ -633,7 +635,7 @@ class TestNewObject(FedoraTestCase):
         dsobj = fetched.getDatastreamObject(dsid2)
         self.assertEqual(label, dsobj.label)
         self.assertEqual('text/plain', dsobj.mimetype)
-        self.assertEqual(content, dsobj.content)
+        self.assertEqual(content, force_text(dsobj.content))
 
 
 class TestDigitalObject(FedoraTestCase):
@@ -732,7 +734,7 @@ class TestDigitalObject(FedoraTestCase):
         self.assert_(str(expected_error).endswith('successfully backed out '), 'Incorrect checksum should back out successfully.')
 
         # re-initialize the object. do it with a unicode pid to test a regression.
-        self.obj = MyDigitalObject(self.api, unicode(self.pid))
+        self.obj = MyDigitalObject(self.api, force_text(self.pid))
 
         # modify object profile, datastream content, datastream info
         self.obj.label = u"new label\u2014with unicode"
@@ -749,7 +751,7 @@ class TestDigitalObject(FedoraTestCase):
         profile = self.obj.getProfile()
         self.assertEqual(profile.label, u"new label\u2014with unicode")
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
-        self.assert_(u'<dc:title>new dublin core title\u2014also with unicode</dc:title>' in unicode(r.content, 'utf-8'))
+        self.assert_(u'<dc:title>new dublin core title\u2014also with unicode</dc:title>' in force_text(r.content))
         text_info = self.obj.getDatastreamProfile(self.obj.text.id)
         self.assertEqual(text_info.label, "text content")
         self.assertEqual(text_info.checksum_type, "MD5")
@@ -760,7 +762,7 @@ class TestDigitalObject(FedoraTestCase):
         # catch the exception so we can inspect it
         try:
             self.obj.save()
-        except models.DigitalObjectSaveFailure, f:
+        except models.DigitalObjectSaveFailure as f:
             save_error = f
         self.assert_(isinstance(save_error, models.DigitalObjectSaveFailure))
         self.assertEqual(save_error.obj_pid, self.obj.pid,
@@ -772,7 +774,7 @@ class TestDigitalObject(FedoraTestCase):
         self.assertEqual([], save_error.not_cleaned)
         self.assertTrue(save_error.recovered)
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
-        self.assertEqual(TEXT_CONTENT, r.content)
+        self.assertEqual(TEXT_CONTENT, r.text)
 
         # force an error updating the profile, should back out both datastreams
         self.obj = MyDigitalObject(self.api, self.pid)
@@ -784,7 +786,7 @@ class TestDigitalObject(FedoraTestCase):
         self.obj.info_modified = True
         try:
             self.obj.save()
-        except models.DigitalObjectSaveFailure, f:
+        except models.DigitalObjectSaveFailure as f:
             profile_save_error = f
         self.assert_(isinstance(profile_save_error, models.DigitalObjectSaveFailure))
         self.assertEqual(profile_save_error.obj_pid, self.obj.pid,
@@ -798,9 +800,9 @@ class TestDigitalObject(FedoraTestCase):
         self.assertTrue(profile_save_error.recovered)
         # confirm datastreams were reverted back to previous contents
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.text.id)
-        self.assertEqual(TEXT_CONTENT, r.content)
+        self.assertEqual(TEXT_CONTENT, r.text)
         r = self.obj.api.getDatastreamDissemination(self.pid, self.obj.dc.id)
-        self.assert_("<dc:description>This object has more data in it than a basic-object.</dc:description>" in r.content)
+        self.assert_("<dc:description>This object has more data in it than a basic-object.</dc:description>" in r.text)
 
         # how to force an error that can't be backed out?
 
@@ -930,22 +932,22 @@ class TestDigitalObject(FedoraTestCase):
         added = self.obj.add_relationship(relsext.isMemberOf, related)
         self.assertTrue(added, "add relationship should return True on success, got %s" % added)
         r = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
-        self.assert_("isMemberOf" in r.content)
-        self.assert_(related.uri in r.content)  # should be full uri, not just pid
+        self.assert_("isMemberOf" in r.text)
+        self.assert_(related.uri in r.text)  # should be full uri, not just pid
 
         # add relation to a resource, by string
         collection_uri = "info:fedora/foo:456"
         self.obj.add_relationship(relsext.isMemberOfCollection, collection_uri)
         r = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
-        self.assert_("isMemberOfCollection" in r.content)
-        self.assert_('rdf:resource="%s"' % collection_uri in r.content,
+        self.assert_("isMemberOfCollection" in r.text)
+        self.assert_('rdf:resource="%s"' % collection_uri in r.text,
             'string uri should be added to rels-ext as a resource')
         # add relation to a resource, by string
         collection_uri = u"info:fedora/foo:457"
         self.obj.add_relationship(relsext.isMemberOfCollection, collection_uri)
         r = self.obj.api.getDatastreamDissemination(self.pid, "RELS-EXT")
-        self.assert_("isMemberOfCollection" in r.content)
-        self.assert_('rdf:resource="%s"' % collection_uri in r.content,
+        self.assert_("isMemberOfCollection" in r.text)
+        self.assert_('rdf:resource="%s"' % collection_uri in r.text,
             'unicode uri should be added to rels-ext as a resource')
 
         # add relation to a literal
@@ -1042,7 +1044,7 @@ class TestDigitalObject(FedoraTestCase):
         self.assert_(self.obj.dc.content.title in indexdata['title'])
         self.assert_(self.obj.dc.content.description in indexdata['description'])
 
-        self.assertEqual(['TEXT', 'DC'], indexdata['dsids'])
+        self.assertEqual(set(['TEXT', 'DC']), set(indexdata['dsids']))
 
     def test_index_data_relations(self):
         # add a few rels-ext relations to test
@@ -1222,10 +1224,10 @@ class TestRelation(FedoraTestCase):
             in self.obj.rels_ext.content,
             'literal value should be set in RELS-EXT after updating via descriptor')
         # check namespace prefix
-        self.assert_('dcns:identifier' in self.obj.rels_ext.content.serialize(),
+        self.assert_('dcns:identifier' in force_text(self.obj.rels_ext.content.serialize()),
             'configured namespace prefix should be used for serialization')
         # check type
-        self.assert_('XMLSchema#int' in self.obj.rels_ext.content.serialize(),
+        self.assert_('XMLSchema#int' in force_text(self.obj.rels_ext.content.serialize()),
             'configured RDF type should be used for serialization')
         # - simpler case
         self.obj.dctitle = 'foo'

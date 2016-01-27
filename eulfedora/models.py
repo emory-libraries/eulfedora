@@ -14,7 +14,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-import cStringIO
+from __future__ import unicode_literals
 import hashlib
 import logging
 import requests
@@ -23,11 +23,17 @@ from rdflib import URIRef, Graph as RdfGraph, Literal
 
 from lxml import etree
 from lxml.builder import ElementMaker
+from six import iteritems
+from six import iterkeys
+from six import StringIO
+from six import string_types
+from six import with_metaclass
 
 from eulxml import xmlmap
 from eulfedora.api import ResourceIndex
 from eulfedora.rdfns import model as modelns, relsext as relsextns, fedora_rels
-from eulfedora.util import parse_xml_object, parse_rdf, RequestFailed, datetime_to_fedoratime
+from eulfedora.util import parse_xml_object, parse_rdf, RequestFailed, \
+    datetime_to_fedoratime, force_bytes, force_text
 from eulfedora.xml import ObjectDatastreams, ObjectProfile, DatastreamProfile, \
     NewPids, ObjectHistory, ObjectMethods, DsCompositeModel, FoxmlDigitalObject, \
     DatastreamHistory
@@ -219,7 +225,7 @@ class DatastreamObject(object):
 
     def _content_digest(self):
         # generate a hash of the content so we can easily check if it has changed and should be saved
-        raw = self._raw_content()
+        raw = force_bytes(self._raw_content())
         # handle case where datastream is empty or does not yet exist
         if raw is not None:
             return hashlib.sha1(raw).hexdigest()
@@ -611,7 +617,7 @@ class RdfDatastreamObject(DatastreamObject):
 
     def _bind_prefixes(self, graph):
         # bind any specified prefixes so that serialized xml will be human-readable
-        for prefix, namespace in self.default_namespaces.iteritems():
+        for prefix, namespace in iteritems(self.default_namespaces):
             graph.bind(prefix, namespace)
         return graph
 
@@ -718,7 +724,7 @@ class FileDatastreamObject(DatastreamObject):
     def _convert_content(self, data, url):
         # for now, using stringio to return a file-like object
         # NOTE: will require changes (here and in APIs) to handle large files
-        return cStringIO.StringIO(data)
+        return StringIO(data)
 
     # redefine content property to override set_content to set a flag when modified
     def _get_content(self):
@@ -891,7 +897,7 @@ class Relation(object):
 
     def __set__(self, obj, subject):
         # if any namespace prefixes were specified, bind them before adding the tuple
-        for prefix, ns in self.ns_prefix.iteritems():
+        for prefix, ns in iteritems(self.ns_prefix):
             obj.rels_ext.content.bind(prefix, ns)
 
         # TODO: do we need to check that subject matches self.object_type (if any)?
@@ -1055,9 +1061,9 @@ class DigitalObjectType(type):
         # create any ReverseRelations corresponding to Relations on
         # the current class
         # for now, assume all reverse relations are multiple
-        for rel_name, rel in reverse_rels.iteritems():
+        for rel_name, rel in iteritems(reverse_rels):
             # don't reverse self-relations for now
-            if isinstance(rel.object_type, basestring):
+            if isinstance(rel.object_type, string_types):
                 continue
             # TODO: look into handling this the way django handles
             # recursive relationships
@@ -1080,7 +1086,7 @@ class DigitalObjectType(type):
         return DigitalObjectType._registry.copy()
 
 
-class DigitalObject(object):
+class DigitalObject(with_metaclass(DigitalObjectType, object)):
     """
     A single digital object in a Fedora respository, with methods and
     properties to easy creating, accessing, and updating a Fedora
@@ -1098,8 +1104,6 @@ class DigitalObject(object):
       appropriate.
 
     """
-
-    __metaclass__ = DigitalObjectType
 
     default_pidspace = None
     """Default namespace to use when generating new PIDs in
@@ -1163,7 +1167,7 @@ class DigitalObject(object):
             # in this class. Barring clever hanky-panky, it should be
             # reliably callable.
             pid = self.get_default_pid
-        elif isinstance(pid, basestring) and \
+        elif isinstance(pid, string_types) and \
                  pid.startswith('info:fedora/'):  # passed a uri
             pid = pid[len('info:fedora/'):]
 
@@ -1538,7 +1542,7 @@ class DigitalObject(object):
         # save an object that has already been ingested into fedora
 
         # - list of datastreams that should be saved
-        to_save = [ds for ds, dsobj in self.dscache.iteritems() if dsobj.isModified()]
+        to_save = [ds for ds, dsobj in iteritems(self.dscache) if dsobj.isModified()]
         # - track successfully saved datastreams, in case roll-back is necessary
         saved = []
         # save modified datastreams
@@ -1606,8 +1610,8 @@ class DigitalObject(object):
 
     def _ingest(self, logMessage):
         foxml = self._build_foxml_for_ingest()
-        r = self.api.ingest(foxml, logMessage)
-        if r.status_code != requests.codes.created or r.content != self.pid:
+        r = self.api.ingest(foxml.decode('utf-8'), logMessage)
+        if r.status_code != requests.codes.created or r.text != self.pid:
             msg = ('fedora returned unexpected pid "%s" when trying to ' +
                    'ingest object with pid "%s" (status code: %s)') % \
                    (r.content, self.pid, r.status_code)
@@ -1905,13 +1909,13 @@ class DigitalObject(object):
         :rtype: boolean
         """
         if isinstance(rel_uri, URIRef):
-            rel_uri = unicode(rel_uri)
+            rel_uri = force_text(rel_uri)
 
         obj_is_literal = True
         if isinstance(obj, DigitalObject):
             obj = obj.uri
             obj_is_literal = False
-        elif (isinstance(obj, str) or isinstance(obj, unicode)) \
+        elif (isinstance(obj, str) or isinstance(obj, string_types)) \
           and obj.startswith('info:fedora/'):
             obj_is_literal = False
 
@@ -1941,13 +1945,13 @@ class DigitalObject(object):
         :rtype: boolean
         """
         if isinstance(rel_uri, URIRef):
-            rel_uri = unicode(rel_uri)
+            rel_uri = force_text(rel_uri)
 
         obj_is_literal = True
         if isinstance(obj, DigitalObject):
             obj = obj.uri
             obj_is_literal = False
-        elif (isinstance(obj, str) or isinstance(obj, unicode)) \
+        elif (isinstance(obj, str) or isinstance(obj, string_types)) \
           and obj.startswith('info:fedora/'):
             obj_is_literal = False
 
@@ -1985,14 +1989,14 @@ class DigitalObject(object):
         """
 
         if isinstance(rel_uri, URIRef):
-            rel_uri = unicode(rel_uri)
+            rel_uri = force_text(rel_uri)
 
         # old_object
         obj_old_is_literal = True
         if isinstance(old_object, DigitalObject):
             old_object = old_object.uri
             obj_old_is_literal = False
-        elif (isinstance(old_object, str) or isinstance(old_object, unicode)) \
+        elif (isinstance(old_object, str) or isinstance(old_object, string_types)) \
           and old_object.startswith('info:fedora/'):
             obj_old_is_literal = False
 
@@ -2001,7 +2005,7 @@ class DigitalObject(object):
         if isinstance(new_object, DigitalObject):
             new_object = new_object.uri
             obj_new_is_literal = False
-        elif (isinstance(new_object, str) or isinstance(new_object, unicode)) \
+        elif (isinstance(new_object, str) or isinstance(new_object, string_types)) \
           and new_object.startswith('info:fedora/'):
             obj_new_is_literal = False
 
@@ -2093,7 +2097,7 @@ class DigitalObject(object):
                 'last_modified': self.modified.isoformat(),
                 'created': self.created.isoformat(),
                 # datastream ids
-                'dsids': list(self.ds_list.iterkeys()),
+                'dsids': list(iterkeys(self.ds_list)),
             })
 
         index_data.update(self.index_data_descriptive())
@@ -2184,7 +2188,7 @@ class ContentModel(DigitalObject):
         return cmodel_obj
 
 
-class DigitalObjectSaveFailure(StandardError):
+class DigitalObjectSaveFailure(Exception):
     """Custom exception class for when a save error occurs part-way through saving
     an instance of :class:`DigitalObject`.  This exception should contain enough
     information to determine where the save failed, and whether or not any changes
@@ -2213,4 +2217,3 @@ class DigitalObjectSaveFailure(StandardError):
     def __str__(self):
         return "Error saving %s - failed to save %s; saved %s; successfully backed out %s" \
                 % (self.obj_pid, self.failure, ', '.join(self.saved), ', '.join(self.cleaned))
-

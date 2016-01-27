@@ -14,11 +14,10 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-
 from datetime import datetime, timedelta
 from dateutil.tz import tzutc
+import hashlib
 from lxml import etree
-import md5
 from rdflib import URIRef
 import re
 import requests
@@ -33,7 +32,8 @@ from eulfedora.api import REST_API, API_A_LITE, UnrecognizedQueryLanguage
 from eulfedora.models import DigitalObject
 from eulfedora.rdfns import model as modelns
 from eulfedora.util import fedoratime_to_datetime, \
-     datetime_to_fedoratime, RequestFailed, ChecksumMismatch, parse_rdf
+     datetime_to_fedoratime, RequestFailed, ChecksumMismatch, parse_rdf, \
+     force_bytes, force_text
 from eulfedora.xml import FEDORA_MANAGE_NS, FEDORA_ACCESS_NS
 
 
@@ -81,33 +81,32 @@ Hey, nonny-nonny."""
     def test_findObjects(self):
         # search for current test object  (restrict to current pidspace to avoid bogus failures)
         r = self.rest_api.findObjects("ownerId~tester pid~%s:*" % FEDORA_PIDSPACE)
-        found = r.content
+        found = r.text
         self.assert_('<result ' in found)
         self.assert_('<resultList>' in found)
         self.assert_('<pid>%s</pid>' % self.pid in found)
 
         # crazy search that shouldn't match anything
         r = self.rest_api.findObjects("title~supercalifragilistexpi...")
-        self.assert_('<objectFields>' not in r.content)
+        self.assert_('<objectFields>' not in r.text)
 
         # search for everything - get enough results to get a session token
         # - note that current test fedora includes a number of control objects
         # - using smaller chunk size to ensure pagination
         r = self.rest_api.findObjects("title~*", chunksize=2)
-        self.assert_('<listSession>' in r.content)
-        self.assert_('<token>' in r.content)
+        self.assert_('<listSession>' in r.text)
+        self.assert_('<token>' in r.text)
 
         # search by terms
         r = self.rest_api.findObjects(terms="more dat? in it than a *")
-        print r.content
-        self.assert_('<pid>%s</pid>' % self.pid in r.content)
+        self.assert_('<pid>%s</pid>' % self.pid in r.text)
 
         # NOTE: not testing resumeFind here because it would require parsing the xml
         # for the session token - tested at the server/Repository level
 
     def test_getDatastreamDissemination(self):
         r = self.rest_api.getDatastreamDissemination(self.pid, "DC")
-        dc = r.content
+        dc = r.text
         self.assert_("<dc:title>A partially-prepared test object</dc:title>" in dc)
         self.assert_("<dc:description>This object has more data" in dc)
         self.assert_("<dc:identifier>%s</dc:identifier>" % self.pid in dc)
@@ -121,7 +120,7 @@ Hey, nonny-nonny."""
         # with date-time param
         r = self.rest_api.getDatastreamDissemination(self.pid, "DC",
             asOfDateTime=created + ONE_SEC)
-        postcreate_dc = r.content
+        postcreate_dc = r.text
         self.assertEqual(dc, postcreate_dc)    # unchanged within its first sec
 
         # bogus datastream
@@ -137,34 +136,34 @@ Hey, nonny-nonny."""
         self.assert_(isinstance(response, requests.Response),
                      'getDatastreamDissemination should return a response object')
         # datastream content should still be accessible
-        self.assertEqual(dc, response.content)
+        self.assertEqual(dc, response.text)
 
     # NOTE: getDissemination not available in REST API until Fedora 3.3
     def test_getDissemination(self):
         # testing with built-in fedora dissemination
         r = self.rest_api.getDissemination(self.pid, "fedora-system:3", "viewItemIndex")
-        self.assert_('<title>Object Items HTML Presentation</title>' in r.content)
-        self.assert_(self.pid in r.content)
+        self.assert_('<title>Object Items HTML Presentation</title>' in r.text)
+        self.assert_(self.pid in r.text)
 
         # return_http_response
         response = self.rest_api.getDissemination(self.pid, "fedora-system:3", "viewItemIndex")
         self.assert_(isinstance(response, requests.Response),
                      'getDissemination should return a response object')
         # datastream content should still be accessible
-        self.assert_(self.pid in response.content)
+        self.assert_(self.pid in force_text(response.content))
 
     def test_getObjectHistory(self):
         r = self.rest_api.getObjectHistory(self.pid)
-        self.assert_('<fedoraObjectHistory' in r.content)
-        self.assert_('pid="%s"' % self.pid in r.content)
-        self.assert_('<objectChangeDate>%s' % self.today in r.content)
+        self.assert_('<fedoraObjectHistory' in r.text)
+        self.assert_('pid="%s"' % self.pid in r.text)
+        self.assert_('<objectChangeDate>%s' % self.today in r.text)
 
         # bogus pid
         self.assertRaises(Exception, self.rest_api.getObjectHistory, "bogus:pid")
 
     def test_getObjectProfile(self):
         r = self.rest_api.getObjectProfile(self.pid)
-        profile = r.content
+        profile = r.text
         self.assert_('<objectProfile' in profile)
         self.assert_('pid="%s"' % self.pid in profile)
         self.assert_('<objLabel>A partially-prepared test object</objLabel>' in profile)
@@ -175,14 +174,14 @@ Hey, nonny-nonny."""
         # unchecked: objDissIndexViewURL, objItemIndexViewURL
 
         # get server datetime param (the hard way) for testing
-        profile_node = etree.fromstring(profile, base_url=r.url)
+        profile_node = etree.fromstring(r.content, base_url=r.url)
         created_s = profile_node.xpath('string(a:objCreateDate)', namespaces={'a': FEDORA_ACCESS_NS})
         created = fedoratime_to_datetime(created_s)
 
         # with time
         r = self.rest_api.getObjectProfile(self.pid,
                         asOfDateTime=created + ONE_SEC)
-        profile_now = r.content
+        profile_now = r.text
         # NOTE: profile content is not exactly the same because it includes a datetime attribute
         self.assert_('pid="%s"' % self.pid in profile_now)
         self.assert_('<objLabel>A partially-prepared test object</objLabel>' in profile_now)
@@ -192,15 +191,15 @@ Hey, nonny-nonny."""
 
     def test_listDatastreams(self):
         r = self.rest_api.listDatastreams(self.pid)
-        self.assert_('<objectDatastreams' in r.content)
-        self.assert_('<datastream dsid="DC" label="Dublin Core" mimeType="text/xml"' in r.content)
+        self.assert_('<objectDatastreams' in r.text)
+        self.assert_('<datastream dsid="DC" label="Dublin Core" mimeType="text/xml"' in r.text)
 
         # bogus pid
         self.assertRaises(Exception, self.rest_api.listDatastreams, "bogus:pid")
 
     def test_listMethods(self):
         r = self.rest_api.listMethods(self.pid)
-        methods = r.content
+        methods = r.text
         self.assert_('<objectMethods' in methods)
         self.assert_('pid="%s"' % self.pid in methods)
         # default fedora methods, should be available on every object
@@ -223,12 +222,12 @@ Hey, nonny-nonny."""
         self.assertTrue(added)  # response from addDatastream
         r = self.rest_api.getObjectXML(self.pid)
         message = r.content
-        self.assert_(ds['logMessage'] in message)
+        self.assert_(ds['logMessage'] in force_text(message))
         r = self.rest_api.listDatastreams(self.pid)
         self.assert_('<datastream dsid="%(id)s" label="%(label)s" mimeType="%(mimeType)s" />'
-            % ds in r.content)
+            % ds in r.text)
         r = self.rest_api.getDatastream(self.pid, ds['id'])
-        ds_profile = r.content
+        ds_profile = r.text
         self.assert_('dsID="%s"' % ds['id'] in ds_profile)
         self.assert_('<dsLabel>%s</dsLabel>' % ds['label'] in ds_profile)
         self.assert_('<dsVersionID>%s.0</dsVersionID>' % ds['id'] in ds_profile)
@@ -240,7 +239,7 @@ Hey, nonny-nonny."""
 
         # content returned from fedora should be exactly what we started with
         r = self.rest_api.getDatastreamDissemination(self.pid, ds['id'])
-        self.assertEqual(self.TEXT_CONTENT, r.content)
+        self.assertEqual(self.TEXT_CONTENT, r.text)
 
         # invalid checksum
         self.assertRaises(ChecksumMismatch, self.rest_api.addDatastream, self.pid,
@@ -278,20 +277,20 @@ Hey, nonny-nonny."""
     def test_addRelationship(self):
         # rel to resource
         added = self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
-                                              unicode(modelns.hasModel),
+                                              force_text(modelns.hasModel),
                                               'info:fedora/pid:123', False)
         self.assertTrue(added)
         r = self.rest_api.getDatastreamDissemination(self.pid, 'RELS-EXT')
-        self.assert_('<hasModel' in r.content)
-        self.assert_('rdf:resource="info:fedora/pid:123"' in r.content)
+        self.assert_('<hasModel' in r.text)
+        self.assert_('rdf:resource="info:fedora/pid:123"' in r.text)
 
         # literal
         added = self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
                                               self.rel_owner, "johndoe", True)
         self.assertTrue(added)
         r = self.rest_api.getDatastreamDissemination(self.pid, 'RELS-EXT')
-        self.assert_('<owner' in r.content)
-        self.assert_('>johndoe<' in r.content)
+        self.assert_('<owner' in r.text)
+        self.assert_('>johndoe<' in r.text)
 
         # bogus pid
         self.assertRaises(RequestFailed, self.rest_api.addRelationship,
@@ -300,7 +299,7 @@ Hey, nonny-nonny."""
     def test_getRelationships(self):
         # add relations to retrieve
         self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
-                                   unicode(modelns.hasModel), "info:fedora/pid:123", False)
+                                   force_text(modelns.hasModel), "info:fedora/pid:123", False)
         self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
                                    self.rel_owner, "johndoe", True)
 
@@ -331,19 +330,19 @@ Hey, nonny-nonny."""
         (added, ds) = self._add_text_datastream()
         r = self.rest_api.compareDatastreamChecksum(self.pid, ds['id'])
 
-        mdsum = md5.new()
-        mdsum.update(self.TEXT_CONTENT)
+        mdsum = hashlib.md5()
+        mdsum.update(force_bytes(self.TEXT_CONTENT))
         text_md5 = mdsum.hexdigest()
-        self.assert_('<dsChecksum>%s</dsChecksum>' % text_md5 in r.content)
+        self.assert_('<dsChecksum>%s</dsChecksum>' % text_md5 in r.text)
         # FIXME: how to test that checksum has actually been checked?
 
         # check for log message in audit trail
         r = self.rest_api.getObjectXML(self.pid)
-        self.assert_(ds['logMessage'] in r.content)
+        self.assert_(ds['logMessage'] in r.text)
 
     def test_export(self):
         r = self.rest_api.export(self.pid)
-        export = r.content
+        export = r.text
         self.assert_('<foxml:datastream' in export)
         self.assert_('PID="%s"' % self.pid in export)
         self.assert_('<foxml:property' in export)
@@ -353,10 +352,10 @@ Hey, nonny-nonny."""
         # FIXME/TODO: add more datastreams/versions so export formats differ ?
 
         r = self.rest_api.export(self.pid, context="migrate")
-        self.assert_('<foxml:datastream' in r.content)
+        self.assert_('<foxml:datastream' in r.text)
 
         r = self.rest_api.export(self.pid, context="archive")
-        self.assert_('<foxml:datastream' in r.content)
+        self.assert_('<foxml:datastream' in r.text)
 
         # bogus id
         self.assertRaises(Exception, self.rest_api.export, "bogus:pid")
@@ -364,16 +363,17 @@ Hey, nonny-nonny."""
     def test_getDatastream(self):
         r = self.rest_api.getDatastream(self.pid, "DC")
         ds_profile = r.content
-        self.assert_('<datastreamProfile' in ds_profile)
-        self.assert_('pid="%s"' % self.pid in ds_profile)
-        self.assert_('dsID="DC"' in ds_profile)
-        self.assert_('<dsLabel>Dublin Core</dsLabel>' in ds_profile)
-        self.assert_('<dsVersionID>DC.0</dsVersionID>' in ds_profile)
-        self.assert_('<dsCreateDate>%s' % self.today in ds_profile)
-        self.assert_('<dsState>A</dsState>' in ds_profile)
-        self.assert_('<dsMIME>text/xml</dsMIME>' in ds_profile)
-        self.assert_('<dsControlGroup>X</dsControlGroup>' in ds_profile)
-        self.assert_('<dsVersionable>true</dsVersionable>' in ds_profile)
+        ds_profile_text = r.text
+        self.assert_('<datastreamProfile' in ds_profile_text)
+        self.assert_('pid="%s"' % self.pid in ds_profile_text)
+        self.assert_('dsID="DC"' in ds_profile_text)
+        self.assert_('<dsLabel>Dublin Core</dsLabel>' in ds_profile_text)
+        self.assert_('<dsVersionID>DC.0</dsVersionID>' in ds_profile_text)
+        self.assert_('<dsCreateDate>%s' % self.today in ds_profile_text)
+        self.assert_('<dsState>A</dsState>' in ds_profile_text)
+        self.assert_('<dsMIME>text/xml</dsMIME>' in ds_profile_text)
+        self.assert_('<dsControlGroup>X</dsControlGroup>' in ds_profile_text)
+        self.assert_('<dsVersionable>true</dsVersionable>' in ds_profile_text)
 
         # get server datetime param (the hard way) for testing
         dsprofile_node = etree.fromstring(ds_profile, base_url=r.url)
@@ -383,7 +383,7 @@ Hey, nonny-nonny."""
         # with date param
         r = self.rest_api.getDatastream(self.pid, "DC",
                         asOfDateTime=created + ONE_SEC)
-        ds_profile_now = r.content
+        ds_profile_now = r.text
         # NOTE: contents are not exactly equal because 'now' version includes a dateTime attribute
         self.assert_('<dsLabel>Dublin Core</dsLabel>' in ds_profile_now)
         self.assert_('<dsVersionID>DC.0</dsVersionID>' in ds_profile_now)
@@ -397,9 +397,9 @@ Hey, nonny-nonny."""
     def test_getDatastreamHistory(self):
         r = self.rest_api.getDatastreamHistory(self.pid, "DC")
         # default format is html
-        self.assert_('<h3>Datastream History View</h3>' in r.content)
+        self.assert_('<h3>Datastream History View</h3>' in r.text)
         r = self.rest_api.getDatastreamHistory(self.pid, "DC", format='xml')
-        data = r.content
+        data = r.text
         # check various pieces of datastream info
         self.assert_('<dsVersionID>DC.0</dsVersionID>' in data)
         self.assert_('<dsControlGroup>X</dsControlGroup>' in data)
@@ -418,7 +418,7 @@ Hey, nonny-nonny."""
         self.rest_api.modifyDatastream(self.pid, "DC", "DCv2Dublin Core",
             mimeType="text/xml", logMessage="updating DC", content=new_dc)
         r = self.rest_api.getDatastreamHistory(self.pid, 'DC', format='xml')
-        data = r.content
+        data = r.text
         # should include both versions
         self.assert_('<dsVersionID>DC.0</dsVersionID>' in data)
         self.assert_('<dsVersionID>DC.1</dsVersionID>' in data)
@@ -432,17 +432,17 @@ Hey, nonny-nonny."""
 
     def test_getNextPID(self):
         r = self.rest_api.getNextPID()
-        self.assert_('<pidList' in r.content)
-        self.assert_('<pid>' in r.content)
+        self.assert_('<pidList' in r.text)
+        self.assert_('<pid>' in r.text)
 
         r = self.rest_api.getNextPID(numPIDs=3, namespace="test-ns")
-        self.assertEqual(3, r.content.count("<pid>test-ns:"))
+        self.assertEqual(3, r.text.count("<pid>test-ns:"))
 
     def test_getObjectXML(self):
         # update the object so we can look for audit trail in object xml
         added, ds = self._add_text_datastream()
         r = self.rest_api.getObjectXML(self.pid)
-        objxml = r.content
+        objxml = r.text
         self.assert_('<foxml:digitalObject' in objxml)
         self.assert_('<foxml:datastream ID="DC" ' in objxml)
         # audit trail accessible in full xml
@@ -452,19 +452,19 @@ Hey, nonny-nonny."""
         self.assertRaises(Exception, self.rest_api.getObjectXML, "bogus:pid")
 
     def test_ingest(self):
-        obj = load_fixture_data('basic-object.foxml')
+        obj = self.loadFixtureData('basic-object.foxml')
         r = self.rest_api.ingest(obj)
         pid = r.content
         self.assertTrue(pid)
-        self.rest_api.purgeObject(pid)
+        self.rest_api.purgeObject(force_text(pid))
 
         # test ingesting with log message
         r = self.rest_api.ingest(obj, "this is my test ingest message")
-        pid = r.content
+        pid = r.text
         # ingest message is stored in AUDIT datastream
         # - can currently only be accessed by retrieving entire object xml
         r = self.rest_api.getObjectXML(pid)
-        self.assertTrue("this is my test ingest message" in r.content)
+        self.assertTrue("this is my test ingest message" in r.text)
         self.rest_api.purgeObject(pid, "removing test ingest object")
 
     def test_modifyDatastream(self):
@@ -484,17 +484,17 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assertTrue(r.status_code == requests.codes.ok)
         # log message in audit trail
         r = self.rest_api.getObjectXML(self.pid)
-        self.assert_('modifying TEXT datastream' in r.content)
+        self.assert_('modifying TEXT datastream' in r.text)
 
         r = self.rest_api.getDatastream(self.pid, ds['id'])
-        ds_profile = r.content
+        ds_profile = r.text
         self.assert_('<dsLabel>text datastream (modified)</dsLabel>' in ds_profile)
         self.assert_('<dsVersionID>%s.1</dsVersionID>' % ds['id'] in ds_profile)
         self.assert_('<dsState>A</dsState>' in ds_profile)
         self.assert_('<dsMIME>text/other</dsMIME>' in ds_profile)
 
         r = self.rest_api.getDatastreamDissemination(self.pid, ds['id'])
-        self.assertEqual(r.content, new_text)
+        self.assertEqual(r.text, new_text)
 
         # modify DC (inline xml) by string
         new_dc = """<oai_dc:dc
@@ -508,7 +508,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assertTrue(r.status_code == requests.codes.ok)
         r = self.rest_api.getDatastreamDissemination(self.pid, "DC")
         # fedora changes whitespace in xml, so exact test fails
-        dc = r.content
+        dc = r.text
         self.assert_('<dc:title>Test-Object</dc:title>' in dc)
         self.assert_('<dc:description>modified!</dc:description>' in dc)
 
@@ -535,10 +535,10 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.assertTrue(modified)
         # log message in audit trail
         r = self.rest_api.getObjectXML(self.pid)
-        self.assert_('testing modify object' in r.content)
+        self.assert_('testing modify object' in r.text)
 
         r = self.rest_api.getObjectProfile(self.pid)
-        profile = r.content
+        profile = r.text
         self.assert_('<objLabel>modified test object</objLabel>' in profile)
         self.assert_('<objOwnerId>testuser</objOwnerId>' in profile)
         self.assert_('<objState>I</objState>' in profile)
@@ -567,17 +567,17 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         r = self.rest_api.purgeDatastream(self.pid, ds['id'],
                                             logMessage="purging text datastream")
         purged = (r.status_code == requests.codes.ok)
-        times = r.content
+        times = r.text
         self.assertTrue(purged)
         self.assert_(expect_created in times,
             'datastream creation date should be returned in list of purged datastreams - expected %s, got %s' % \
             (expect_created, times))
         # log message in audit trail
         r = self.rest_api.getObjectXML(self.pid)
-        self.assert_('purging text datastream' in r.content)
+        self.assert_('purging text datastream' in r.text)
         # datastream no longer listed
         r = self.rest_api.listDatastreams(self.pid)
-        self.assert_('<datastream dsid="%s"' % ds['id'] not in r.content)
+        self.assert_('<datastream dsid="%s"' % ds['id'] not in r.text)
 
         # NOTE: Fedora bug - attempting to purge a non-existent datastream returns 204?
         # purged = self.rest_api.purgeDatastream(self.pid, "BOGUS",
@@ -595,7 +595,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
                                         startDT=datetime_to_fedoratime(tomorrow),
                                         logMessage="purging text datastream")
         success = (r.status_code == requests.codes.ok)
-        times = r.content
+        times = r.text
         # no errors, no versions purged
         self.assertTrue(success)
         self.assertEqual('[]', times)
@@ -603,7 +603,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
     def test_purgeObject(self):
         obj = load_fixture_data('basic-object.foxml')
         r = self.rest_api.ingest(obj)
-        pid = r.content
+        pid = r.text
         r = self.rest_api.purgeObject(pid)
         purged = (r.status_code == requests.codes.ok)
         self.assertTrue(purged)
@@ -618,11 +618,16 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
     def test_purgeRelationship(self):
         # add relation to purg
         self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
-                                      predicate=unicode(modelns.hasModel),
+                                      predicate=force_text(modelns.hasModel),
                                       object='info:fedora/pid:123')
 
+        print(self.pid)
+        print(force_text(self.pid))
+        print(type(self.pid))
+        print(self.fedora_fixtures_ingested)
+
         purged = self.rest_api.purgeRelationship(self.pid, 'info:fedora/%s' % self.pid,
-                                                 unicode(modelns.hasModel),
+                                                 force_text(modelns.hasModel),
                                                  'info:fedora/pid:123')
         self.assertEqual(purged, True)
 
@@ -645,7 +650,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
 
         # get datastream to confirm change
         r = self.rest_api.getDatastream(self.pid, "TEXT")
-        self.assert_('<dsState>I</dsState>' in r.content)
+        self.assert_('<dsState>I</dsState>' in r.text)
 
         # bad datastream id
         self.assertRaises(RequestFailed, self.rest_api.setDatastreamState,
@@ -665,7 +670,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
 
         # get datastream profile to confirm change
         r = self.rest_api.getDatastream(self.pid, "TEXT")
-        self.assert_('<dsVersionable>false</dsVersionable>' in r.content)
+        self.assert_('<dsVersionable>false</dsVersionable>' in r.text)
 
         # bad datastream id
         self.assertRaises(RequestFailed, self.rest_api.setDatastreamVersionable,
@@ -682,7 +687,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         upload_id = self.rest_api.upload(data)
         # current format looks like uploaded://####
         pattern = re.compile('uploaded://[0-9]+')
-        self.assert_(pattern.match(upload_id))
+        self.assert_(pattern.match(force_text(upload_id)))
 
     def test_upload_file(self):
         FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
@@ -693,7 +698,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
             upload_id = self.rest_api.upload(f)
         # current format looks like uploaded://####
         pattern = re.compile('uploaded://[0-9]+')
-        self.assert_(pattern.match(upload_id))
+        self.assert_(pattern.match(force_text(upload_id)))
 
 
 class TestAPI_A_LITE(FedoraTestCase):
@@ -707,9 +712,9 @@ class TestAPI_A_LITE(FedoraTestCase):
 
     def testDescribeRepository(self):
         r = self.api_a.describeRepository()
-        self.assert_('<repositoryName>' in r.content)
-        self.assert_('<repositoryVersion>' in r.content)
-        self.assert_('<adminEmail>' in r.content)
+        self.assert_(b'<repositoryName>' in r.content)
+        self.assert_(b'<repositoryVersion>' in r.content)
+        self.assert_(b'<adminEmail>' in r.content)
 
 
 class TestResourceIndex(FedoraTestCase):
@@ -735,7 +740,7 @@ class TestResourceIndex(FedoraTestCase):
     def testGetPredicates(self):
         # get all predicates for test object
         predicates = list(self.risearch.get_predicates(self.object.uri, None))
-        self.assertTrue(unicode(modelns.hasModel) in predicates)
+        self.assertTrue(force_text(modelns.hasModel) in predicates)
         self.assertTrue(self.rel_isMemberOf in predicates)
         self.assertTrue(self.rel_owner in predicates)
         # resource
