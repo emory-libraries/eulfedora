@@ -61,7 +61,7 @@ import logging
 import requests
 import warnings
 
-from six import iteritems
+import six
 
 from eulfedora.rdfns import model as modelns
 from eulfedora.api import ApiFacade, ResourceIndex
@@ -394,7 +394,7 @@ class Repository(object):
             find_opts['terms'] = terms
         else:
             conditions = []
-            for field, value in iteritems(kwargs):
+            for field, value in six.iteritems(kwargs):
                 if '__' in field:
                     field, filter = field.split('__')
                     if filter not in search_operators:

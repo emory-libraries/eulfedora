@@ -70,7 +70,7 @@ from django.conf import settings
 from django.http import HttpResponse, Http404, HttpResponseForbidden, \
     HttpResponseBadRequest
 
-from six import itervalues
+import six
 
 from eulfedora.models import DigitalObject
 from eulfedora.server import TypeInferringRepository
@@ -100,7 +100,7 @@ def index_config(request):
     # Generate an automatic list of lists of content models (one list for each defined type)
     # if no content model settings exist
     if not content_list:
-        for cls in itervalues(DigitalObject.defined_types):
+        for cls in six.itervalues(DigitalObject.defined_types):
             # by default, Fedora system content models are excluded
             content_group = [model for model in getattr(cls, 'CONTENT_MODELS', [])
                              if not model.startswith('info:fedora/fedora-system:')]

@@ -23,12 +23,14 @@ import warnings
 
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor, \
     user_agent
-from six import StringIO
+
+import six
 from six.moves.urllib.parse import urljoin
 
 from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import datetime_to_fedoratime, \
-    RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf
+    RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf, \
+    force_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +113,6 @@ class HTTP_API_Base(object):
         response = reqmeth(self.prep_url(url), *args, **rqst_options)
         logger.debug('%s %s=>%d: %f sec' % (reqmeth.__name__.upper(), url,
             response.status_code, time.time() - start))
-
 
         # FIXME: handle 3xx (?) [possibly handled for us by requests]
         if response.status_code >= requests.codes.bad:  # 400 or worse
@@ -498,7 +499,6 @@ class REST_API(HTTP_API_Base):
         # type, Fedora honors it (*does* error on invalid checksum
         # with no checksum type) - it seems to use the existing
         # checksum type if a new type is not specified.
-
         http_args = {}
         if dsLabel:
             http_args['dsLabel'] = dsLabel
@@ -675,7 +675,7 @@ class REST_API(HTTP_API_Base):
         # make string content into a file-like object so requests.post
         # sends it the way Fedora expects.
         if not hasattr(data, 'read'):
-            data = StringIO(data)
+            data = six.BytesIO(force_bytes(data))
 
         # use requests-toolbelt multipart encoder to avoid reading
         # the full content of large files into memory

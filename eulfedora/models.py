@@ -23,11 +23,7 @@ from rdflib import URIRef, Graph as RdfGraph, Literal
 
 from lxml import etree
 from lxml.builder import ElementMaker
-from six import iteritems
-from six import iterkeys
-from six import StringIO
-from six import string_types
-from six import with_metaclass
+import six
 
 from eulxml import xmlmap
 from eulfedora.api import ResourceIndex
@@ -207,9 +203,9 @@ class DatastreamObject(object):
         if self.content is None:
             return None
         if hasattr(self.content, 'serialize'):
-            return str(self.content.serialize())
+            return force_bytes(self.content.serialize())
         else:
-            return str(self.content)
+            return force_bytes(self.content)
 
     def isModified(self):
         """Check if either the datastream content or profile fields have changed
@@ -378,7 +374,6 @@ class DatastreamObject(object):
             # if not versionable, make a backup to back out changes if object save fails
             if not self.versionable:
                 self._backup()
-
             # if this datastream already exists, use modifyDatastream API call
             r = self.obj.api.modifyDatastream(self.obj.pid, self.id,
                     logMessage=logmessage, **save_opts)
@@ -617,7 +612,7 @@ class RdfDatastreamObject(DatastreamObject):
 
     def _bind_prefixes(self, graph):
         # bind any specified prefixes so that serialized xml will be human-readable
-        for prefix, namespace in iteritems(self.default_namespaces):
+        for prefix, namespace in six.iteritems(self.default_namespaces):
             graph.bind(prefix, namespace)
         return graph
 
@@ -724,7 +719,7 @@ class FileDatastreamObject(DatastreamObject):
     def _convert_content(self, data, url):
         # for now, using stringio to return a file-like object
         # NOTE: will require changes (here and in APIs) to handle large files
-        return StringIO(data)
+        return six.BytesIO(data)
 
     # redefine content property to override set_content to set a flag when modified
     def _get_content(self):
@@ -897,7 +892,7 @@ class Relation(object):
 
     def __set__(self, obj, subject):
         # if any namespace prefixes were specified, bind them before adding the tuple
-        for prefix, ns in iteritems(self.ns_prefix):
+        for prefix, ns in six.iteritems(self.ns_prefix):
             obj.rels_ext.content.bind(prefix, ns)
 
         # TODO: do we need to check that subject matches self.object_type (if any)?
@@ -1061,9 +1056,9 @@ class DigitalObjectType(type):
         # create any ReverseRelations corresponding to Relations on
         # the current class
         # for now, assume all reverse relations are multiple
-        for rel_name, rel in iteritems(reverse_rels):
+        for rel_name, rel in six.iteritems(reverse_rels):
             # don't reverse self-relations for now
-            if isinstance(rel.object_type, string_types):
+            if isinstance(rel.object_type, six.string_types):
                 continue
             # TODO: look into handling this the way django handles
             # recursive relationships
@@ -1086,7 +1081,7 @@ class DigitalObjectType(type):
         return DigitalObjectType._registry.copy()
 
 
-class DigitalObject(with_metaclass(DigitalObjectType, object)):
+class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
     """
     A single digital object in a Fedora respository, with methods and
     properties to easy creating, accessing, and updating a Fedora
@@ -1167,7 +1162,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
             # in this class. Barring clever hanky-panky, it should be
             # reliably callable.
             pid = self.get_default_pid
-        elif isinstance(pid, string_types) and \
+        elif isinstance(pid, six.string_types) and \
                  pid.startswith('info:fedora/'):  # passed a uri
             pid = pid[len('info:fedora/'):]
 
@@ -1223,7 +1218,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
             return self.pid
 
     def __repr__(self):
-        return '<%s %s>' % (self.__class__.__name__, str(self))
+        return '<%s %s>' % (self.__class__.__name__, force_text(self))
 
     def get_default_pid(self):
         '''Get the next default pid when creating and ingesting a new
@@ -1542,7 +1537,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
         # save an object that has already been ingested into fedora
 
         # - list of datastreams that should be saved
-        to_save = [ds for ds, dsobj in iteritems(self.dscache) if dsobj.isModified()]
+        to_save = [ds for ds, dsobj in six.iteritems(self.dscache) if dsobj.isModified()]
         # - track successfully saved datastreams, in case roll-back is necessary
         saved = []
         # save modified datastreams
@@ -1551,7 +1546,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
             # in later versions, it throws an exception
             try:
                 ds_saved = self.dscache[ds].save(logMessage)
-            except RequestFailed:
+            except RequestFailed as e:
                 logger.error('Failed to save %s/%s' % (self.pid, ds))
                 ds_saved = False
 
@@ -1698,7 +1693,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
         ds_xml.set('ID', dsid)
         ds_xml.set('CONTROL_GROUP', dsobj.control_group)
         ds_xml.set('STATE', dsobj.state)
-        ds_xml.set('VERSIONABLE', str(dsobj.versionable).lower())
+        ds_xml.set('VERSIONABLE', force_text(dsobj.versionable).lower())
 
         ver_xml = E('datastreamVersion')
         ver_xml.set('ID', dsid + '.0')
@@ -1915,7 +1910,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
         if isinstance(obj, DigitalObject):
             obj = obj.uri
             obj_is_literal = False
-        elif (isinstance(obj, str) or isinstance(obj, string_types)) \
+        elif (isinstance(obj, str) or isinstance(obj, six.string_types)) \
           and obj.startswith('info:fedora/'):
             obj_is_literal = False
 
@@ -1951,7 +1946,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
         if isinstance(obj, DigitalObject):
             obj = obj.uri
             obj_is_literal = False
-        elif (isinstance(obj, str) or isinstance(obj, string_types)) \
+        elif (isinstance(obj, str) or isinstance(obj, six.string_types)) \
           and obj.startswith('info:fedora/'):
             obj_is_literal = False
 
@@ -1996,7 +1991,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
         if isinstance(old_object, DigitalObject):
             old_object = old_object.uri
             obj_old_is_literal = False
-        elif (isinstance(old_object, str) or isinstance(old_object, string_types)) \
+        elif (isinstance(old_object, str) or isinstance(old_object, six.string_types)) \
           and old_object.startswith('info:fedora/'):
             obj_old_is_literal = False
 
@@ -2005,7 +2000,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
         if isinstance(new_object, DigitalObject):
             new_object = new_object.uri
             obj_new_is_literal = False
-        elif (isinstance(new_object, str) or isinstance(new_object, string_types)) \
+        elif (isinstance(new_object, str) or isinstance(new_object, six.string_types)) \
           and new_object.startswith('info:fedora/'):
             obj_new_is_literal = False
 
@@ -2085,7 +2080,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
             'label': self.label,
             'owner': self.owners,
             'state': self.state,
-            'content_model': [str(cm) for cm in self.get_models()],  # convert URIRefs to strings
+            'content_model': [force_text(cm) for cm in self.get_models()],  # convert URIRefs to strings
             }
 
         # date created/modified won't be set unless the object actually exists in Fedora
@@ -2097,7 +2092,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
                 'last_modified': self.modified.isoformat(),
                 'created': self.created.isoformat(),
                 # datastream ids
-                'dsids': list(iterkeys(self.ds_list)),
+                'dsids': list(six.iterkeys(self.ds_list)),
             })
 
         index_data.update(self.index_data_descriptive())
@@ -2134,7 +2129,7 @@ class DigitalObject(with_metaclass(DigitalObjectType, object)):
         for rel in fedora_rels:
             values = []
             for o in self.rels_ext.content.objects(self.uriref, relsextns[rel]):
-                values.append(str(o))
+                values.append(force_text(o))
             if values:
                 data[rel] = values
         return data

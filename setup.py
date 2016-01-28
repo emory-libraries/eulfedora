@@ -36,6 +36,8 @@ requirements = [
     'requests>=2.5.0,<2.9',
     'requests-toolbelt',
     'pycrypto',
+    'pypdf2',
+    'six',
 ]
 
 if sys.version_info < (2, 7):
@@ -47,7 +49,7 @@ dev_requirements = [
     'coverage',
     'Django<1.7',
     'mock',
-    'unittest2<0.7',  # optional testrunner in testutil
+    'unittest2',
     'pyPdf',
     'tox',
 ]

@@ -14,9 +14,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from __future__ import unicode_literals
 import unittest
-
-import six
 
 from eulfedora import cryptutil
 from eulfedora.util import force_text
@@ -42,11 +41,11 @@ class CryptTest(unittest.TestCase):
     def test_encrypt_decrypt(self):
         def test_encrypt_decrypt(text):
             encrypted = cryptutil.encrypt(text)
-            self.assertNotEqual(text, force_text(encrypted) if six.PY3 else encrypted,
-                "encrypted text (%s) should not match original (%s)" % (encrypted, text))
+            self.assertNotEqual(text, encrypted,
+                "encrypted text should not match original")
             decrypted = cryptutil.decrypt(encrypted)
-            self.assertEqual(text, force_text(decrypted) if six.PY3 else decrypted,
-                "decrypted text (%s) should match original encrypted text (%s)" % (decrypted, text))
+            self.assertEqual(text, force_text(decrypted),
+                "decrypted text (%s) should match original encrypted text (%s)" % (force_text(decrypted), text))
 
         test_encrypt_decrypt('text')
         test_encrypt_decrypt('texty')

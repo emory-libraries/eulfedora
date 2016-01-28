@@ -26,6 +26,7 @@ from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.views import raw_datastream, login_and_store_credentials_in_session, \
      datastream_etag, datastream_lastmodified, raw_audit_trail
 from eulfedora import cryptutil
+from eulfedora.util import force_bytes, force_text
 
 
 TEST_PIDSPACE = getattr(settings, 'FEDORA_PIDSPACE', 'testme')
@@ -55,7 +56,7 @@ class FedoraViewsTest(unittest.TestCase):
         self.obj.dc.content.title = 'test object for generic views'
         self.obj.text.content = 'sample plain-text content'
         img_file = os.path.join(settings.FEDORA_FIXTURES_DIR, 'test.png')
-        self.obj.image.content = open(img_file)
+        self.obj.image.content = open(img_file, mode='rb')
         # force datastream checksums so we can test response headers
         for ds in [self.obj.dc, self.obj.rels_ext, self.obj.text, self.obj.image]:
             ds.checksum_type = 'MD5'
@@ -376,8 +377,8 @@ class FedoraViewsTest(unittest.TestCase):
         self.assertEqual(expected, got,
             'Expected %s but returned %s for mimetype on raw_audit_trail' \
                 % (expected, got))
-        self.assert_('<audit:auditTrail' in response.content)
-        self.assert_('<audit:justification>%s</audit:justification>' % changelog
+        self.assert_(b'<audit:auditTrail' in response.content)
+        self.assert_(force_bytes('<audit:justification>%s</audit:justification>' % changelog)
                      in response.content)
         self.assert_('Last-Modified' in response)
 
@@ -414,6 +415,5 @@ class FedoraViewsTest(unittest.TestCase):
             sessionpwd = mockrequest.session[FEDORA_PASSWORD_SESSION_KEY]
             self.assertNotEqual(pwd, sessionpwd,
                                 'password should not be stored in the session without encryption')
-            self.assertEqual(pwd, cryptutil.decrypt(sessionpwd),
+            self.assertEqual(pwd, force_text(cryptutil.decrypt(sessionpwd)),
                              'user password stored in session is encrypted')
-
