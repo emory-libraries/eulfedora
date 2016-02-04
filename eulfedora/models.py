@@ -1479,6 +1479,8 @@ class DigitalObject(object):
             return set([r.user for r in self.audit_trail.records])
         return set()
 
+    _profile = None
+
     def getProfile(self):
         """Get information about this object (label, owner, date created, etc.).
 
@@ -1487,8 +1489,10 @@ class DigitalObject(object):
         if self._create:
             return ObjectProfile()
         else:
-            r = self.api.getObjectProfile(self.pid)
-            return parse_xml_object(ObjectProfile, r.content, r.url)
+            if self._profile is None:
+                r = self.api.getObjectProfile(self.pid)
+                self._profile = parse_xml_object(ObjectProfile, r.content, r.url)
+            return self._profile
 
     def _saveProfile(self, logMessage=None):
         if self._create:
