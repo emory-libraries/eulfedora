@@ -2,8 +2,21 @@ Change & Version Information
 ============================
 
 The following is a summary of changes and improvements to
-:mod:`eulfedora`.  New features in each version should be listed, with
-any necessary information about installation or upgrade notes.
+:mod:`eulfedora`.
+
+.. New features in each version should be listed, with any necessary information about installation or upgrade notes.
+
+1.5
+---
+
+* New, more efficient version of :class:`eulfedora.views.RawDatastreamView`
+  and :meth:`eulfedora.views.raw_datastream`.  Passes response
+  headers from Fedora, and takes advantage of support for HEAD
+  and Range requests in Fedora 3.7+. **NOTE** that the method signature
+  has changed.  The previous implementation is still available
+  as :class:`eulfedora.views.RawDatastreamViewOld` and
+  :meth:`eulfedora.views.raw_datastream_old` for those who need the
+  functionality.
 
 1.4
 ---
