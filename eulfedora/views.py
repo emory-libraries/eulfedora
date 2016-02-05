@@ -117,8 +117,8 @@ def raw_datastream(request, pid, dsid, repo=None, headers=None,
     :param headers: dictionary of additional headers to include in the response
     :param as_of_date: access a historical version of the datastream
     '''
-    return _raw_datastream(request, pid, dsid, repo=None, headers=None,
-       as_of_date=None)
+    return _raw_datastream(request, pid, dsid, repo=repo, headers=headers,
+       as_of_date=as_of_date)
 
 def _raw_datastream(request, pid, dsid, repo=None, headers=None,
        as_of_date=None):
