@@ -17,22 +17,50 @@
 
 import binascii
 import hashlib
+import math
 import re
 
+try:
+    from progressbar import ProgressBar, Bar, Counter, ETA, \
+        FileTransferSpeed, Percentage, \
+        RotatingMarker, SimpleProgress, Timer
+except ImportError:
+    ProgressBar = None
 
-def estimate_object_size(obj):
+
+
+def sync_object(src_obj, dest_repo, overwrite=False, show_progress=False):
     # calculate rough estimate of object size
-    size_estimate = 250000   # initial rough estimate for foxml size
-    for ds in obj.ds_list:
-        dsobj = obj.getDatastreamObject(ds)
-        for version in dsobj.history().versions:
-            size_estimate += version.size
 
-    # TODO: optionally support calculating base64 encoded size
+    if show_progress and ProgressBar:
+        size_estimate = estimate_object_size(src_obj)
+        # create a new progress bar with current pid and size
+        widgets = [src_obj.pid,
+            ' Estimated size: %s || ' % humanize_file_size(size_estimate),
+            'Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
+             Timer(format='%s') # time only, no label like "elapsed time: 00:00"
+            ]
+        pbar = ProgressBar(widgets=widgets, maxval=size_estimate)
+    else:
+        pbar = None
 
-    return size_estimate
+    # TODO: support migrate/archive option
+    export = ArchiveExport(src_obj, dest_repo,
+        progress_bar=pbar)
 
+    dest_obj = dest_repo.get_object(src_obj.pid)
+    if dest_obj.exists:
+        if overwrite:
+            dest_repo.purge_object(src_obj.pid)
+        else:
+            # exception maybe?
+            return  # error
 
+    result = dest_repo.ingest(export.object_data())
+    # log ?
+    print '%s copied' % result
+    if pbar:
+        pbar.finish()
 
 
 class ArchiveExport(object):
@@ -44,10 +72,11 @@ class ArchiveExport(object):
         flags=re.MULTILINE|re.DOTALL)
 
 
-    def __init__(self, obj, dest_repo):
+    def __init__(self, obj, dest_repo, progress_bar=None):
         self.obj = obj
         self.dest_repo = dest_repo
-
+        self.progress_bar = progress_bar
+        self.processed_size = 0
 
     _export_response = None
     def get_export(self):
@@ -68,6 +97,8 @@ class ArchiveExport(object):
         return self._current_chunk
 
     partial_chunk = False
+    section_start_idx = None
+    end_of_last_chunk = None
 
     def get_next_chunk(self):
         self.partial_chunk = False
@@ -78,11 +109,22 @@ class ArchiveExport(object):
             self.end_of_last_chunk = self._current_chunk[-200:]
 
         self._current_chunk = self._iter_content.next()
+        self.processed_size += len(self._current_chunk)
         return self._current_chunk
 
     def has_binary_content(self, chunk):
         # i.e., includes a start or end binary content tag
         return self.bincontent_regex.search(chunk)
+
+    def update_progressbar(self):
+        # update progressbar if we have one
+        if self.progress_bar is not None:
+            # progressbar doesn't like it when size exceeds maxval,
+            # but we don't actually know maxval; adjust the maxval up
+            # when necessary
+            if self.progress_bar.maxval < self.processed_size:
+                self.progress_bar.maxval = self.processed_size
+            self.progress_bar.update(self.processed_size)
 
     # _section_enumerate = None
     # def current_chunk_sections(self):
@@ -93,14 +135,16 @@ class ArchiveExport(object):
     # def get_next_chunk_section(self):
     #     if self._section_enumerate is not None:
     #         return self._section_enumerate.next()
-    end_of_last_chunk = None
 
-    def data(self):
+
+    def object_data(self):
         # generator that can be used to upload to fedoro
         # response = self.obj.api.export(self.obj.pid, context='archive', stream=True)
-        size = 0
-        for chunk in self.export_iterator():
-            size += len(chunk)
+        if self.progress_bar:
+            self.progress_bar.start()
+
+        while True:
+            chunk = self.get_next_chunk()
 
             # check if this chunk includes start or end of binary content
             if self.has_binary_content(chunk):
@@ -113,8 +157,8 @@ class ArchiveExport(object):
                     yield section
 
                 if self.partial_chunk:
-                    subsections = self.bincontent_regex.split(self.current_chunk())
-                    for section in self.process_chunk_sections(subsections[self.section_start_idx:]):
+                    sections = self.bincontent_regex.split(self.current_chunk())
+                    for section in self.process_chunk_sections(sections[self.section_start_idx:]):
                         yield section
 
 
@@ -131,15 +175,8 @@ class ArchiveExport(object):
 
             # FIXME: in certain cases, some content is being yielded out of order
 
-            # error; ignoring for now
-            # # update progressbar if we have one
-            # if pbar:
-            #     # progressbar doesn't like it when size exceeds maxval,
-            #     # but we don't actually know maxval; adjust the maxval up
-            #     # when necessary
-            #     if pbar.maxval < size:
-            #         pbar.maxval = size
-            #     pbar.update(size)
+            # update progressbar if we have one
+            self.update_progressbar()
 
 
     def process_chunk_sections(self, subsections):
@@ -199,76 +236,129 @@ class ArchiveExport(object):
 
     # generator to iterate through sections and possibly next chunk
     # for upload to fedora
-    def encoded_datastream(self, sections, size=0, md5=None, leftover=None):
+    def encoded_datastream(self, sections):
         # return a generator of data to be uploaded to fedora
         found_end = False
-        if md5 is None:
-            md5 = hashlib.md5()
-        for idx, content in enumerate(sections):
-            if content == '</foxml:binaryContent>':
-                print 'total size %s md5 %s' % (size, md5.hexdigest())
-                found_end = True
-            elif not found_end:
-                # decode method used by base64.decode
-                # print 'content beginning = ', content[:200]
-                if leftover is not None:
-                    content = ''.join([leftover, content])
-                    leftover = None
-                    # print 'content beginning with leftover = ', content[:200]
+        size = 0
+        md5 = hashlib.md5()
+        leftover = None
+        while not found_end:
+            for idx, content in enumerate(sections):
+                if content == '</foxml:binaryContent>':
+                    print 'Decoded content size %s (%s) MD5 %s' % \
+                        (size, humanize_file_size(size), md5.hexdigest())
+                    found_end = True
+                elif not found_end:
+                    # if there was leftover binary content from the last chunk,
+                    # add it to the content now
+                    if leftover is not None:
+                        content = ''.join([leftover, content])
+                        leftover = None
 
-                try:
-                    decoded_content = binascii.a2b_base64(content)
-                    # TODO: if padding is incorrect, needs to grab
-                    # next chunk before it can be decoded
+                    try:
+                        # decode method used by base64.decode
+                        decoded_content = binascii.a2b_base64(content)
+                    except binascii.Error:
+                        # decoding can fail with a padding error when
+                        # a line of encoded content runs across a read chunk
+                        lines = content.split('\n')
+                        # decode and yield all but the last line of encoded content
+                        decoded_content = binascii.a2b_base64(''.join(lines[:-1]))
+                        # store the leftover to be decoded with the next chunk
+                        leftover = lines[-1]
 
-                except binascii.Error as berr:
-                    # print 'decode error ', berr
-                    # print content[-200:]
-                    # decoding can fail with a padding error when
-                    # a line of b64 encoded content runs across a read chunk
-                    lines = content.split('\n')
-                    # decode and yield all but the last line of encoded content
-                    # decoded_content = binascii.a2b_base64('\n'.join(lines[:-1]))
-                    # store the leftover to decode with the next chunk
-                    leftover = lines[-1]
-                    # print 'leftover = ', leftover
+                    md5.update(decoded_content)
+                    size += len(decoded_content)
+                    yield decoded_content
 
-                    decoded_content = binascii.a2b_base64(''.join(lines[:-1]))
-                    # print len(decoded_content), ' - len decoded all but last line'
+                else:
+                    # content is not a binaryContent tag and we are no longer
+                    # within the encoded binary data, so this section
+                    # and an following ones need to be processed by
+                    # the object data generator
 
-                md5.update(decoded_content)
-                size += len(decoded_content)
-                # print 'decoded content = ', decoded_content
-                yield decoded_content
-            else:
-                # set a flag
-                self.partial_chunk = True
-                self.section_start_idx = idx
-                # stop processing
-                break
+                    # set a flag to indicate partial content,
+                    # with an index of where to start
+                    self.partial_chunk = True
+                    self.section_start_idx = idx
+                    # stop processing
+                    break
 
-        # if end was not found in current chunk, get next chunk
-        # and keep going
-        if not found_end:
-            chunk = self.get_next_chunk()
-            subsections = self.bincontent_regex.split(chunk)
-            for data in self.encoded_datastream(subsections, size=size,
-                                                md5=md5, leftover=leftover):
-                yield data
-
+            # if binary data end was not found in the current chunk,
+            # get the next chunk and keep processing
+            if not found_end:
+                chunk = self.get_next_chunk()
+                self.update_progressbar()
+                sections = self.bincontent_regex.split(chunk)
 
 class ReadableGenerator(object):
     def __init__(self, gen, size):
         self.gen = gen
         self.size = size
+        self.remainder = None
+        self.total_read = 0
+
     def read(self, size=None):
         if size is None:
             # FIXME: doesn't this defeat the purpose of the generator?
             return ''.join(self.gen)
         print 'read size requested = ', size
+
+        if self.remainder:
+            data = self.remainder
+            self.remainder = None
+        else:
+            data = ''
+
+        while len(data) < size:
+            data += self.gen.next()
+
+        if len(data) > size:
+            self.remainder = data[size:]
+
+        self.total_read += len(data[:size])
+        return data[:size]
+
+        # next_chunk = self.gen.next()
+        # # if chunk is bigger than requested
+        # if len(next_chunk) > size:
+        #     self.remainder = next_chunk[size:]
+        #     return next_chunk[:size]
+
         # todo: handle size
         # while self.gen.next()
     def __len__(self):
         return int(self.size)
 
+
+def estimate_object_size(obj):
+    # calculate rough estimate of object size
+    size_estimate = 250000   # initial rough estimate for foxml size
+    for ds in obj.ds_list:
+        dsobj = obj.getDatastreamObject(ds)
+        for version in dsobj.history().versions:
+            size_estimate += version.size
+
+    # TODO: optionally support calculating base64 encoded size
+
+    return size_estimate
+
+
+def humanize_file_size(size):
+    # human-readable file size from
+    # http://stackoverflow.com/questions/1094841/reusable-library-to-get-human-readable-version-of-file-size
+    size = abs(size)
+    if size == 0:
+        return "0B"
+    units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
+    p = math.floor(math.log(size, 2)/10)
+    return "%.2f%s" % (size/math.pow(1024, p), units[int(p)])
+
+
+if ProgressBar:
+    class FileSizeCounter(Counter):
+        # file size counter widget for progressbar
+
+        def update(self, pbar):
+            return humanize_file_size(pbar.currval)
 

@@ -34,7 +34,8 @@ from eulfedora.models import DigitalObject
 from eulfedora.util import ChecksumMismatch, PermissionDenied, \
     RequestFailed
 from eulfedora.xml import FoxmlDigitalObject
-from eulfedora.syncutil import estimate_object_size, ArchiveExport
+from eulfedora.syncutil import estimate_object_size, ArchiveExport, \
+    humanize_file_size
 
 try:
     from progressbar import ProgressBar, Bar, Counter, ETA, \
@@ -89,13 +90,6 @@ def repo_copy():
         cfg.get(args.dest, 'fedora_user'),
         cfg.get(args.dest, 'fedora_password'))
 
-    # regex to match start or end of binary content
-    bincontent_regex = re.compile('(</?foxml:binaryContent>)')
-        # dsinfo_regex = re.compile('SIZE="(?P<size>\d+)".*DIGEST="(?P<digest>[0-9a-f]+)"',
-    dsinfo_regex = re.compile('ID="(?P<id>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]+)"',
-        flags=re.MULTILINE|re.DOTALL)
-
-
     if ProgressBar:
         widgets = ['Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
                    Timer(format='%s')] # time only, no label like "elapsed time: 00:00"
@@ -131,16 +125,16 @@ def repo_copy():
 
             # generator to read src repo request in chunks and stream
             # to dest repo
-            export = ArchiveExport(src_obj, dest_repo)
+            export = ArchiveExport(src_obj, dest_repo,
+                progress_bar=pbar)
 
             with open('/tmp/foxml-export.xml', 'w') as testoutput:
-                for chunk in export.data():
+                for chunk in export.object_data():
                     testoutput.write(chunk)
 
             raise Exception  # bail out
 
         except RequestFailed as err:
-            print err
             err_type = 'Error'
             if isinstance(err, PermissionDenied):
                 err_type = 'Permission denied'
@@ -177,8 +171,7 @@ def repo_copy():
             if pbar:
                 pbar.start()
 
-
-            result = dest_repo.ingest(export.data())
+            result = dest_repo.ingest(export.object_data())
             if pbar:
                 pbar.finish()
             print '%s copied' % result
@@ -193,18 +186,6 @@ def repo_copy():
                 (err_type, pid, args.dest, err)
 
             continue
-
-
-
-def humanize_file_size(size):
-    # human-readable file size from
-    # http://stackoverflow.com/questions/1094841/reusable-library-to-get-human-readable-version-of-file-size
-    size = abs(size)
-    if size == 0:
-        return "0B"
-    units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
-    p = math.floor(math.log(size, 2)/10)
-    return "%.2f%s" % (size/math.pow(1024, p), units[int(p)])
 
 
 class FileSizeCounter(Counter):
