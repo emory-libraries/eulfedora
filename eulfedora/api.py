@@ -657,7 +657,8 @@ class REST_API(HTTP_API_Base):
 
     ### utility methods
 
-    def upload(self, data, callback=None):
+    def upload(self, data, callback=None, generator=False,
+        content_type=None):
         '''
         Upload a multi-part file for content to ingest.  Returns a
         temporary upload id that can be used as a datstream location.
@@ -670,21 +671,29 @@ class REST_API(HTTP_API_Base):
         :returns: upload id on success
         '''
         url = 'upload'
+
+        if generator:
+            file_data = [('file', ('file', data, content_type))]
+            post_args = {'files': file_data}
+
         # fedora only expects content uploaded as multipart file;
         # make string content into a file-like object so requests.post
         # sends it the way Fedora expects.
-        if not hasattr(data, 'read'):
-            data = StringIO(data)
+        else:
+            if not hasattr(data, 'read'):
+                data = StringIO(data)
+            else:
+                # use requests-toolbelt multipart encoder to avoid reading
+                # the full content of large files into memory
+                m = MultipartEncoder(fields={'file': data})
+                headers={'Content-Type': m.content_type}
 
-        # use requests-toolbelt multipart encoder to avoid reading
-        # the full content of large files into memory
-        m = MultipartEncoder(fields={'file': data})
-
-        if callback is not None:
-            m = MultipartEncoderMonitor(m, callback)
+            if callback is not None:
+                m = MultipartEncoderMonitor(m, callback)
+            post_args = {'data': m, 'headers': headers}
 
         try:
-            r = self.post(url, data=m, headers={'Content-Type': m.content_type})
+            r = self.post(url, **post_args)
         except OverflowError as err:
             # Python __len__ uses integer so it is limited to system maxint,
             # and requests and requests-toolbelt use len() throughout.
@@ -694,6 +703,7 @@ class REST_API(HTTP_API_Base):
             msg = 'upload content larger than system maxint (32-bit OS limitation)'
             logger.error('OverflowError: %s', msg)
             raise OverflowError(msg)
+
 
         if r.status_code == requests.codes.accepted:
             return r.content.strip()
