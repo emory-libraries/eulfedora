@@ -67,6 +67,8 @@ def repo_copy():
     parser.add_argument('--file', '-f',
         help='Input file with a list of pids, one pid per line',
         required=False)
+    parser.add_argument('--progress', '-p',
+        help='Show progress', action='store_true', default=False)
 
     args = parser.parse_args()
 
@@ -90,7 +92,7 @@ def repo_copy():
         cfg.get(args.dest, 'fedora_user'),
         cfg.get(args.dest, 'fedora_password'))
 
-    if ProgressBar:
+    if args.progress and ProgressBar:
         widgets = ['Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
                    Timer(format='%s')] # time only, no label like "elapsed time: 00:00"
     else:
@@ -119,7 +121,7 @@ def repo_copy():
 
             size_estimate = estimate_object_size(src_obj, archive=True)
 
-            if ProgressBar:
+            if args.progress and ProgressBar:
                 # create a new progress bar with current pid and size
                 current_widgets = [pid,
                     ' Estimated size: %s || ' % humanize_file_size(size_estimate)]

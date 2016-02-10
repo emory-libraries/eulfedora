@@ -78,9 +78,10 @@ class ArchiveExport(object):
         flags=re.MULTILINE|re.DOTALL)
 
 
-    def __init__(self, obj, dest_repo, progress_bar=None):
+    def __init__(self, obj, dest_repo, verify=False, progress_bar=None):
         self.obj = obj
         self.dest_repo = dest_repo
+        self.verify = verify
         self.progress_bar = progress_bar
         self.processed_size = 0
         self.foxml_buffer = cStringIO.StringIO()
@@ -93,8 +94,7 @@ class ArchiveExport(object):
                 context='archive', stream=True)
         return self._export_response
 
-    # read_block_size = 4096*1024*1024
-    read_block_size = 8192*1024*1024*1024
+    read_block_size = 4096*1024*1024
 
     _iter_content = None
     def export_iterator(self):
@@ -194,7 +194,9 @@ class ArchiveExport(object):
 
             if section == '<foxml:binaryContent>':
                 self.within_file = True
+
                 # get datastream info from the end of the section just before this one
+                # (needed to provide size to upload request)
                 dsinfo = self.get_datastream_info(previous_section)
                 # dsinfo = self.get_datastream_info(subsections[idx-1][-250:], idx-1)
                 if dsinfo:
@@ -251,14 +253,17 @@ class ArchiveExport(object):
 
         # return a generator of data to be uploaded to fedora
         size = 0
-        md5 = hashlib.md5()
+        if self.verify:
+            md5 = hashlib.md5()
         leftover = None
 
         while self.within_file:
             content = self.get_next_section()
             if content == '</foxml:binaryContent>':
-                logger.info('Decoded content size %s (%s) MD5 %s',
-                    size, humanize_file_size(size), md5.hexdigest())
+                if self.verify:
+                    logger.info('Decoded content size %s (%s) MD5 %s',
+                        size, humanize_file_size(size), md5.hexdigest())
+
                 self.within_file = False
 
             elif self.within_file:
@@ -281,7 +286,9 @@ class ArchiveExport(object):
                     # store the leftover to be decoded with the next chunk
                     leftover = lines[-1]
 
-                md5.update(decoded_content)
+                if self.verify:
+                    md5.update(decoded_content)
+
                 size += len(decoded_content)
                 yield decoded_content
 
