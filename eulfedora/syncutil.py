@@ -17,6 +17,7 @@
 
 import binascii
 import hashlib
+import logging
 import math
 import re
 
@@ -27,6 +28,8 @@ try:
 except ImportError:
     ProgressBar = None
 
+
+logger = logging.getLogger(__name__)
 
 
 def sync_object(src_obj, dest_repo, overwrite=False, show_progress=False):
@@ -66,9 +69,9 @@ def sync_object(src_obj, dest_repo, overwrite=False, show_progress=False):
 class ArchiveExport(object):
 
     # regex to match start or end of binary content
-    bincontent_regex = re.compile('(</?foxml:binaryContent>)')
+    bincontent_regex = re.compile(r'(</?foxml:binaryContent>)')
     # regex to pull out datastream version information
-    dsinfo_regex = re.compile('ID="(?P<id>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]+)"',
+    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]+)"',
         flags=re.MULTILINE|re.DOTALL)
 
 
@@ -85,11 +88,13 @@ class ArchiveExport(object):
                 context='archive', stream=True)
         return self._export_response
 
+    read_block_size = 4096*1024*1024
+
     _iter_content = None
     def export_iterator(self):
         if self._iter_content is None:
             # self._iter_content = self.get_export().iter_content(2048)  # testing, to exaggerate problems
-            self._iter_content = self.get_export().iter_content(4096*1024*1024)
+            self._iter_content = self.get_export().iter_content(self.read_block_size)
         return self._iter_content
 
     _current_chunk = None
@@ -113,8 +118,30 @@ class ArchiveExport(object):
         return self._current_chunk
 
     def has_binary_content(self, chunk):
-        # i.e., includes a start or end binary content tag
+        ''''Use a regular expression to check if the current chunk
+        includes the start or end of binary content.'''
         return self.bincontent_regex.search(chunk)
+
+    def get_datastream_info(self, dsinfo):
+        '''Use regular expressions to pull datastream [version]
+        details (id, mimetype, size, and checksum) for binary content,
+        in order to sanity check the decoded data.
+
+        :param dsinfo: text content just before a binaryContent tag
+        :returns: dict with keys for id, mimetype, size, type and digest,
+            or None if no match is found
+        '''
+        # we only need to look at the end of this section of content
+        dsinfo = dsinfo[-250:]
+        # if not enough content is present, include the end of
+        # the last read chunk, if available
+        if len(dsinfo) < 250 and self.end_of_last_chunk is not None:
+            dsinfo = self.end_of_last_chunk + dsinfo
+
+        infomatch = self.dsinfo_regex.search(dsinfo)
+        if infomatch:
+            return infomatch.groupdict()
+
 
     def update_progressbar(self):
         # update progressbar if we have one
@@ -126,20 +153,9 @@ class ArchiveExport(object):
                 self.progress_bar.maxval = self.processed_size
             self.progress_bar.update(self.processed_size)
 
-    # _section_enumerate = None
-    # def current_chunk_sections(self):
-    #     sections = self.bincontent_regex.split(self.current_chunk())
-    #     self._section_enumerate = enumerate(sections)
-    #     return self._section_enumerate
-
-    # def get_next_chunk_section(self):
-    #     if self._section_enumerate is not None:
-    #         return self._section_enumerate.next()
-
 
     def object_data(self):
         # generator that can be used to upload to fedoro
-        # response = self.obj.api.export(self.obj.pid, context='archive', stream=True)
         if self.progress_bar:
             self.progress_bar.start()
 
@@ -183,39 +199,18 @@ class ArchiveExport(object):
         in_file = False
         for idx, content in enumerate(subsections):
             if content == '<foxml:binaryContent>':
-                # FIXME: this can be simpler: it's either the second chunk after this one
-                # OR data spans multiple chunks
-                try:
-                    if subsections[idx + 2] == '</foxml:binaryContent>':
-                        end_index = idx + 2
-                except IndexError:
-                    end_index = None
-                # print subsections[idx-1][-250:]
-                # get datastream info from section immediately before
-                dsinfo = subsections[idx-1][-250:]
-                if len(dsinfo) < 250 and idx == 1:
-                    dsinfo = self.end_of_last_chunk + dsinfo
-
-                # print len(subsections[idx-1][-450:]), subsections[idx-1][-450:]
-                # infomatch = self.dsinfo_regex.search(subsections[idx-1][-250:])
-                infomatch = self.dsinfo_regex.search(dsinfo)
-                if infomatch:
-                    # print infomatch.groupdict()
-                    print 'Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)' \
-                        % infomatch.groupdict()
+                # get datastream info from the end of the section just before this one
+                dsinfo = self.get_datastream_info(subsections[idx-1])
+                # dsinfo = self.get_datastream_info(subsections[idx-1][-250:], idx-1)
+                if dsinfo:
+                    logger.info('Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)',
+                        dsinfo)
+                # FIXME: error if datastream info is not found?
 
                 in_file = True
-                # data = binary_data(subsections[idx+1:], resp_content)
-                # print 'file data = ', ''.join(data)
-
-                if end_index is None:
-                    datasections = subsections[idx+1:]
-                else:
-                    datasections = subsections[idx+1:end_index+1]
-                datagen = self.encoded_datastream(datasections)
-
+                datagen = self.encoded_datastream(subsections[idx+1:])
                 upload_id = self.dest_repo.api.upload(ReadableGenerator(datagen,
-                    size=infomatch.groupdict()['size']),
+                    size=dsinfo['size']),
                     generator=True)
                     # streaming_iter=True, size=infomatch.groupdict()['size'])
 
@@ -237,6 +232,19 @@ class ArchiveExport(object):
     # generator to iterate through sections and possibly next chunk
     # for upload to fedora
     def encoded_datastream(self, sections):
+        '''Generator for datastream content. Takes a list of sections
+        of data within the current chunk (split on binaryContent start and
+        end tags), runs a base64 decode, and yields the data.  Computes
+        datastream size and MD5 as data is decoded for sanity-checking
+        purposes.  If binary content is not completed within the current
+        chunk, it will retrieve successive chunks of export data until it
+        finds the end.  Sets a flag when partial content is left within
+        the current chunk for continued processing by :meth:`object_data`.
+
+        :param sections: list of export data split on binary content start
+            and end tags, starting with the first section of binary content
+        '''
+
         # return a generator of data to be uploaded to fedora
         found_end = False
         size = 0
@@ -245,8 +253,8 @@ class ArchiveExport(object):
         while not found_end:
             for idx, content in enumerate(sections):
                 if content == '</foxml:binaryContent>':
-                    print 'Decoded content size %s (%s) MD5 %s' % \
-                        (size, humanize_file_size(size), md5.hexdigest())
+                    logger.info('Decoded content size %s (%s) MD5 %s',
+                        size, humanize_file_size(size), md5.hexdigest())
                     found_end = True
                 elif not found_end:
                     # if there was leftover binary content from the last chunk,
