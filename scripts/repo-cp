@@ -69,6 +69,11 @@ def repo_copy():
         required=False)
     parser.add_argument('--progress', '-p',
         help='Show progress', action='store_true', default=False)
+    parser.add_argument('--export-format', '-e',
+        choices=['migrate', 'archive'], default='migrate',
+        help='Fedora export format to use.  Use archive if migrate exports ' \
+           + 'fail with checksum errors or if content URLs are not accessible '
+           + 'to the destination server (default: %(default)s')
 
     args = parser.parse_args()
 
@@ -112,36 +117,44 @@ def repo_copy():
     for pid in pids:
         try:
             src_obj = src_repo.get_object(pid)
-            # calculate rough estimate of object size
-            # overwrite = cfg.has_option(args.dest, 'allow_overwrite') and \
-            #     cfg.getboolean(args.dest, 'allow_overwrite')
 
-            # synced = sync_object(src_obj, dest_repo, overwrite=overwrite,
-            #     show_progress=True):
-
-            size_estimate = estimate_object_size(src_obj, archive=True)
-
-            if args.progress and ProgressBar:
-                # create a new progress bar with current pid and size
-                current_widgets = [pid,
-                    ' Estimated size: %s || ' % humanize_file_size(size_estimate)]
-                current_widgets += widgets
-                pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
-
-            # response = src_repo.api.export(pid, context='archive', stream=True)
+            # size estimate / progress bar only relevant to archive exports
+            if args.export_format == 'archive':
+                # calculate rough estimate of object size
+                size_estimate = estimate_object_size(src_obj, archive=True)
 
 
-            # generator to read src repo request in chunks and stream
-            # to dest repo
-            export = ArchiveExport(src_obj, dest_repo,
-                progress_bar=pbar)
+                if args.progress and ProgressBar:
+                    # create a new progress bar with current pid and size
+                    current_widgets = [pid,
+                        ' Estimated size: %s || ' % humanize_file_size(size_estimate)]
+                    current_widgets += widgets
+                    pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
 
-            # with open('/tmp/foxml-export.xml', 'w') as testoutput:
-            #     testoutput.write(export.object_data().getvalue())
-            #     # for chunk in export.object_data():
-            #     #     testoutput.write(chunk)
+                # generator to read src repo request in chunks and stream
+                # to dest repo
+                export = ArchiveExport(src_obj, dest_repo,
+                    progress_bar=pbar)
+                export_data = export.object_data
 
-            # raise Exception  # bail out
+            else:
+                response = src_repo.api.export(pid, context=args.export_format, stream=True)
+
+                # generator to read src repo request in chunks and stream
+                # to dest repo
+                def export_data():
+                    size = 0
+                    for chunk in response.iter_content(4096*1024):
+                        size += len(chunk)
+                        # update progressbar if we have one & export format is archive
+                        if pbar and args.export_format == 'archive':
+                            # progressbar doesn't like it when size exceeds maxval,
+                            # but we don't actually know maxval; adjust the maxval up
+                            # when necessary
+                            if pbar.maxval < size:
+                                pbar.maxval = size
+                            pbar.update(size)
+                        yield chunk
 
         except RequestFailed as err:
             err_type = 'Error'
@@ -180,7 +193,7 @@ def repo_copy():
             if pbar:
                 pbar.start()
 
-            result = dest_repo.ingest(export.object_data())
+            result = dest_repo.ingest(export_data())
             if pbar:
                 pbar.finish()
             print '%s copied' % result

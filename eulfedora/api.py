@@ -134,6 +134,9 @@ class HTTP_API_Base(object):
     def get(self, *args, **kwargs):
         return self._make_request(self.session.get, *args, **kwargs)
 
+    def head(self, *args, **kwargs):
+        return self._make_request(self.session.head, *args, **kwargs)
+
     def put(self, *args, **kwargs):
         return self._make_request(self.session.put, *args, **kwargs)
 
@@ -190,7 +193,8 @@ class REST_API(HTTP_API_Base):
             http_args['maxResults'] = chunksize
         return self.get('objects', params=http_args)
 
-    def getDatastreamDissemination(self, pid, dsID, asOfDateTime=None, stream=False):
+    def getDatastreamDissemination(self, pid, dsID, asOfDateTime=None, stream=False,
+                head=False, rqst_headers={}):
         """Get a single datastream on a Fedora object; optionally, get the version
         as of a particular date time.
 
@@ -198,20 +202,23 @@ class REST_API(HTTP_API_Base):
         :param dsID: datastream id
         :param asOfDateTime: optional datetime; ``must`` be a non-naive datetime
             so it can be converted to a date-time format Fedora can understand
+        :param stream: return a streaming response (default: False); use
+            is recommended for large datastreams
+        :param head: return a HEAD request instead of GET (default: False)
+        :param rqst_headers: request headers to be passed through to Fedora,
+            such as http range requests
         """
-        # TODO: Note that this loads the entire datastream content into
-        # memory as a Python string. This will suck for very large
-        # datastreams. Eventually we need to either modify this function or
-        # else add another to return self.open(), allowing users to stream
-        # the result in a with block.
-
         # /objects/{pid}/datastreams/{dsID}/content ? [asOfDateTime] [download]
         http_args = {}
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
         url = 'objects/%(pid)s/datastreams/%(dsid)s/content' %  \
             {'pid': pid, 'dsid': dsID}
-        return self.get(url, params=http_args, stream=stream)
+        if head:
+            reqmethod = self.head
+        else:
+            reqmethod = self.get
+        return reqmethod(url, params=http_args, stream=stream, headers=rqst_headers)
 
     # NOTE: getDissemination was not available in REST API until Fedora 3.3
     def getDissemination(self, pid, sdefPid, method, method_params={}, return_http_response=False):
