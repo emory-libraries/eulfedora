@@ -32,7 +32,7 @@ from test.testsettings import FEDORA_ROOT_NONSSL,\
 from eulfedora.api import REST_API, API_A_LITE, UnrecognizedQueryLanguage
 from eulfedora.models import DigitalObject
 from eulfedora.rdfns import model as modelns
-from eulfedora.util import fedoratime_to_datetime, \
+from eulfedora.util import fedoratime_to_datetime, md5sum, \
      datetime_to_fedoratime, RequestFailed, ChecksumMismatch, parse_rdf
 from eulfedora.xml import FEDORA_MANAGE_NS, FEDORA_ACCESS_NS
 
@@ -693,8 +693,38 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
             upload_id = self.rest_api.upload(f)
         # current format looks like uploaded://####
         pattern = re.compile('uploaded://[0-9]+')
-        self.assert_(pattern.match(upload_id))
+        self.assertTrue(pattern.match(upload_id))
 
+    def test_upload_generator(self):
+        # test uploading content from a generator
+        def data_generator():
+            yield 'line one of text\n'
+            yield 'line two of text\n'
+            yield 'line three of text\n'
+
+        text_content = ''.join(data_generator())
+        content_md5 = md5sum(text_content)
+        size = len(text_content)
+
+        upload_id = self.rest_api.upload(data_generator(), size=size, content_type='text/plain')
+        pattern = re.compile('uploaded://[0-9]+')
+        self.assertTrue(pattern.match(upload_id))
+
+        # check that the *right* content was uploaded by adding
+        # a datastream using the computed MD5 and generated upload id
+        obj = load_fixture_data('basic-object.foxml')
+        response = self.rest_api.ingest(obj)
+        pid = response.content
+        add_response = self.rest_api.addDatastream(pid, 'text', controlGroup='M',
+            dsLocation=upload_id, mimeType='text/plain',
+            checksumType='MD5', checksum=content_md5)
+        self.assertTrue(add_response.status_code, requests.codes.created)
+        # get the content from fedora and confirm it matches what was sent
+        dsresponse = self.rest_api.getDatastreamDissemination(pid, 'text')
+        self.assertEqual(text_content, dsresponse.content)
+
+        # clean up test object
+        self.rest_api.purgeObject(pid)
 
 class TestAPI_A_LITE(FedoraTestCase):
     fixtures = ['object-with-pid.foxml']

@@ -149,3 +149,43 @@ def md5sum(content):
     md5.update(content)
     return md5.hexdigest()
 
+
+class ReadableIterator(object):
+    '''Adaptor to allow an iterable with known size to be treated like
+    a file-like object so it can be uploaded via requests/requests-toolbelt.
+    '''
+    # adapted from "some_magic_adaptor" here:
+    # http://stackoverflow.com/questions/12593576/adapt-an-iterator-to-behave-like-a-file-like-object-in-python
+
+    def __init__(self, iterable, size):
+        self.iterable = iterable
+        self.next_chunk = ""
+        self.size = size
+        self.amount_read = 0
+
+    def __len__(self):
+        # requests toolbelt expects the length of the content to be
+        # the amount that has not yet been read (which is how it
+        # determines when to stop reading), not the total size
+        # of the content
+        return self.size - self.amount_read
+
+    def grow_chunk(self):
+        self.next_chunk = self.next_chunk + self.iterable.next()
+
+    def read(self, size):
+        if self.next_chunk == None:
+          return None
+        try:
+          while len(self.next_chunk) < size:
+            self.grow_chunk()
+          data = self.next_chunk[:size]
+          self.next_chunk = self.next_chunk[size:]
+          self.amount_read += len(data)
+          return data
+        except StopIteration:
+          data = self.next_chunk
+          self.next_chunk = None
+          self.amount_read += len(data)
+          return data
+

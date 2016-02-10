@@ -26,7 +26,8 @@ import time
 
 from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import datetime_to_fedoratime, \
-    RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf
+    RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf, \
+    ReadableIterator
 
 logger = logging.getLogger(__name__)
 
@@ -657,43 +658,50 @@ class REST_API(HTTP_API_Base):
 
     ### utility methods
 
-    def upload(self, data, callback=None, generator=False,
-        content_type=None):
+    def upload(self, data, callback=None, content_type=None,
+        size=None):
         '''
         Upload a multi-part file for content to ingest.  Returns a
         temporary upload id that can be used as a datstream location.
 
-        :param data: content string or file-like object to be uploaded
+        :param data: content string, file-like object, or iterable with
+            content to be uploaded
         :param callback: optional callback method to monitor the upload;
             see :mod:`requests-toolbelt` documentation for more
             details: https://toolbelt.readthedocs.org/en/latest/user.html#uploading-data
+        :param content_type: optional content type of the data
+        :param size: optional size of the data; required when using an
+            iterable for the data
 
         :returns: upload id on success
         '''
         url = 'upload'
-
-        if generator:
-            file_data = [('file', ('file', data, content_type))]
-            post_args = {'files': file_data}
-
         # fedora only expects content uploaded as multipart file;
         # make string content into a file-like object so requests.post
         # sends it the way Fedora expects.
-        else:
-            if not hasattr(data, 'read'):
-                data = StringIO(data)
-            else:
-                # use requests-toolbelt multipart encoder to avoid reading
-                # the full content of large files into memory
-                m = MultipartEncoder(fields={'file': data})
-                headers={'Content-Type': m.content_type}
+        if not hasattr(data, 'read') and not hasattr(data, 'next'):
+            data = StringIO(data)
 
-            if callback is not None:
-                m = MultipartEncoderMonitor(m, callback)
-            post_args = {'data': m, 'headers': headers}
+        # if data is an iterable, wrap in a readable iterator that
+        # requests-toolbelt can read data from
+        elif hasattr(data, 'next') and not hasattr(data, 'read'):
+            if size is None:
+                raise Exception('Cannot upload iterable with unknown size')
+            data = ReadableIterator(data, size)
+
+        # use requests-toolbelt multipart encoder to avoid reading
+        # the full content of large files into memory
+        menc = MultipartEncoder(fields={'file': ('file', data, content_type)})
+
+        if callback is not None:
+            menc = MultipartEncoderMonitor(menc, callback)
+
+        headers = {'Content-Type': menc.content_type}
+        if size:
+            headers['Content-Length'] = size
 
         try:
-            r = self.post(url, **post_args)
+            response = self.post(url, data=menc, headers=headers)
         except OverflowError as err:
             # Python __len__ uses integer so it is limited to system maxint,
             # and requests and requests-toolbelt use len() throughout.
@@ -705,8 +713,8 @@ class REST_API(HTTP_API_Base):
             raise OverflowError(msg)
 
 
-        if r.status_code == requests.codes.accepted:
-            return r.content.strip()
+        if response.status_code == requests.codes.accepted:
+            return response.content.strip()
             # returns 202 Accepted on success
             # content of response should be upload id, if successful
 
