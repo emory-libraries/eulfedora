@@ -111,7 +111,13 @@ def repo_copy():
         try:
             src_obj = src_repo.get_object(pid)
             # calculate rough estimate of object size
-            size_estimate = estimate_object_size(src_obj)
+            # overwrite = cfg.has_option(args.dest, 'allow_overwrite') and \
+            #     cfg.getboolean(args.dest, 'allow_overwrite')
+
+            # synced = sync_object(src_obj, dest_repo, overwrite=overwrite,
+            #     show_progress=True):
+
+            size_estimate = estimate_object_size(src_obj, archive=True)
 
             if ProgressBar:
                 # create a new progress bar with current pid and size
@@ -128,11 +134,12 @@ def repo_copy():
             export = ArchiveExport(src_obj, dest_repo,
                 progress_bar=pbar)
 
-            with open('/tmp/foxml-export.xml', 'w') as testoutput:
-                for chunk in export.object_data():
-                    testoutput.write(chunk)
+            # with open('/tmp/foxml-export.xml', 'w') as testoutput:
+            #     testoutput.write(export.object_data().getvalue())
+            #     # for chunk in export.object_data():
+            #     #     testoutput.write(chunk)
 
-            raise Exception  # bail out
+            # raise Exception  # bail out
 
         except RequestFailed as err:
             err_type = 'Error'

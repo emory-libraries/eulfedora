@@ -16,6 +16,7 @@
 
 
 import binascii
+import cStringIO
 import hashlib
 import logging
 import math
@@ -36,7 +37,9 @@ def sync_object(src_obj, dest_repo, overwrite=False, show_progress=False):
     # calculate rough estimate of object size
 
     if show_progress and ProgressBar:
-        size_estimate = estimate_object_size(src_obj)
+        print 'normal size estimate = ', estimate_object_size(src_obj)
+        print 'base64 size_estimate = ', estimate_object_size(src_obj, archive=True)
+        size_estimate = estimate_object_size(src_obj, archive=True)
         # create a new progress bar with current pid and size
         widgets = [src_obj.pid,
             ' Estimated size: %s || ' % humanize_file_size(size_estimate),
@@ -80,6 +83,8 @@ class ArchiveExport(object):
         self.dest_repo = dest_repo
         self.progress_bar = progress_bar
         self.processed_size = 0
+        self.foxml_buffer = cStringIO.StringIO()
+        self.within_file = False
 
     _export_response = None
     def get_export(self):
@@ -88,7 +93,8 @@ class ArchiveExport(object):
                 context='archive', stream=True)
         return self._export_response
 
-    read_block_size = 4096*1024*1024
+    # read_block_size = 4096*1024*1024
+    read_block_size = 8192*1024*1024*1024
 
     _iter_content = None
     def export_iterator(self):
@@ -114,8 +120,26 @@ class ArchiveExport(object):
             self.end_of_last_chunk = self._current_chunk[-200:]
 
         self._current_chunk = self._iter_content.next()
-        self.processed_size += len(self._current_chunk)
         return self._current_chunk
+
+    _current_sections = None
+    def get_next_section(self):
+        if self._current_sections is None:
+            if self._current_chunk is None:
+                self.get_next_chunk()
+            self._current_sections = self.bincontent_regex.split(self.current_chunk())
+
+        if self._current_sections:
+            next_section = self._current_sections.pop(0)
+            self.processed_size += len(next_section)
+            self.update_progressbar()
+            return next_section
+        else:
+            # if current list of sections is empty, look for more content
+            # this will raise stop iteration at end of content
+            self.get_next_chunk()
+            self._current_sections = self.bincontent_regex.split(self.current_chunk())
+            return self.get_next_section()
 
     def has_binary_content(self, chunk):
         ''''Use a regular expression to check if the current chunk
@@ -155,83 +179,63 @@ class ArchiveExport(object):
 
 
     def object_data(self):
-        # generator that can be used to upload to fedoro
+        # todo: docstring
+        self.foxml_buffer = cStringIO.StringIO()
+
         if self.progress_bar:
             self.progress_bar.start()
 
+        previous_section = None
         while True:
-            chunk = self.get_next_chunk()
+            try:
+                section = self.get_next_section()
+            except StopIteration:
+                break
 
-            # check if this chunk includes start or end of binary content
-            if self.has_binary_content(chunk):
-                # split into chunks based on binary content tags
-                # NOTE: could contain multiple small binary content
-                # sections in a single chunk
-                subsections = self.bincontent_regex.split(chunk)
-
-                for section in self.process_chunk_sections(subsections):
-                    yield section
-
-                if self.partial_chunk:
-                    sections = self.bincontent_regex.split(self.current_chunk())
-                    for section in self.process_chunk_sections(sections[self.section_start_idx:]):
-                        yield section
-
-
-            # chunk without any binary content tags - yield normally
-            else:
-                yield chunk
-
-            # store the end of the current chunk in case it is needed for
-            # context when processing the next one
-            if self.current_chunk():
-                self.end_of_last_chunk = self.current_chunk()[-200:]
-            else:
-                self.end_of_last_chunk = chunk[-200:]
-
-            # FIXME: in certain cases, some content is being yielded out of order
-
-            # update progressbar if we have one
-            self.update_progressbar()
-
-
-    def process_chunk_sections(self, subsections):
-        in_file = False
-        for idx, content in enumerate(subsections):
-            if content == '<foxml:binaryContent>':
+            if section == '<foxml:binaryContent>':
+                self.within_file = True
                 # get datastream info from the end of the section just before this one
-                dsinfo = self.get_datastream_info(subsections[idx-1])
+                dsinfo = self.get_datastream_info(previous_section)
                 # dsinfo = self.get_datastream_info(subsections[idx-1][-250:], idx-1)
                 if dsinfo:
                     logger.info('Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)',
                         dsinfo)
                 # FIXME: error if datastream info is not found?
 
-                in_file = True
-                datagen = self.encoded_datastream(subsections[idx+1:])
-                upload_id = self.dest_repo.api.upload(ReadableGenerator(datagen,
-                    size=dsinfo['size']),
-                    generator=True)
-                    # streaming_iter=True, size=infomatch.groupdict()['size'])
 
-                yield '<foxml:contentLocation REF="%s" TYPE="URL"/>' % upload_id
+                upload_id = self.dest_repo.api.upload(self.encoded_datastream(),
+                    size=int(dsinfo['size']))
 
-            elif content == '</foxml:binaryContent>':
-                in_file = False
+                self.foxml_buffer.write('<foxml:contentLocation REF="%s" TYPE="URL"/>' \
+                    % upload_id)
 
-            elif in_file:
-                # binary content within a file - ignore
+            elif section == '</foxml:binaryContent>':
+                # should not occur here; this section will be processed by
+                # encoded_datastream method
+                self.within_file = False
+
+            elif self.within_file:
+                # should not occur here; this section will be pulled by
+                # encoded_datastream method
+
+                # binary content within a file - ignore here
+                # (handled by encoded_datastream method)
                 next
 
             else:
                 # not start or end of binary content, and not
                 # within a file, so yield as is (e.g., datastream tags
                 # between small files)
-                yield content
+                self.foxml_buffer.write(section)
+
+            previous_section = section
+
+        return self.foxml_buffer
+
 
     # generator to iterate through sections and possibly next chunk
     # for upload to fedora
-    def encoded_datastream(self, sections):
+    def encoded_datastream(self):
         '''Generator for datastream content. Takes a list of sections
         of data within the current chunk (split on binaryContent start and
         end tags), runs a base64 decode, and yields the data.  Computes
@@ -246,110 +250,61 @@ class ArchiveExport(object):
         '''
 
         # return a generator of data to be uploaded to fedora
-        found_end = False
         size = 0
         md5 = hashlib.md5()
         leftover = None
-        while not found_end:
-            for idx, content in enumerate(sections):
-                if content == '</foxml:binaryContent>':
-                    logger.info('Decoded content size %s (%s) MD5 %s',
-                        size, humanize_file_size(size), md5.hexdigest())
-                    found_end = True
-                elif not found_end:
-                    # if there was leftover binary content from the last chunk,
-                    # add it to the content now
-                    if leftover is not None:
-                        content = ''.join([leftover, content])
-                        leftover = None
 
-                    try:
-                        # decode method used by base64.decode
-                        decoded_content = binascii.a2b_base64(content)
-                    except binascii.Error:
-                        # decoding can fail with a padding error when
-                        # a line of encoded content runs across a read chunk
-                        lines = content.split('\n')
-                        # decode and yield all but the last line of encoded content
-                        decoded_content = binascii.a2b_base64(''.join(lines[:-1]))
-                        # store the leftover to be decoded with the next chunk
-                        leftover = lines[-1]
+        while self.within_file:
+            content = self.get_next_section()
+            if content == '</foxml:binaryContent>':
+                logger.info('Decoded content size %s (%s) MD5 %s',
+                    size, humanize_file_size(size), md5.hexdigest())
+                self.within_file = False
 
-                    md5.update(decoded_content)
-                    size += len(decoded_content)
-                    yield decoded_content
+            elif self.within_file:
+                content[:50]
+                # if there was leftover binary content from the last chunk,
+                # add it to the content now
+                if leftover is not None:
+                    content = ''.join([leftover, content])
+                    leftover = None
 
-                else:
-                    # content is not a binaryContent tag and we are no longer
-                    # within the encoded binary data, so this section
-                    # and an following ones need to be processed by
-                    # the object data generator
+                try:
+                    # decode method used by base64.decode
+                    decoded_content = binascii.a2b_base64(content)
+                except binascii.Error:
+                    # decoding can fail with a padding error when
+                    # a line of encoded content runs across a read chunk
+                    lines = content.split('\n')
+                    # decode and yield all but the last line of encoded content
+                    decoded_content = binascii.a2b_base64(''.join(lines[:-1]))
+                    # store the leftover to be decoded with the next chunk
+                    leftover = lines[-1]
 
-                    # set a flag to indicate partial content,
-                    # with an index of where to start
-                    self.partial_chunk = True
-                    self.section_start_idx = idx
-                    # stop processing
-                    break
-
-            # if binary data end was not found in the current chunk,
-            # get the next chunk and keep processing
-            if not found_end:
-                chunk = self.get_next_chunk()
-                self.update_progressbar()
-                sections = self.bincontent_regex.split(chunk)
-
-class ReadableGenerator(object):
-    def __init__(self, gen, size):
-        self.gen = gen
-        self.size = size
-        self.remainder = None
-        self.total_read = 0
-
-    def read(self, size=None):
-        if size is None:
-            # FIXME: doesn't this defeat the purpose of the generator?
-            return ''.join(self.gen)
-        print 'read size requested = ', size
-
-        if self.remainder:
-            data = self.remainder
-            self.remainder = None
-        else:
-            data = ''
-
-        while len(data) < size:
-            data += self.gen.next()
-
-        if len(data) > size:
-            self.remainder = data[size:]
-
-        self.total_read += len(data[:size])
-        return data[:size]
-
-        # next_chunk = self.gen.next()
-        # # if chunk is bigger than requested
-        # if len(next_chunk) > size:
-        #     self.remainder = next_chunk[size:]
-        #     return next_chunk[:size]
-
-        # todo: handle size
-        # while self.gen.next()
-    def __len__(self):
-        return int(self.size)
+                md5.update(decoded_content)
+                size += len(decoded_content)
+                yield decoded_content
 
 
-def estimate_object_size(obj):
+def estimate_object_size(obj, archive=True):
     # calculate rough estimate of object size
     size_estimate = 250000   # initial rough estimate for foxml size
     for ds in obj.ds_list:
         dsobj = obj.getDatastreamObject(ds)
         for version in dsobj.history().versions:
-            size_estimate += version.size
-
-    # TODO: optionally support calculating base64 encoded size
+            if archive and version.control_group == 'M':
+                size_estimate += base64_size(version.size)
+            else:
+                size_estimate += version.size
 
     return size_estimate
+
+def base64_size(input_size):
+    # from http://stackoverflow.com/questions/1533113/calculate-the-size-to-a-base-64-encoded-message
+    adjustment = 3 - (input_size % 3) if (input_size % 3) else 0
+    code_padded_size = ((input_size + adjustment) / 3) * 4
+    newline_size = ((code_padded_size) / 76) * 1
+    return code_padded_size + newline_size
 
 
 def humanize_file_size(size):

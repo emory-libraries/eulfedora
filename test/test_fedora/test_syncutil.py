@@ -11,6 +11,7 @@ from urllib import url2pathname
 from eulfedora.models import DigitalObject
 from eulfedora.server import Repository
 from eulfedora.syncutil import ArchiveExport
+from eulfedora.util import md5sum
 from test.test_fedora.base import FIXTURE_ROOT
 
 
@@ -20,12 +21,19 @@ logger = logging.getLogger(__name__)
 class ArchiveExportTest(unittest.TestCase):
 
     sync1_export = os.path.join(FIXTURE_ROOT, 'synctest1-export.xml')
+    sync2_export = os.path.join(FIXTURE_ROOT, 'synctest2-export.xml')
 
     def setUp(self):
         # todo: use mocks?
         self.repo = Mock(spec=Repository)
         self.obj = Mock() #spec=DigitalObject)
         self.archex = ArchiveExport(self.obj, self.repo)
+
+        # set up a request session that can load file uris, so
+        # fixtures can be used as export data
+        self.session = requests.session()
+        self.session.mount('file://', LocalFileAdapter())
+
 
     def test_has_binary_content(self):
         # sample archival export content with open binary content tag
@@ -102,17 +110,20 @@ xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/
 
 
     def test_object_data(self):
-
         # mock api to read export data from a local fixture filie
-        requests_session = requests.session()
-        requests_session.mount('file://', LocalFileAdapter())
-        response = requests_session.get('file://%s' % self.sync1_export)
+        response = self.session.get('file://%s' % self.sync1_export)
         mockapi = Mock()
-        mockapi.upload.return_value = 'uploaded://1'
+        def mock_upload(data, size):
+            list(data)  # consume the generator so datastream processing happens
+            return 'uploaded://1'
+
+        mockapi.upload = mock_upload
         mockapi.export.return_value = response
         self.obj.api = self.repo.api = mockapi
         data = self.archex.object_data()
-        foxml = ''.join(data)
+        foxml = data.getvalue()
+        with open('/tmp/foxml-sync1.xml', 'w') as testfile:
+            testfile.write(foxml)
 
         self.assert_(etree.XML(foxml) is not None,
             'object data should be valid xml')
@@ -127,7 +138,7 @@ xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/
         self.archex = ArchiveExport(self.obj, self.repo)
         self.archex.read_block_size = 1024
         data = self.archex.object_data()
-        foxml = ''.join(data)
+        foxml = data.getvalue()
 
         self.assert_(etree.XML(foxml) is not None,
             'object data should be valid xml')
@@ -136,32 +147,43 @@ xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/
         self.assert_('<foxml:contentLocation REF="uploaded://1" TYPE="URL"/>' in foxml,
             'object data for ingest should include upload id as content location')
 
+        # test with second fixture - multiple small encoded datastreams
+        self.archex = ArchiveExport(self.obj, self.repo)
+        self.archex.read_block_size = 1024
+        response = self.session.get('file://%s' % self.sync2_export)
+        mockapi.export.return_value = response
+        data = self.archex.object_data()
+        foxml = data.getvalue()
 
+        self.assert_(etree.XML(foxml) is not None,
+            'object data should be valid xml')
+        self.assert_('foxml:binaryContent' not in foxml,
+            'object data for ingest should not include binaryContent tags')
+        self.assert_('<foxml:contentLocation REF="uploaded://1" TYPE="URL"/>' in foxml,
+            'object data for ingest should include upload id as content location')
 
     def test_encoded_datastream(self):
         # data content within a single chunk of data
-        with open(self.sync1_export) as exportdatafile:
-            exportdata = exportdatafile.read()
+        mockapi = Mock()
+        mockapi.export.return_value = self.session.get('file://%s' % self.sync1_export)
+        mockapi.upload.return_value = 'uploaded://1'
+        self.obj.api = self.repo.api = mockapi
 
-        sections = self.archex.bincontent_regex.split(exportdata)
+        section = self.archex.get_next_section()
         # get binary datastream info from first section
-        dsinfo = self.archex.get_datastream_info(sections[0])
-        # fixture only has one binary content block;
-        # binary data starts at section index 2
-        dscontent = ''.join(self.archex.encoded_datastream(sections[2:]))
+        dsinfo = self.archex.get_datastream_info(section)
+        # fixture only has one binary content block
+        # get binarycontent tag out of the way
+        self.archex.get_next_section()
+        # next section will be file contents
+        self.archex.within_file = True
+        dscontent = ''.join(self.archex.encoded_datastream())
         # check decoded size and MD5 match data from fixture
         self.assertEqual(int(dsinfo['size']), len(dscontent))
-        md5 = hashlib.md5()
-        md5.update(dscontent)
-        self.assertEqual(dsinfo['digest'], md5.hexdigest())
+        self.assertEqual(dsinfo['digest'], md5sum(dscontent))
 
         # data content across multiple chunks
-        requests_session = requests.session()
-        requests_session.mount('file://', LocalFileAdapter())
-        response = requests_session.get('file://%s' % self.sync1_export)
-        mockapi = Mock()
-        mockapi.upload.return_value = 'uploaded://1'
-        mockapi.export.return_value = response
+        mockapi.export.return_value = self.session.get('file://%s' % self.sync1_export)
         self.obj.api = self.repo.api = mockapi
         # set read block size artificially low to ensure
         # datastream content is spread across multiple chunks
@@ -172,22 +194,18 @@ xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/
         # but only handle binary content
         while not finished:
             try:
-                chunk = self.archex.get_next_chunk()
+                section = self.archex.get_next_section()
             except StopIteration:
                 finished = True
 
             # find the section with starting binary content
-            if self.archex.has_binary_content(chunk):
-                # find the section where binary content starts,
-                # and pass it in to the encoded_datastream method
-                sections = self.archex.bincontent_regex.split(chunk)
-                binary_content_idx = sections.index('<foxml:binaryContent>')
-                dscontent = ''.join(self.archex.encoded_datastream(sections[binary_content_idx+1:]))
+            if section == '<foxml:binaryContent>':
+                # then decode the subsequent content
+                self.archex.within_file = True
+                dscontent = ''.join(self.archex.encoded_datastream())
 
                 self.assertEqual(int(dsinfo['size']), len(dscontent))
-                md5 = hashlib.md5()
-                md5.update(dscontent)
-                self.assertEqual(dsinfo['digest'], md5.hexdigest())
+                self.assertEqual(dsinfo['digest'], md5sum(dscontent))
 
                 # stop processing
                 finished = True
