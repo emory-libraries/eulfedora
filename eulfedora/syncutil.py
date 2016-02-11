@@ -97,11 +97,6 @@ class ArchiveExport(object):
     read_block_size = 4096*1024*1024
 
     _iter_content = None
-    def export_iterator(self):
-        if self._iter_content is None:
-            # self._iter_content = self.get_export().iter_content(2048)  # testing, to exaggerate problems
-            self._iter_content = self.get_export().iter_content(self.read_block_size)
-        return self._iter_content
 
     _current_chunk = None
     def current_chunk(self):
@@ -114,7 +109,7 @@ class ArchiveExport(object):
     def get_next_chunk(self):
         self.partial_chunk = False
         if self._iter_content is None:
-            self.export_iterator()
+            self._iter_content = self.get_export().iter_content(self.read_block_size)
 
         if self._current_chunk is not None:
             self.end_of_last_chunk = self._current_chunk[-200:]
