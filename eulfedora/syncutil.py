@@ -33,13 +33,36 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def sync_object(src_obj, dest_repo, overwrite=False, show_progress=False):
-    # calculate rough estimate of object size
+def sync_object(src_obj, dest_repo, export_context='migrate',
+                overwrite=False, show_progress=False):
+    '''Copy an object from one repository to another using the Fedora
+    export functionality.
+
+    :param src_obj: source :class:`~eulfedora.models.DigitalObject` to
+        be copied
+    :param dest_repo: destination  :class:`~eulfedora.server.Repository`
+        where the object will be copied to
+    :param export_context: Fedora export format to use, one of "migrate"
+        or "archive"; migrate is generally faster, but requires access
+        from destination repository to source and may result in checksum
+        errors for some content; archive exports take longer to process
+        (default: migrate)
+    :param overwrite: if an object with the same pid is already present
+        in the destination repository, it will be removed only if
+        overwrite is set to true (default: false)
+    :param show_progress: if True, displays a progress bar with content size,
+        progress, speed, and ETA (only applicable to archive exports)
+    :returns: result of Fedora ingest on the destination repository on
+        success
+    '''
+
+    # NOTE: currently exceptions are expected to be handled by the
+    # calling method; see repo-cp script for an example
 
     if show_progress and ProgressBar:
-        print 'normal size estimate = ', estimate_object_size(src_obj)
-        print 'base64 size_estimate = ', estimate_object_size(src_obj, archive=True)
-        size_estimate = estimate_object_size(src_obj, archive=True)
+        # calculate rough estimate of object size
+        size_estimate = estimate_object_size(src_obj,
+            archive=(export_context == 'archive'))
         # create a new progress bar with current pid and size
         widgets = [src_obj.pid,
             ' Estimated size: %s || ' % humanize_file_size(size_estimate),
@@ -50,23 +73,31 @@ def sync_object(src_obj, dest_repo, overwrite=False, show_progress=False):
     else:
         pbar = None
 
-    # TODO: support migrate/archive option
-    export = ArchiveExport(src_obj, dest_repo,
-        progress_bar=pbar)
+    # migrate export can simply be read and uploaded to dest fedora
+    if export_context == 'migrate':
+        response = src_obj.api.export(src_obj, context=export_context, stream=True)
+        export_data = response.iter_content(4096*1024)
+
+    # archive export needs additional processing to handle large binary content
+    elif export_context == 'archive':
+        export = ArchiveExport(src_obj, dest_repo,
+            progress_bar=pbar)
+        export_data = export.object_data()
+    else:
+        raise Exception('Unsupported export context %s', export_context)
 
     dest_obj = dest_repo.get_object(src_obj.pid)
     if dest_obj.exists:
         if overwrite:
             dest_repo.purge_object(src_obj.pid)
         else:
-            # exception maybe?
-            return  # error
+            # exception ?
+            return False
 
-    result = dest_repo.ingest(export.object_data())
-    # log ?
-    print '%s copied' % result
+    result = dest_repo.ingest(export_data)
     if pbar:
         pbar.finish()
+    return result
 
 
 class ArchiveExport(object):

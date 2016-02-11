@@ -35,7 +35,7 @@ from eulfedora.util import ChecksumMismatch, PermissionDenied, \
     RequestFailed
 from eulfedora.xml import FoxmlDigitalObject
 from eulfedora.syncutil import estimate_object_size, ArchiveExport, \
-    humanize_file_size
+    humanize_file_size, sync_object
 
 try:
     from progressbar import ProgressBar, Bar, Counter, ETA, \
@@ -68,7 +68,8 @@ def repo_copy():
         help='Input file with a list of pids, one pid per line',
         required=False)
     parser.add_argument('--progress', '-p',
-        help='Show progress', action='store_true', default=False)
+        help='Show progress (only available for archive exports)',
+        action='store_true', default=False)
     parser.add_argument('--export-format', '-e',
         choices=['migrate', 'archive'], default='migrate',
         help='Fedora export format to use.  Use archive if migrate exports ' \
@@ -99,11 +100,6 @@ def repo_copy():
         cfg.get(args.dest, 'fedora_user'),
         cfg.get(args.dest, 'fedora_password'))
 
-    pbar = None
-    if args.progress and ProgressBar:
-        widgets = ['Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
-                   Timer(), ' || ', ETA()] # time only, no label like "elapsed time: 00:00"
-
     pids = []
     if args.pids:
         pids = args.pids
@@ -115,88 +111,15 @@ def repo_copy():
         parser.print_help()
         return
 
+    allow_overwrite = cfg.has_option(args.dest, 'allow_overwrite') and \
+        cfg.getboolean(args.dest, 'allow_overwrite')
+
     for pid in pids:
         try:
             src_obj = src_repo.get_object(pid)
 
-            # size estimate / progress bar only relevant to archive exports
-            if args.export_format == 'archive':
-                # calculate rough estimate of object size
-                size_estimate = estimate_object_size(src_obj, archive=True)
-
-
-                if args.progress and ProgressBar:
-                    # create a new progress bar with current pid and size
-                    current_widgets = [pid,
-                        ' Estimated size: %s || ' % humanize_file_size(size_estimate)]
-                    current_widgets += widgets
-                    pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
-
-                # generator to read src repo request in chunks and stream
-                # to dest repo
-                export = ArchiveExport(src_obj, dest_repo,
-                    progress_bar=pbar)
-                export_data = export.object_data
-
-            else:
-                response = src_repo.api.export(pid, context=args.export_format, stream=True)
-
-                # generator to read src repo request in chunks and stream
-                # to dest repo
-                def export_data():
-                    size = 0
-                    for chunk in response.iter_content(4096*1024):
-                        size += len(chunk)
-                        # update progressbar if we have one & export format is archive
-                        if pbar and args.export_format == 'archive':
-                            # progressbar doesn't like it when size exceeds maxval,
-                            # but we don't actually know maxval; adjust the maxval up
-                            # when necessary
-                            if pbar.maxval < size:
-                                pbar.maxval = size
-                            pbar.update(size)
-                        yield chunk
-
-        except RequestFailed as err:
-            err_type = 'Error'
-            if isinstance(err, PermissionDenied):
-                err_type = 'Permission denied'
-            err_msg = unicode(err)
-            if '404' in err_msg:
-                err_msg = 'object not found'
-            print '%s exporting %s from %s: %s' % \
-                (err_type, pid, args.source, err_msg)
-
-            continue
-
-        dest_obj = dest_repo.get_object(pid)
-        if dest_obj.exists:
-            if cfg.has_option(args.dest, 'allow_overwrite') and \
-              cfg.getboolean(args.dest, 'allow_overwrite'):
-
-                print '%s already exists in %s, purging' % (pid, args.dest)
-                try:
-                    dest_repo.purge_object(pid)
-                except RequestFailed as err:
-                    err_type = 'Error'
-                    if isinstance(err, PermissionDenied):
-                        err_type = 'Permission denied'
-                    print '%s purging %s from %s: %s' % \
-                        (err_type, pid, args.dest, err)
-                    # if object exists and purge fails, go to next pid
-                    continue
-            else:
-                print '%s already exists in %s but overwrite is not allowed; skipping'\
-                    % (pid, args.dest)
-                continue
-
-        try:
-            if pbar:
-                pbar.start()
-
-            result = dest_repo.ingest(export_data())
-            if pbar:
-                pbar.finish()
+            result = sync_object(src_obj, dest_repo, export_context=args.export_format,
+                overwrite=allow_overwrite, show_progress=args.progress)
             print '%s copied' % result
         except ChecksumMismatch:
             print 'ChecksumMismatch on %s' % pid
@@ -208,7 +131,6 @@ def repo_copy():
             print '%s importing %s to %s: %s' % \
                 (err_type, pid, args.dest, err)
 
-            continue
 
 
 class FileSizeCounter(Counter):
