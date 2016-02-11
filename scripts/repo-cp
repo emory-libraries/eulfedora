@@ -74,7 +74,9 @@ def repo_copy():
         help='Fedora export format to use.  Use archive if migrate exports ' \
            + 'fail with checksum errors or if content URLs are not accessible '
            + 'to the destination server (default: %(default)s')
-
+    parser.add_argument('--archive', '-a', action='store_const',
+        const='archive', dest='export_format',
+        help='Use archive export format (equivalent to --export-format archive)')
     args = parser.parse_args()
 
     cfg = ConfigParser.ConfigParser()
@@ -97,11 +99,10 @@ def repo_copy():
         cfg.get(args.dest, 'fedora_user'),
         cfg.get(args.dest, 'fedora_password'))
 
+    pbar = None
     if args.progress and ProgressBar:
         widgets = ['Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
-                   Timer(format='%s')] # time only, no label like "elapsed time: 00:00"
-    else:
-        pbar = None
+                   Timer(), ' || ', ETA()] # time only, no label like "elapsed time: 00:00"
 
     pids = []
     if args.pids:
