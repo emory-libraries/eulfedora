@@ -65,10 +65,11 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
             archive=(export_context == 'archive'))
         # create a new progress bar with current pid and size
         widgets = [src_obj.pid,
-            ' Estimated size: %s || ' % humanize_file_size(size_estimate),
+            ' Estimated size: %s // ' % humanize_file_size(size_estimate),
             'Read: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
-            '|| Uploaded: ', FileSizeCounter('upload'), # ' ', FileTransferSpeed('upload'),
-             Timer(format='%s') # time only, no label like "elapsed time: 00:00"
+            '| Uploaded: ', FileSizeCounter('upload'), ' // ',
+            # FileTransferSpeed('upload'), currently no way to track upload speed...
+             Timer(), ' | ', ETA()
             ]
 
         class DownUpProgressBar(ProgressBar):
@@ -436,4 +437,5 @@ if ProgressBar:
 
         def update(self, pbar):
             return humanize_file_size(getattr(pbar, self.val))
+
 
