@@ -115,7 +115,8 @@ BINARY_CONTENT_END = '</foxml:binaryContent>'
 class ArchiveExport(object):
 
     # regex to pull out datastream version information
-    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]+)"',
+    # NOTE: regex allows for digest to be empty
+    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]*)"',
         flags=re.MULTILINE|re.DOTALL)
 
     def __init__(self, obj, dest_repo, verify=False, progress_bar=None):
@@ -247,6 +248,8 @@ class ArchiveExport(object):
                     logger.info('Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)',
                         dsinfo)
                 # FIXME: error if datastream info is not found?
+                else:
+                    raise Exception('Failed to find datastream information from \n%s' % previous_section)
 
 
                 def upload_callback(monitor):
