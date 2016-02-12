@@ -66,10 +66,15 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
         # create a new progress bar with current pid and size
         widgets = [src_obj.pid,
             ' Estimated size: %s || ' % humanize_file_size(size_estimate),
-            'Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
+            'Read: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
+            '|| Uploaded: ', FileSizeCounter('upload'), # ' ', FileTransferSpeed('upload'),
              Timer(format='%s') # time only, no label like "elapsed time: 00:00"
             ]
-        pbar = ProgressBar(widgets=widgets, maxval=size_estimate)
+
+        class DownUpProgressBar(ProgressBar):
+            upload = 0
+
+        pbar = DownUpProgressBar(widgets=widgets, maxval=size_estimate)
     else:
         pbar = None
 
@@ -136,6 +141,7 @@ class ArchiveExport(object):
     partial_chunk = False
     section_start_idx = None
     end_of_last_chunk = None
+    _chunk_leftover = ''
 
     def get_next_chunk(self):
         self.partial_chunk = False
@@ -145,7 +151,18 @@ class ArchiveExport(object):
         if self._current_chunk is not None:
             self.end_of_last_chunk = self._current_chunk[-200:]
 
-        self._current_chunk = self._iter_content.next()
+        self._current_chunk = self._chunk_leftover + self._iter_content.next()
+
+        # check if chunk ends with a partial binary content tag
+        len_to_save = (endswith_partial(self._current_chunk, '<foxml:binaryContent>')  \
+                    or endswith_partial(self._current_chunk, '</foxml:binaryContent>'))
+        # if it does, save that content for the next chunk
+        if len_to_save:
+            self._chunk_leftover = self._current_chunk[-len_to_save:]
+            self._current_chunk = self._current_chunk[:-len_to_save]
+        else:
+            self._chunk_leftover = ''
+
         return self._current_chunk
 
     _current_sections = None
@@ -153,6 +170,9 @@ class ArchiveExport(object):
         if self._current_sections is None:
             if self._current_chunk is None:
                 self.get_next_chunk()
+
+            # TODO: test regex speed vs string split
+            # (perhaps use translate to look for same string?)
             self._current_sections = self.bincontent_regex.split(self.current_chunk())
 
         if self._current_sections:
@@ -170,7 +190,8 @@ class ArchiveExport(object):
     def has_binary_content(self, chunk):
         ''''Use a regular expression to check if the current chunk
         includes the start or end of binary content.'''
-        return self.bincontent_regex.search(chunk)
+        # NOTE: use string compare instead of regex because it is faster
+        return 'foxml:binaryContent>' in chunk
 
     def get_datastream_info(self, dsinfo):
         '''Use regular expressions to pull datastream [version]
@@ -231,8 +252,11 @@ class ArchiveExport(object):
                 # FIXME: error if datastream info is not found?
 
 
+                def upload_callback(monitor):
+                    self.progress_bar.upload = monitor.bytes_read
+
                 upload_id = self.dest_repo.api.upload(self.encoded_datastream(),
-                    size=int(dsinfo['size']))
+                    size=int(dsinfo['size']), callback=upload_callback)
 
                 self.foxml_buffer.write('<foxml:contentLocation REF="%s" TYPE="URL"/>' \
                     % upload_id)
@@ -350,11 +374,28 @@ def humanize_file_size(size):
     p = math.floor(math.log(size, 2)/10)
     return "%.2f%s" % (size/math.pow(1024, p), units[int(p)])
 
+def endswith_partial(text, partial_str):
+    '''Check if the text ends with any partial version of the
+    specified string.'''
+    # at the end of the content
+    # we don't care about complete overlap, so start checking
+    # for matches without the last character
+    test_str = partial_str[:-1]
+    # look for progressively smaller segments
+    while test_str:
+        if text.endswith(test_str):
+            return len(test_str)
+        test_str = test_str[:-1]
+    return False
+
 
 if ProgressBar:
     class FileSizeCounter(Counter):
         # file size counter widget for progressbar
 
+        def __init__(self, val='currval'):
+            self.val = val
+
         def update(self, pbar):
-            return humanize_file_size(pbar.currval)
+            return humanize_file_size(getattr(pbar, self.val))
 

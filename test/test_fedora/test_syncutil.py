@@ -10,7 +10,7 @@ from urllib import url2pathname
 
 from eulfedora.models import DigitalObject
 from eulfedora.server import Repository
-from eulfedora.syncutil import ArchiveExport
+from eulfedora.syncutil import ArchiveExport, endswith_partial
 from eulfedora.util import md5sum
 from test.test_fedora.base import FIXTURE_ROOT
 
@@ -108,12 +108,11 @@ xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/
         self.assertEqual('text/xml', dsinfo['mimetype'])
         self.assertEqual('f53aec07f2607f536bac7ee03dbbfe7c', dsinfo['digest'])
 
-
     def test_object_data(self):
         # mock api to read export data from a local fixture filie
         response = self.session.get('file://%s' % self.sync1_export)
         mockapi = Mock()
-        def mock_upload(data, size):
+        def mock_upload(data, *args, **kwargs):
             list(data)  # consume the generator so datastream processing happens
             return 'uploaded://1'
 
@@ -122,8 +121,6 @@ xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/
         self.obj.api = self.repo.api = mockapi
         data = self.archex.object_data()
         foxml = data.getvalue()
-        with open('/tmp/foxml-sync1.xml', 'w') as testfile:
-            testfile.write(foxml)
 
         self.assert_(etree.XML(foxml) is not None,
             'object data should be valid xml')
@@ -161,6 +158,54 @@ xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/
             'object data for ingest should not include binaryContent tags')
         self.assert_('<foxml:contentLocation REF="uploaded://1" TYPE="URL"/>' in foxml,
             'object data for ingest should include upload id as content location')
+
+    def test_object_data_split_bincontent(self):
+        # explictly test handling of binary content tag split over
+        # chunk boundaries
+
+        response = self.session.get('file://%s' % self.sync1_export)
+        mockapi = Mock()
+        def mock_upload(data, *args, **kwargs):
+            list(data)  # consume the generator so datastream processing happens
+            return 'uploaded://1'
+
+        mockapi.upload = mock_upload
+        mockapi.export.return_value = response
+        self.obj.api = self.repo.api = mockapi
+
+        # test binary content tag split across chunks
+        self.archex = ArchiveExport(self.obj, self.repo)
+        # use a block size that will split the fixture in the middle of
+        # the first binary content tag
+        self.archex.read_block_size = 2688
+        data = self.archex.object_data()
+        foxml = data.getvalue()
+
+        self.assert_(etree.XML(foxml) is not None,
+            'object data should be valid xml')
+        self.assert_('foxml:binaryContent' not in foxml,
+            'object data for ingest should not include binaryContent tags')
+
+        self.archex = ArchiveExport(self.obj, self.repo)
+        # this blocksize ends with just the < in foxml:binaryContent
+        self.archex.read_block_size = 2680
+        data = self.archex.object_data()
+        foxml = data.getvalue()
+        self.assert_(etree.XML(foxml) is not None,
+            'object data should be valid xml')
+        self.assert_('foxml:binaryContent' not in foxml,
+            'object data for ingest should not include binaryContent tags')
+
+        self.archex = ArchiveExport(self.obj, self.repo)
+        # this blocksize ends with an unrelated close tag </
+        self.archex.read_block_size = 1526
+        data = self.archex.object_data()
+        foxml = data.getvalue()
+        self.assert_(etree.XML(foxml) is not None,
+            'object data should be valid xml')
+        self.assert_('foxml:binaryContent' not in foxml,
+            'object data for ingest should not include binaryContent tags')
+
 
     def test_encoded_datastream(self):
         # data content within a single chunk of data
@@ -210,7 +255,29 @@ xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/
                 # stop processing
                 finished = True
 
+class EndswithPartialTest(unittest.TestCase):
 
+    def test_endswith_partial(self):
+        test_string = '<foxml:binaryContent>'
+
+        test_len = 19
+        txt = 'some content %s' % test_string[:test_len]
+        print 'test text is ', txt
+        len_overlap = endswith_partial(txt, test_string)
+        self.assertEqual(test_len, len_overlap)
+
+        test_len = 5
+        txt = 'some content %s' % test_string[:test_len]
+        len_overlap = endswith_partial(txt, test_string)
+        self.assertEqual(test_len, len_overlap)
+
+        test_len = 1
+        txt = 'some content %s' % test_string[:test_len]
+        len_overlap = endswith_partial(txt, test_string)
+        self.assertEqual(test_len, len_overlap)
+
+        # no overlap
+        self.assertFalse(endswith_partial('some content', test_string))
 
 # requests file uri adapter, thanks to
 # http://stackoverflow.com/questions/10123929/python-requests-fetch-a-file-from-a-local-url
