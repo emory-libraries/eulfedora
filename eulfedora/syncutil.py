@@ -104,15 +104,18 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
         pbar.finish()
     return result
 
+## constants for binary content end and start
+#: foxml binary content start tag
+BINARY_CONTENT_START = '<foxml:binaryContent>'
+#: foxml binary content end tag
+BINARY_CONTENT_END = '</foxml:binaryContent>'
+
 
 class ArchiveExport(object):
 
-    # regex to match start or end of binary content
-    bincontent_regex = re.compile(r'(</?foxml:binaryContent>)')
     # regex to pull out datastream version information
     dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]+)"',
         flags=re.MULTILINE|re.DOTALL)
-
 
     def __init__(self, obj, dest_repo, verify=False, progress_bar=None):
         self.obj = obj
@@ -154,8 +157,8 @@ class ArchiveExport(object):
         self._current_chunk = self._chunk_leftover + self._iter_content.next()
 
         # check if chunk ends with a partial binary content tag
-        len_to_save = (endswith_partial(self._current_chunk, '<foxml:binaryContent>')  \
-                    or endswith_partial(self._current_chunk, '</foxml:binaryContent>'))
+        len_to_save = (endswith_partial(self._current_chunk, BINARY_CONTENT_START) \
+                    or endswith_partial(self._current_chunk, BINARY_CONTENT_END))
         # if it does, save that content for the next chunk
         if len_to_save:
             self._chunk_leftover = self._current_chunk[-len_to_save:]
@@ -165,15 +168,14 @@ class ArchiveExport(object):
 
         return self._current_chunk
 
+
     _current_sections = None
     def get_next_section(self):
         if self._current_sections is None:
             if self._current_chunk is None:
                 self.get_next_chunk()
 
-            # TODO: test regex speed vs string split
-            # (perhaps use translate to look for same string?)
-            self._current_sections = self.bincontent_regex.split(self.current_chunk())
+            self._current_sections = list(binarycontent_sections(self.current_chunk()))
 
         if self._current_sections:
             next_section = self._current_sections.pop(0)
@@ -184,14 +186,8 @@ class ArchiveExport(object):
             # if current list of sections is empty, look for more content
             # this will raise stop iteration at end of content
             self.get_next_chunk()
-            self._current_sections = self.bincontent_regex.split(self.current_chunk())
+            self._current_sections = list(binarycontent_sections(self.current_chunk()))
             return self.get_next_section()
-
-    def has_binary_content(self, chunk):
-        ''''Use a regular expression to check if the current chunk
-        includes the start or end of binary content.'''
-        # NOTE: use string compare instead of regex because it is faster
-        return 'foxml:binaryContent>' in chunk
 
     def get_datastream_info(self, dsinfo):
         '''Use regular expressions to pull datastream [version]
@@ -239,7 +235,7 @@ class ArchiveExport(object):
             except StopIteration:
                 break
 
-            if section == '<foxml:binaryContent>':
+            if section == BINARY_CONTENT_START:
                 self.within_file = True
 
                 # get datastream info from the end of the section just before this one
@@ -261,7 +257,7 @@ class ArchiveExport(object):
                 self.foxml_buffer.write('<foxml:contentLocation REF="%s" TYPE="URL"/>' \
                     % upload_id)
 
-            elif section == '</foxml:binaryContent>':
+            elif section == BINARY_CONTENT_END:
                 # should not occur here; this section will be processed by
                 # encoded_datastream method
                 self.within_file = False
@@ -309,7 +305,7 @@ class ArchiveExport(object):
 
         while self.within_file:
             content = self.get_next_section()
-            if content == '</foxml:binaryContent>':
+            if content == BINARY_CONTENT_END:
                 if self.verify:
                     logger.info('Decoded content size %s (%s) MD5 %s',
                         size, humanize_file_size(size), md5.hexdigest())
@@ -341,6 +337,48 @@ class ArchiveExport(object):
 
                 size += len(decoded_content)
                 yield decoded_content
+
+
+def intersperse(seq, sep):
+    if len(seq) == 1:
+        return seq
+    return reduce(lambda r, v: r+[sep, v], seq[1:], seq[:1])
+
+
+def binarycontent_sections(chunk):
+    '''Split a chunk of data into sections by start and end binary
+    content tags.'''
+    # using string split because it is significantly faster than regex.
+
+    # use common text of start and end tags to split the text
+    # (i.e. without < or </ tag beginning)
+    binary_content_tag = BINARY_CONTENT_START[1:]
+
+    if not binary_content_tag in chunk:
+        # if no tags are present, don't do any extra work
+        yield chunk
+
+    else:
+        # split on common portion of foxml:binaryContent
+        sections = chunk.split(binary_content_tag)
+        for sec in sections:
+            extra = ''
+            # check the end of the section to determine start/end tag
+            if sec.endswith('</'):
+                extra = sec[-2:]
+                yield sec[:-2]
+
+            elif sec.endswith('<'):
+                extra = sec[-1:]
+                yield sec[:-1]
+
+            else:
+                yield sec
+
+            if extra:
+                # yield the actual binary content tag
+                # (delimiter removed by split, but needed for processing)
+                yield ''.join([extra, binary_content_tag])
 
 
 def estimate_object_size(obj, archive=True):
