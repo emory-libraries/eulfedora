@@ -323,12 +323,15 @@ class ArchiveExport(object):
                     content_location = '%sobjects/%s/datastreams/%s/content?asOfDateTime=%s' % \
                         (base_url, self.obj.pid, dsid, dsinfo['created'])
                 else:
-                    def upload_callback(monitor):
-                        self.progress_bar.upload = monitor.bytes_read
+                    upload_args = {}
+                    if self.progress_bar:
+                        def upload_callback(monitor):
+                            self.progress_bar.upload = monitor.bytes_read
+                        upload_args = {'callback': upload_callback}
 
                     # use upload id as concent location
                     content_location = self.dest_repo.api.upload(self.encoded_datastream(),
-                        size=int(dsinfo['size']), callback=upload_callback)
+                        size=int(dsinfo['size']), **upload_args)
 
                 self.foxml_buffer.write('<foxml:contentLocation REF="%s" TYPE="URL"/>' \
                     % content_location)
