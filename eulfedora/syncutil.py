@@ -67,7 +67,7 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
     if show_progress and ProgressBar:
         # calculate rough estimate of object size
         size_estimate = estimate_object_size(src_obj,
-            archive=(export_context == 'archive'))
+            archive=(export_context in ['archive', 'archive-xml']))
         # create a new progress bar with current pid and size
         widgets = [src_obj.pid,
             ' Estimated size: %s // ' % humanize_file_size(size_estimate),
