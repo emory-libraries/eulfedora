@@ -21,6 +21,7 @@ import hashlib
 import logging
 import math
 import re
+from urlparse import urlparse
 
 try:
     from progressbar import ProgressBar, Bar, Counter, ETA, \
@@ -34,7 +35,8 @@ logger = logging.getLogger(__name__)
 
 
 def sync_object(src_obj, dest_repo, export_context='migrate',
-                overwrite=False, show_progress=False):
+                overwrite=False, show_progress=False,
+                requires_auth=False):
     '''Copy an object from one repository to another using the Fedora
     export functionality.
 
@@ -52,6 +54,9 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
         overwrite is set to true (default: false)
     :param show_progress: if True, displays a progress bar with content size,
         progress, speed, and ETA (only applicable to archive exports)
+    :param requires_auth: content datastreams require authentication,
+        and should have credentials patched in (currently only supported
+        in archive-xml export mode)  (default: False)
     :returns: result of Fedora ingest on the destination repository on
         success
     '''
@@ -85,9 +90,10 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
         export_data = response.iter_content(4096*1024)
 
     # archive export needs additional processing to handle large binary content
-    elif export_context == 'archive':
+    elif export_context in ['archive', 'archive-xml']:
         export = ArchiveExport(src_obj, dest_repo,
-            progress_bar=pbar)
+            progress_bar=pbar, requires_auth=requires_auth,
+            xml_only=(export_context == 'archive-xml'))
         export_data = export.object_data()
     else:
         raise Exception('Unsupported export context %s', export_context)
@@ -113,17 +119,52 @@ BINARY_CONTENT_END = '</foxml:binaryContent>'
 
 
 class ArchiveExport(object):
+    '''Iteratively process a Fedora archival export in order to copy
+    an object into another fedora repository.  Use :meth:`object_data`
+    to process the content and provides the foxml to be ingested into
+    the destination repository.
 
-    # regex to pull out datastream version information
-    # NOTE: regex allows for digest to be empty
-    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]*)"',
+    :param obj: source :class:`~eulfedora.models.DigitalObject` to
+        be copied
+    :param dest_repo: destination :class:`~eulfedora.server.Repository`
+        where the object will be copied to
+    :param verify: if True, datastream sizes and MD5 checksums will
+        be calculated as they are decoded and logged for verification
+        (default: False)
+    :param progress_bar: optional progressbar object to be updated as
+        the export is read and processed
+    :param requires_auth: content datastreams require authentication,
+        and should have credentials patched in; currently only relevant
+        when xml_only is True. (default: False)
+    :param xml_only: only use archival data for xml datastreams;
+        use fedora datastream dissemination urls for all non-xml content
+        (optionally with credentials, if requires_auth is set).
+        (default: False)
+    '''
+
+
+
+    #: regular expression used to identify datastream version information
+    #: that is needed for processing datastream content in an archival export
+    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*.*CREATED="(?P<created>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]*)"',
         flags=re.MULTILINE|re.DOTALL)
+    # NOTE: regex allows for digest to be empty
 
-    def __init__(self, obj, dest_repo, verify=False, progress_bar=None):
+    #: url credentials, if needed for datastream content urls
+    url_credentials = ''
+
+    def __init__(self, obj, dest_repo, verify=False, progress_bar=None,
+        requires_auth=False, xml_only=False):
         self.obj = obj
         self.dest_repo = dest_repo
         self.verify = verify
+        self.xml_only = xml_only
         self.progress_bar = progress_bar
+        if requires_auth:
+            # if auth is required, create a credentials string
+            # in format to be inserted into a url
+            self.url_credentials = '%s:%s@' % (obj.api.username, obj.api.password)
+
         self.processed_size = 0
         self.foxml_buffer = cStringIO.StringIO()
         self.within_file = False
@@ -224,7 +265,12 @@ class ArchiveExport(object):
 
 
     def object_data(self):
-        # todo: docstring
+        '''Process the archival export and return a buffer with foxml
+        content for ingest into the destination repository.
+
+        :returns: :class:`cStringIO.StringIO` for ingest, with references
+            to uploaded datastream content or content location urls
+        '''
         self.foxml_buffer = cStringIO.StringIO()
 
         if self.progress_bar:
@@ -243,23 +289,49 @@ class ArchiveExport(object):
                 # get datastream info from the end of the section just before this one
                 # (needed to provide size to upload request)
                 dsinfo = self.get_datastream_info(previous_section)
-                # dsinfo = self.get_datastream_info(subsections[idx-1][-250:], idx-1)
                 if dsinfo:
+                    'Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)' %  \
+                        dsinfo
+
                     logger.info('Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)',
                         dsinfo)
-                # FIXME: error if datastream info is not found?
                 else:
+                    # error if datastream info is not found, because either
+                    # size or version date is required to handle content
                     raise Exception('Failed to find datastream information from \n%s' % previous_section)
 
+                if self.xml_only and not dsinfo['mimetype'] == 'text/xml':  # possibly others?
+                    try:
+                        dsid, dsversion = dsinfo['id'].split('.')
+                    except ValueError:
+                        # if dsid doesn't include a .# (for versioning),
+                        # use the id as is.
+                        dsid = dsinfo['id']
 
-                def upload_callback(monitor):
-                    self.progress_bar.upload = monitor.bytes_read
+                    if self.url_credentials:
+                        # if url credentials are set, parse the base fedora api
+                        # url so they can be inserted at the right place
+                        parsed_url = urlparse(self.obj.api.base_url)
+                        # reassemble base url, adding in credentials
+                        base_url = ''.join([parsed_url.scheme, '://',
+                            self.url_credentials, parsed_url.netloc,
+                            parsed_url.path])
+                    else:
+                        base_url = self.obj.api.base_url
 
-                upload_id = self.dest_repo.api.upload(self.encoded_datastream(),
-                    size=int(dsinfo['size']), callback=upload_callback)
+                    # versioned datastream dissemination url
+                    content_location = '%sobjects/%s/datastreams/%s/content?asOfDateTime=%s' % \
+                        (base_url, self.obj.pid, dsid, dsinfo['created'])
+                else:
+                    def upload_callback(monitor):
+                        self.progress_bar.upload = monitor.bytes_read
+
+                    # use upload id as concent location
+                    content_location = self.dest_repo.api.upload(self.encoded_datastream(),
+                        size=int(dsinfo['size']), callback=upload_callback)
 
                 self.foxml_buffer.write('<foxml:contentLocation REF="%s" TYPE="URL"/>' \
-                    % upload_id)
+                    % content_location)
 
             elif section == BINARY_CONTENT_END:
                 # should not occur here; this section will be processed by
@@ -343,12 +415,6 @@ class ArchiveExport(object):
                 yield decoded_content
 
 
-def intersperse(seq, sep):
-    if len(seq) == 1:
-        return seq
-    return reduce(lambda r, v: r+[sep, v], seq[1:], seq[:1])
-
-
 def binarycontent_sections(chunk):
     '''Split a chunk of data into sections by start and end binary
     content tags.'''
@@ -357,7 +423,6 @@ def binarycontent_sections(chunk):
     # use common text of start and end tags to split the text
     # (i.e. without < or </ tag beginning)
     binary_content_tag = BINARY_CONTENT_START[1:]
-
     if not binary_content_tag in chunk:
         # if no tags are present, don't do any extra work
         yield chunk
@@ -386,7 +451,10 @@ def binarycontent_sections(chunk):
 
 
 def estimate_object_size(obj, archive=True):
-    # calculate rough estimate of object size
+    '''Calculate a rough estimate of object size, based on the sizes of
+    all versions of all datastreams.  If archive is true, adjusts
+    the size estimate of managed datastreams for base64 encoded data.
+    '''
     size_estimate = 250000   # initial rough estimate for foxml size
     for ds in obj.ds_list:
         dsobj = obj.getDatastreamObject(ds)

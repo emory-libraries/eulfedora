@@ -30,6 +30,7 @@ class ArchiveExportTest(unittest.TestCase):
         # todo: use mocks?
         self.repo = Mock(spec=Repository)
         self.obj = Mock() #spec=DigitalObject)
+        self.obj.pid = 'synctest:1'
         self.archex = ArchiveExport(self.obj, self.repo)
 
         # set up a request session that can load file uris, so
@@ -45,6 +46,7 @@ class ArchiveExportTest(unittest.TestCase):
         self.assertEqual('771', dsinfo['size'])
         self.assertEqual('MD5', dsinfo['type'])
         self.assertEqual('f53aec07f2607f536bac7ee03dbbfe7c', dsinfo['digest'])
+        self.assertEqual('2012-10-11T14:13:03.658Z', dsinfo['created'])
 
         # datastream info split across chunks
         self.archex.end_of_last_chunk = '''<foxml:datastreamVersion ID="DC.2" LABEL="Dublin Core" CREATED="2012-10-11T14:13:03.658Z" MIMETYPE="te'''
@@ -64,6 +66,7 @@ class ArchiveExportTest(unittest.TestCase):
 
         mockapi.upload = mock_upload
         mockapi.export.return_value = response
+        mockapi.base_url = 'http://fedora.example.co/fedora'
         self.obj.api = self.repo.api = mockapi
         data = self.archex.object_data()
         foxml = data.getvalue()
@@ -229,7 +232,6 @@ class UtilsTest(unittest.TestCase):
     def test_binarycontent_sections(self):
         with open(FIXTURES['sync1_export']) as sync1data:
             sections = list(binarycontent_sections(sync1data.read()))
-
             self.assertEqual(5, len(sections))
             self.assertEqual('<foxml:binaryContent>', sections[1])
             self.assertEqual('</foxml:binaryContent>', sections[3])
