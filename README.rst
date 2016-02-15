@@ -95,8 +95,11 @@ Running the unit tests requires a Fedora Commons repository instance.  Before
 running tests, you will need to copy ``test/localsettings.py.dist`` to
 ``test/localsettings.py`` and edit the configuration for your test repository.
 
-To run all unit tests::
+To run the tests, you should set an environment variable of
+**DJANGO_SETTINGS_MODULE** equal to ``testsettings.test`` or prefix
+the nosetests command with ``env DJANGO_SETTINGS_MODULE=testsettings.test``.
 
+To run all unit tests::
 
     nosetests test # for normal development
     nosetests test --with-coverage --cover-package=eulfedora --cover-xml --with-xunit   # for continuous integration
