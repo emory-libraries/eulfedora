@@ -238,7 +238,7 @@ class REST_API(HTTP_API_Base):
 
         :param pid: object pid
         :param asOfDateTime: optional datetime; ``must`` be a non-naive datetime
-        so it can be converted to a date-time format Fedora can understand
+            so it can be converted to a date-time format Fedora can understand
         """
         # /objects/{pid} ? [format] [asOfDateTime]
         http_args = {}
@@ -394,7 +394,7 @@ class REST_API(HTTP_API_Base):
         :param pid: object pid
         :param dsID: datastream id
         :param asOfDateTime: optional datetime; ``must`` be a non-naive datetime
-        so it can be converted to a date-time format Fedora can understand
+            so it can be converted to a date-time format Fedora can understand
         """
         # /objects/{pid}/datastreams/{dsID} ? [asOfDateTime] [format] [validateChecksum]
         http_args = {}
@@ -732,6 +732,12 @@ class REST_API(HTTP_API_Base):
 class API_A_LITE(HTTP_API_Base):
     """
        Python object for accessing `Fedora's API-A-LITE <http://fedora-commons.org/confluence/display/FCR30/API-A-LITE>`_.
+
+    .. NOTE::
+
+        As of Fedora 3.4, the previous "LITE" APIs are deprecated;
+        this APIis maintained because the REST API covers all functionality
+        except describeRepository.
     """
     def describeRepository(self):
         """
@@ -739,12 +745,12 @@ class API_A_LITE(HTTP_API_Base):
 
         :rtype: string
         """
-        http_args = { 'xml': 'true' }
+        http_args = {'xml': 'true'}
         return self.get('describe', params=http_args)
 
 
 class ApiFacade(REST_API, API_A_LITE):
-    """Pull together all Fedora APIs into one place."""
+    """Provide access to both :class:`REST_API` and :class:`API_A_LITE`."""
     # as of 3.4, REST API covers everything except describeRepository
     def __init__(self, base_url, username=None, password=None):
         HTTP_API_Base.__init__(self, base_url, username, password)

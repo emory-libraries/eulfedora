@@ -1,5 +1,5 @@
 EULFedora
-=========
+^^^^^^^^^
 
 
 .. image:: https://img.shields.io/pypi/v/eulfedora.svg
