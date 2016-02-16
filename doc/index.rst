@@ -1,7 +1,7 @@
-EULfedora
+eulfedora
 =========
 
-EULfedora is an extensible library for creating and managing digital objects
+eulfedora is an extensible library for creating and managing digital objects
 in a `Fedora Commons <http://fedora-commons.org/>`_ repository. It eases
 `mapping Fedora digital object types to Python classes
 <tutorials/fedora.html#create-a-model-for-your-fedora-object>`_ along with
@@ -15,21 +15,21 @@ also extensible, allowing applications to define other datastream types as
 needed.
 
 The library contains extra `integration for Django apps
-<fedora.html#django-integration>`_, though the core repository functionality
+<fedora/django.html>`_, though the core repository functionality
 is framework-agnostic.
 
 Contents
 --------
 
 .. toctree::
-   :maxdepth: 2
-   
-   tutorials/fedora
-   tutorials/examples
+   :maxdepth: 1
+
+   tutorials
    fedora
    scripts
-   changelog
    readme
+   changelog
+
 
 Indices and tables
 ------------------

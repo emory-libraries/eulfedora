@@ -4,12 +4,12 @@ import eulfedora
 
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx']
 
-#templates_path = ['templates']
+templates_path = ['templates']
 exclude_trees = ['build']
 source_suffix = '.rst'
 master_doc = 'index'
 
-project = 'EULfedora'
+project = 'eulfedora'
 copyright = '2011, Emory University Libraries'
 version = '%d.%d' % eulfedora.__version_info__[:2]
 release = eulfedora.__version__
@@ -17,12 +17,29 @@ modindex_common_prefix = ['eulfedora.']
 
 pygments_style = 'sphinx'
 
-html_style = 'default.css'
-#html_static_path = ['static']
-htmlhelp_basename = 'eulcoredoc'
+html_static_path = ['_static']
+htmlhelp_basename = 'eulfedora'
+
+# The theme to use for HTML and HTML Help pages.  See the documentation for
+# a list of builtin themes.
+html_theme = 'alabaster'
+html_style = 'style.css'
+html_theme_options = {
+    # 'logo': 'logo.png',
+    'github_user': 'emory-libraries',
+    'github_repo': 'eulfedora',
+    # 'travis_button': True,  # enable when we get travis-ci set up
+    'description': 'Pythonic access to Fedora Commons 3.x repositories'
+    # 'analytics_id':
+}
+
+html_sidebars = {
+    '**': ['about.html', 'navigation.html',
+          'searchbox.html', 'sidebar_footer.html'],
+}
 
 latex_documents = [
-  ('index', 'eulcore.tex', 'EULfedora Documentation',
+  ('index', 'eulcore.tex', 'eulfedora Documentation',
    'Emory University Libraries', 'manual'),
 ]
 

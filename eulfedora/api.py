@@ -26,7 +26,8 @@ import time
 
 from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import datetime_to_fedoratime, \
-    RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf
+    RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf, \
+    ReadableIterator
 
 logger = logging.getLogger(__name__)
 
@@ -237,7 +238,7 @@ class REST_API(HTTP_API_Base):
 
         :param pid: object pid
         :param asOfDateTime: optional datetime; ``must`` be a non-naive datetime
-        so it can be converted to a date-time format Fedora can understand
+            so it can be converted to a date-time format Fedora can understand
         """
         # /objects/{pid} ? [format] [asOfDateTime]
         http_args = {}
@@ -393,7 +394,7 @@ class REST_API(HTTP_API_Base):
         :param pid: object pid
         :param dsID: datastream id
         :param asOfDateTime: optional datetime; ``must`` be a non-naive datetime
-        so it can be converted to a date-time format Fedora can understand
+            so it can be converted to a date-time format Fedora can understand
         """
         # /objects/{pid}/datastreams/{dsID} ? [asOfDateTime] [format] [validateChecksum]
         http_args = {}
@@ -664,15 +665,20 @@ class REST_API(HTTP_API_Base):
 
     ### utility methods
 
-    def upload(self, data, callback=None):
+    def upload(self, data, callback=None, content_type=None,
+        size=None):
         '''
         Upload a multi-part file for content to ingest.  Returns a
         temporary upload id that can be used as a datstream location.
 
-        :param data: content string or file-like object to be uploaded
+        :param data: content string, file-like object, or iterable with
+            content to be uploaded
         :param callback: optional callback method to monitor the upload;
             see :mod:`requests-toolbelt` documentation for more
             details: https://toolbelt.readthedocs.org/en/latest/user.html#uploading-data
+        :param content_type: optional content type of the data
+        :param size: optional size of the data; required when using an
+            iterable for the data
 
         :returns: upload id on success
         '''
@@ -680,18 +686,29 @@ class REST_API(HTTP_API_Base):
         # fedora only expects content uploaded as multipart file;
         # make string content into a file-like object so requests.post
         # sends it the way Fedora expects.
-        if not hasattr(data, 'read'):
+        if not hasattr(data, 'read') and not hasattr(data, 'next'):
             data = StringIO(data)
+
+        # if data is an iterable, wrap in a readable iterator that
+        # requests-toolbelt can read data from
+        elif hasattr(data, 'next') and not hasattr(data, 'read'):
+            if size is None:
+                raise Exception('Cannot upload iterable with unknown size')
+            data = ReadableIterator(data, size)
 
         # use requests-toolbelt multipart encoder to avoid reading
         # the full content of large files into memory
-        m = MultipartEncoder(fields={'file': data})
+        menc = MultipartEncoder(fields={'file': ('file', data, content_type)})
 
         if callback is not None:
-            m = MultipartEncoderMonitor(m, callback)
+            menc = MultipartEncoderMonitor(menc, callback)
+
+        headers = {'Content-Type': menc.content_type}
+        if size:
+            headers['Content-Length'] = size
 
         try:
-            r = self.post(url, data=m, headers={'Content-Type': m.content_type})
+            response = self.post(url, data=menc, headers=headers)
         except OverflowError as err:
             # Python __len__ uses integer so it is limited to system maxint,
             # and requests and requests-toolbelt use len() throughout.
@@ -702,8 +719,9 @@ class REST_API(HTTP_API_Base):
             logger.error('OverflowError: %s', msg)
             raise OverflowError(msg)
 
-        if r.status_code == requests.codes.accepted:
-            return r.content.strip()
+
+        if response.status_code == requests.codes.accepted:
+            return response.content.strip()
             # returns 202 Accepted on success
             # content of response should be upload id, if successful
 
@@ -714,6 +732,12 @@ class REST_API(HTTP_API_Base):
 class API_A_LITE(HTTP_API_Base):
     """
        Python object for accessing `Fedora's API-A-LITE <http://fedora-commons.org/confluence/display/FCR30/API-A-LITE>`_.
+
+    .. NOTE::
+
+        As of Fedora 3.4, the previous "LITE" APIs are deprecated;
+        this APIis maintained because the REST API covers all functionality
+        except describeRepository.
     """
     def describeRepository(self):
         """
@@ -721,12 +745,12 @@ class API_A_LITE(HTTP_API_Base):
 
         :rtype: string
         """
-        http_args = { 'xml': 'true' }
+        http_args = {'xml': 'true'}
         return self.get('describe', params=http_args)
 
 
 class ApiFacade(REST_API, API_A_LITE):
-    """Pull together all Fedora APIs into one place."""
+    """Provide access to both :class:`REST_API` and :class:`API_A_LITE`."""
     # as of 3.4, REST API covers everything except describeRepository
     def __init__(self, base_url, username=None, password=None):
         HTTP_API_Base.__init__(self, base_url, username, password)

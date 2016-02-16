@@ -1,10 +1,10 @@
 # Makefile for EULcore Sphinx-based documentation
 #
 
-export PYTHONPATH=.:..
-# sphinx needs django settings while some django-releated code
+export PYTHONPATH:=$(PYTHONPATH):.:..
+# sphinx needs django settings while some django-related code
 # introspect those modules for autodocs
-export DJANGO_SETTINGS_MODULE=doc_djangosettings
+export DJANGO_SETTINGS_MODULE=test.testsettings
 
 
 SPHINXOPTS    =
