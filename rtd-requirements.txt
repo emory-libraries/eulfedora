@@ -1,0 +1,4 @@
+# optional/dev requirements needed to generate documentation
+Django<1.7
+unittest2<0.7
+pyPdf
