@@ -10,6 +10,7 @@ RDF Namespaces
 
 Testing utilities
 ------------------
+.. currentmodule:: eulfedora.testutil
 
 .. automodule:: eulfedora.testutil
    :members:
@@ -17,6 +18,7 @@ Testing utilities
 
 Synchronization
 ---------------
+.. automodule:: eulfedora.syncutil
 
 .. automethod:: eulfedora.syncutil.sync_object
 
