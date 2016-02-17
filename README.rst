@@ -9,6 +9,12 @@ EULFedora
 
 .. image:: https://img.shields.io/pypi/dm/eulfedora.svg
 
+.. image:: https://img.shields.io/pypi/dm/eulfedora.svg
+
+.. image:: https://codeclimate.com/github/emory-libraries/eulfedora/badges/gpa.svg
+   :target: https://codeclimate.com/github/emory-libraries/eulfedora
+   :alt: Code Climate
+
 
 EULfedora is a `Python <http://www.python.org/>`_ module that provides
 utilities, API wrappers, and classes for interacting with the
