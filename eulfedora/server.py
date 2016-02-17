@@ -56,16 +56,17 @@ the configured Fedora credentials should use the following settings::
 ----
 """
 
-
-from urllib import urlencode
+from __future__ import unicode_literals
 import logging
 import requests
 import warnings
 
+import six
+
 from eulfedora.rdfns import model as modelns
 from eulfedora.api import ApiFacade, ResourceIndex
 from eulfedora.models import DigitalObject
-from eulfedora.util import parse_xml_object, RequestFailed
+from eulfedora.util import parse_xml_object
 from eulfedora.xml import SearchResults, NewPids
 
 logger = logging.getLogger(__name__)
@@ -393,7 +394,7 @@ class Repository(object):
             find_opts['terms'] = terms
         else:
             conditions = []
-            for field, value in kwargs.iteritems():
+            for field, value in six.iteritems(kwargs):
                 if '__' in field:
                     field, filter = field.split('__')
                     if filter not in search_operators:
@@ -442,7 +443,3 @@ class TypeInferringRepository(Repository):
 # session key for storing a user password that will be used for Fedora access
 # - used here and in eulcore.django.fedora.views
 FEDORA_PASSWORD_SESSION_KEY = 'eulfedora_password'
-
-
-
-

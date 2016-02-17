@@ -14,14 +14,19 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from __future__ import unicode_literals
 from Crypto.Cipher import Blowfish as EncryptionAlgorithm
 import hashlib
 import logging
+
+import six
 
 try:
     from django.conf import settings
 except ImportError:
     settings = None
+
+from eulfedora.util import force_text
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +34,7 @@ logger = logging.getLogger(__name__)
 # encryption algorithms supported by Crypto that allow for variable key length
 
 ENCRYPTION_KEY = None
-ENCRYPT_PAD_CHARACTER = '\0'
+ENCRYPT_PAD_CHARACTER = b'\0'
 
 def _get_encryption_key():
     '''Method for accessing an encryption key based on the SECRET_KEY
@@ -69,6 +74,6 @@ def to_blocksize(password):
     # pad the text to create a string of acceptable block size for the encryption algorithm
     width = len(password) + \
         (EncryptionAlgorithm.block_size - len(password) % EncryptionAlgorithm.block_size)
-    block = password.ljust(width, ENCRYPT_PAD_CHARACTER)
+    block = password.ljust(
+        width, force_text(ENCRYPT_PAD_CHARACTER) if six.PY3 else ENCRYPT_PAD_CHARACTER)
     return block
-

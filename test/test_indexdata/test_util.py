@@ -33,12 +33,12 @@ class TestPdfObject(DigitalObject):
 class PdfToTextTest(unittest.TestCase):
     fixture_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixtures')
     pdf_filepath = os.path.join(fixture_dir, 'test.pdf')
-    pdf_text = 'This is a short PDF document to use for testing.'
+    pdf_text = '\nThis is a short PDF document to use for testing.'
 
     def setUp(self):
         self.repo = Repository(settings.FEDORA_ROOT, settings.FEDORA_USER,
                                settings.FEDORA_PASSWORD)
-        with open(self.pdf_filepath) as pdf:
+        with open(self.pdf_filepath, mode='rb') as pdf:
             self.pdfobj = self.repo.get_object(type=TestPdfObject)
             self.pdfobj.label = 'eulindexer test pdf object'
             self.pdfobj.pdf.content = pdf

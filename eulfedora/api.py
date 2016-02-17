@@ -14,20 +14,23 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from __future__ import unicode_literals
 import csv
 import logging
-from urlparse import urljoin
-import warnings
 import requests
+import time
+import warnings
+
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor, \
     user_agent
-from StringIO import StringIO
-import time
+
+import six
+from six.moves.urllib.parse import urljoin
 
 from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import datetime_to_fedoratime, \
     RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf, \
-    ReadableIterator
+    ReadableIterator, force_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -122,13 +125,12 @@ class HTTP_API_Base(object):
             elif response.status_code == requests.codes.server_error:
                 # check response content to determine if this is a
                 # ChecksumMismatch or a more generic error
-                if 'Checksum Mismatch' in response.content:
+                if 'Checksum Mismatch' in response.text:
                     raise ChecksumMismatch(response)
                 else:
                     raise RequestFailed(response)
             else:
                 raise RequestFailed(response)
-
         return response
 
     def get(self, *args, **kwargs):
@@ -602,7 +604,6 @@ class REST_API(HTTP_API_Base):
         # type, Fedora honors it (*does* error on invalid checksum
         # with no checksum type) - it seems to use the existing
         # checksum type if a new type is not specified.
-
         http_args = {}
         if dsLabel:
             http_args['dsLabel'] = dsLabel
@@ -755,7 +756,7 @@ class REST_API(HTTP_API_Base):
         response = self.delete(url, params=http_args)
         # should have a status code of 200;
         # response body text indicates if a relationship was purged or not
-        return response.status_code == requests.codes.ok and response.content == 'true'
+        return response.status_code == requests.codes.ok and response.content == b'true'
 
     def setDatastreamState(self, pid, dsID, dsState):
         '''Update datastream state.
@@ -810,12 +811,12 @@ class REST_API(HTTP_API_Base):
         # fedora only expects content uploaded as multipart file;
         # make string content into a file-like object so requests.post
         # sends it the way Fedora expects.
-        if not hasattr(data, 'read') and not hasattr(data, 'next'):
-            data = StringIO(data)
+        if not hasattr(data, 'read') and not hasattr(data, '__next__'):
+            data = six.BytesIO(force_bytes(data))
 
         # if data is an iterable, wrap in a readable iterator that
         # requests-toolbelt can read data from
-        elif hasattr(data, 'next') and not hasattr(data, 'read'):
+        elif hasattr(data, '__next__') and not hasattr(data, 'read'):
             if size is None:
                 raise Exception('Cannot upload iterable with unknown size')
             data = ReadableIterator(data, size)
@@ -963,7 +964,7 @@ class ResourceIndex(HTTP_API_Base):
             elif format == 'CSV':
                 # reader expects a file or a list; for now, just split the string
                 # TODO: when we can return url contents as file-like objects, use that
-                return csv.DictReader(data.split('\n'))
+                return csv.DictReader(r.text.split('\n'))
             elif format == 'count':
                 return int(data)
 
@@ -1056,5 +1057,3 @@ class ResourceIndex(HTTP_API_Base):
         """
         return self.count_statements(query, language='sparql', type='tuples',
             flush=flush)
-
-

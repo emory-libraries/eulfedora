@@ -20,6 +20,12 @@ CLASSIFIERS = [
     'Natural Language :: English',
     'Operating System :: OS Independent',
     'Programming Language :: Python',
+    'Programming Language :: Python :: 2',
+    'Programming Language :: Python :: 2.7',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.3',
+    'Programming Language :: Python :: 3.4',
+    'Programming Language :: Python :: 3.5',
     'Topic :: Software Development :: Libraries :: Python Modules',
 ]
 
@@ -30,10 +36,27 @@ requirements = [
     'requests>=2.5.0,<2.9',
     'requests-toolbelt',
     'pycrypto',
+    'pypdf2',
+    'six',
 ]
 
 if sys.version_info < (2, 7):
     requirements.append('argparse')
+
+dev_requirements = [
+    'sphinx',
+    'nose',
+    'coverage',
+    'Django',
+    'mock',
+    'unittest2',
+    'pyPdf',
+    'tox',
+    'progressbar'
+]
+
+if sys.version_info < (3, 0):
+    requirements.append('progressbar')
 
 setup(
     name='eulfedora',
@@ -48,18 +71,9 @@ setup(
     # Be sure to include the below in your own pip dependencies file if you need to use
     # the built in indexer utility support.
     extras_require={
-        'indexdata_util': ['pyPdf'],
+        'indexdata_util': ['pypdf2'],
         'django': ['Django'],
-        'dev': [
-            'sphinx>=1.3.5',
-            'nose',
-            'coverage',
-            'Django<1.7',
-            'mock',
-            'unittest2<0.7',  # optional testrunner in testutil
-            'pyPdf',
-            'progressbar',
-        ]
+        'dev': dev_requirements,
     },
     description='Idiomatic access to digital objects in a Fedora Commons repository',
     long_description=LONG_DESCRIPTION,
