@@ -50,4 +50,5 @@ intersphinx_mapping = {
     'eulxml': ('http://eulxml.readthedocs.org/en/latest/', None),
     'python': ('http://docs.python.org/', None),
     'rdflib': ('http://rdflib.readthedocs.org/en/latest/', None),
+    'requests': ('http://docs.python-requests.org/en/master/', None),
 }

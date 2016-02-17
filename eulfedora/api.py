@@ -111,8 +111,8 @@ class HTTP_API_Base(object):
         logger.debug('%s %s=>%d: %f sec' % (reqmeth.__name__.upper(), url,
             response.status_code, time.time() - start))
 
-
-        # FIXME: handle 3xx (?) [possibly handled for us by requests]
+        # NOTE: currently doesn't do anything with 3xx  responses
+        # (likely handled for us by requests)
         if response.status_code >= requests.codes.bad:  # 400 or worse
             # separate out 401 and 403 (permission errors) to enable
             # special handling in client code.
@@ -150,12 +150,17 @@ class HTTP_API_Base(object):
 
 
 class REST_API(HTTP_API_Base):
-    """
-       Python object for accessing `Fedora's REST API <http://fedora-commons.org/confluence/display/FCR30/REST+API>`_.
+    """Python object for accessing
+    `Fedora's REST API <https://wiki.duraspace.org/display/FEDORA38/REST+API>`_.
+
+    Most methods return an HTTP :class:`requests.models.Response`, which
+    provides access to status code and headers as well as content.  Many
+    responses with XML content can be loaded using models in
+    :mod:`eulfedora.xml`.
     """
 
     # always return xml response instead of html version
-    format_xml = { 'format' : 'xml'}
+    format_xml = {'format': 'xml'}
 
     ### API-A methods (access) ####
     # describeRepository not implemented in REST, use API-A-LITE version
@@ -174,7 +179,7 @@ class REST_API(HTTP_API_Base):
         :param session_token: get an additional chunk of results from a prior search
         :param parse: optional data parser function; defaults to returning
                       raw string data
-        :rtype: string
+        :rtype: :class:`requests.models.Response`
         """
         if query is not None and terms is not None:
             raise Exception("Cannot findObject with both query ('%s') and terms ('%s')" % (query, terms))
@@ -207,6 +212,8 @@ class REST_API(HTTP_API_Base):
         :param head: return a HEAD request instead of GET (default: False)
         :param rqst_headers: request headers to be passed through to Fedora,
             such as http range requests
+
+        :rtype: :class:`requests.models.Response`
         """
         # /objects/{pid}/datastreams/{dsID}/content ? [asOfDateTime] [download]
         http_args = {}
@@ -220,14 +227,31 @@ class REST_API(HTTP_API_Base):
             reqmethod = self.get
         return reqmethod(url, params=http_args, stream=stream, headers=rqst_headers)
 
-    # NOTE: getDissemination was not available in REST API until Fedora 3.3
-    def getDissemination(self, pid, sdefPid, method, method_params={}, return_http_response=False):
+    # NOTE:
+    def getDissemination(self, pid, sdefPid, method, method_params={}):
+        '''Get a service dissemination.
+
+        .. NOTE:
+
+            This method not available in REST API until Fedora 3.3
+
+        :param pid: object pid
+        :param sDefPid: service definition pid
+        :param method: service method name
+        :param method_params: method parameters
+        :rtype: :class:`requests.models.Response`
+        '''
         # /objects/{pid}/methods/{sdefPid}/{method} ? [method parameters]
         uri = 'objects/%(pid)s/methods/%(sdefpid)s/%(method)s' % \
             {'pid': pid, 'sdefpid': sdefPid, 'method': method}
         return self.get(uri, params=method_params)
 
     def getObjectHistory(self, pid):
+        '''Get the history for an object in XML format.
+
+        :param pid: object pid
+        :rtype: :class:`requests.models.Response`
+        '''
         # /objects/{pid}/versions ? [format]
         return self.get('objects/%(pid)s/versions' % {'pid': pid},
                         params=self.format_xml)
@@ -239,6 +263,7 @@ class REST_API(HTTP_API_Base):
         :param pid: object pid
         :param asOfDateTime: optional datetime; ``must`` be a non-naive datetime
             so it can be converted to a date-time format Fedora can understand
+        :rtype: :class:`requests.models.Response`
         """
         # /objects/{pid} ? [format] [asOfDateTime]
         http_args = {}
@@ -257,13 +282,19 @@ class REST_API(HTTP_API_Base):
         :param pid: string object pid
         :param parse: optional data parser function; defaults to returning
                       raw string data
-        :rtype: string xml data
+        :rtype: :class:`requests.models.Response`
         """
         # /objects/{pid}/datastreams ? [format, datetime]
         return self.get('objects/%(pid)s/datastreams' % {'pid': pid},
                         params=self.format_xml)
 
     def listMethods(self, pid, sdefpid=None):
+        '''List available service methods.
+
+        :param pid: object pid
+        :param sDefPid: service definition pid
+        :rtype: :class:`requests.models.Response`
+        '''
         # /objects/{pid}/methods ? [format, datetime]
         # /objects/{pid}/methods/{sdefpid} ? [format, datetime]
 
@@ -276,9 +307,31 @@ class REST_API(HTTP_API_Base):
 
     ### API-M methods (management) ####
 
-    def addDatastream(self, pid, dsID, dsLabel=None,  mimeType=None, logMessage=None,
+    def addDatastream(self, pid, dsID, dsLabel=None, mimeType=None, logMessage=None,
         controlGroup=None, dsLocation=None, altIDs=None, versionable=None,
         dsState=None, formatURI=None, checksumType=None, checksum=None, content=None):
+        '''Add a new datastream to an existing object.  On success,
+        the return response should have a status of 201 Created;
+        if there is an error, the response body includes the error message.
+
+        :param pid: object pid
+        :param dsID: id for the new datastream
+        :param dslabel: label for the new datastream (optional)
+        :param mimeType: mimetype for the new datastream (optional)
+        :param logMessage: log message for the object history (optional)
+        :param controlGroup: control group for the new datastream (optional)
+        :param dsLocation: URL where the content should be ingested from
+        :param altIDs: alternate ids (optional)
+        :param versionable: configure datastream versioning (optional)
+        :param dsState: datastream state (optional)
+        :param formatURI: datastream format (optional)
+        :param checksumType: checksum type (optional)
+        :param checksum: checksum  (optional)
+        :param content: datastream content, as a file-like object or
+            characterdata (optional)
+        :rtype: :class:`requests.models.Response`
+        '''
+
         # objects/{pid}/datastreams/NEWDS? [opts]
         # content via multipart file in request content, or dsLocation=URI
         # one of dsLocation or filename must be specified
@@ -309,7 +362,6 @@ class REST_API(HTTP_API_Base):
         if checksum:
             http_args['checksum'] = checksum
 
-
         # Added code to match how content is now handled, see modifyDatastream.
         extra_args = {}
         # could be a string or a file-like object
@@ -320,16 +372,8 @@ class REST_API(HTTP_API_Base):
 
                 extra_args['files'] = {'file': content}
 
-                # m = MultipartEncoder(fields={'file': content})
-                # extra_args.update({
-                #     'data': m,
-                #     'headers': {'Content-Type': m.content_type}
-                # })
-
             else:
                 extra_args['data'] = content
-                # extra_args['data']
-                # extra_args['files'] = StringIO(content)
 
             # set content-type header ?
 
@@ -344,7 +388,7 @@ class REST_API(HTTP_API_Base):
     def addRelationship(self, pid, subject, predicate, object, isLiteral=False,
                         datatype=None):
         """
-        Wrapper function for `Fedora REST API addRelationsphi <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-addRelationship>`_
+        Wrapper function for `Fedora REST API addRelationship <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-addRelationship>`_
 
         :param pid: persistent id for the object to add the new relationship to
         :param subject: subject of the relationship; object or datastream URI
@@ -363,20 +407,36 @@ class REST_API(HTTP_API_Base):
             http_args['datatype'] = datatype
 
         url = 'objects/%(pid)s/relationships/new' % {'pid': pid}
-        r = self.post(url, params=http_args)
-        return r.status_code == requests.codes.ok
+        response = self.post(url, params=http_args)
+        return response.status_code == requests.codes.ok
 
     def compareDatastreamChecksum(self, pid, dsID, asOfDateTime=None): # date time
+        '''Compare (validate) datastream checksum.  This is a special case of
+        :meth:`getDatastream`, with validate checksum set to True. Fedora
+        will recalculate the checksum and compare it to the stored value.
+        Response is the same content returned by :meth:`getDatastream`,
+        with validation result included in the xml.
+
+        :rtype: :class:`requests.models.Response`
+        '''
         # special case of getDatastream, with validateChecksum = true
         # currently returns datastream info returned by getDatastream...  what should it return?
         return self.getDatastream(pid, dsID, validateChecksum=True, asOfDateTime=asOfDateTime)
 
     def export(self, pid, context=None, format=None, encoding=None,
                 stream=False):
-        # /objects/{pid}/export ? [format] [context] [encoding]
-        # - if format is not specified, use fedora default (FOXML 1.1)
-        # - if encoding is not specified, use fedora default (UTF-8)
-        # - context should be one of: public, migrate, archive (default is public)
+        '''Export an object to be migrated or archived.
+
+        :param pid: object pid
+        :param context: export context, one of: public, migrate, archive
+            (default: public)
+        :param format: export format (Fedora default is foxml 1.1)
+        :param encoding: encoding (Fedora default is UTF-8)
+        :param stream: if True, request a streaming response to be
+            read in chunks
+        :rtype: :class:`requests.models.Response`
+        '''
+
         http_args = {}
         if context:
             http_args['context'] = context
@@ -395,6 +455,9 @@ class REST_API(HTTP_API_Base):
         :param dsID: datastream id
         :param asOfDateTime: optional datetime; ``must`` be a non-naive datetime
             so it can be converted to a date-time format Fedora can understand
+        :param validateChecksum: boolean; if True, request Fedora to recalculate
+            and verify the stored checksum against actual data
+        :rtype: :class:`requests.models.Response`
         """
         # /objects/{pid}/datastreams/{dsID} ? [asOfDateTime] [format] [validateChecksum]
         http_args = {}
@@ -408,6 +471,13 @@ class REST_API(HTTP_API_Base):
         return self.get(uri, params=http_args)
 
     def getDatastreamHistory(self, pid, dsid, format=None):
+        '''Get history information for a datastream.
+
+        :param pid: object pid
+        :param dsid: datastream id
+        :param format: format
+        :rtype: :class:`requests.models.Response`
+        '''
         http_args = {}
         if format is not None:
             http_args['format'] = format
@@ -424,12 +494,14 @@ class REST_API(HTTP_API_Base):
         """
         Wrapper function for `Fedora REST API getNextPid <http://fedora-commons.org/confluence/display/FCR30/REST+API#RESTAPI-getNextPID>`_
 
-        :param numPIDs: (optional) get the specified number of pids; by default, returns 1
-        :param namespace: (optional) get the next pid in the specified pid namespace;
-            otherwise, Fedora will return the next pid in the configured default namespace.
+        :param numPIDs: (optional) get the specified number of pids;
+            by default, returns 1
+        :param namespace: (optional) get the next pid in the specified
+            pid namespace; otherwise, Fedora will return the next pid
+            in the configured default namespace.
         :rtype: string (if only 1 pid requested) or list of strings (multiple pids)
         """
-        http_args = { 'format': 'xml' }
+        http_args = {'format': 'xml'}
         if numPIDs:
             http_args['numPIDs'] = numPIDs
         if namespace:
@@ -439,23 +511,25 @@ class REST_API(HTTP_API_Base):
         return self.post(rel_url, params=http_args)
 
     def getObjectXML(self, pid):
-        """
-           Return the entire xml for the specified object.
+        """Return the entire xml for the specified object.
 
-           :param pid: pid of the object to retrieve
-           :param parse: optional data parser function; defaults to returning
-                         raw string data
-           :rtype: string xml content of entire object
+        :param pid: pid of the object to retrieve
+        :rtype: :class:`requests.models.Response`
         """
         # /objects/{pid}/objectXML
         return self.get('objects/%(pid)s/objectXML' % {'pid': pid})
 
     def getRelationships(self, pid, subject=None, predicate=None, format=None):
-        '''
-        Get information about relationships on an object.
+        '''Get information about relationships on an object.
 
-        Wrapper function for `Fedora REST API getRelationships <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-getRelationships>`_
+        Wrapper function for
+         `Fedora REST API getRelationships <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-getRelationships>`_
 
+        :param pid: object pid
+        :param subject: subject (optional)
+        :param predicate: predicate (optional)
+        :param format: format
+        :rtype: :class:`requests.models.Response`
         '''
         http_args = {}
         if subject is not None:
@@ -469,17 +543,20 @@ class REST_API(HTTP_API_Base):
         return self.get(url, params=http_args)
 
     def ingest(self, text, logMessage=None):
-        """
-        Ingest a new object into Fedora. Returns the pid of the new object on success.
+        """Ingest a new object into Fedora. Returns the pid of the new object on success.
+        Return response should have a status of 201 Created on success, and
+        the content of the response will be the newly created pid.
 
         Wrapper function for `Fedora REST API ingest <http://fedora-commons.org/confluence/display/FCR30/REST+API#RESTAPI-ingest>`_
 
         :param text: full text content of the object to be ingested
         :param logMessage: optional log message
-        :rtype: string
+        :rtype: :class:`requests.models.Response`
         """
+        # NOTE: ingest method supports additional options for
+        # label/format/namespace/ownerId, etc - but we generally set
+        # those in the foxml that is passed in
 
-        # FIXME/TODO: add options for ingest with pid, values for label/format/namespace/ownerId, etc?
         http_args = {}
         if logMessage:
             http_args['logMessage'] = logMessage
@@ -488,18 +565,38 @@ class REST_API(HTTP_API_Base):
 
         url = 'objects/new'
         return self.post(url, data=text, params=http_args, headers=headers)
-        # FIXME: check response status code first?
-        # return r.content  # content is new pid
+
 
     def modifyDatastream(self, pid, dsID, dsLabel=None, mimeType=None, logMessage=None, dsLocation=None,
         altIDs=None, versionable=None, dsState=None, formatURI=None, checksumType=None,
         checksum=None, content=None, force=False):
+        '''Modify an existing datastream, similar to :meth:`addDatastraem`.
+        Content can be specified by either a URI location or as
+        string content or file-like object; if content is not specified,
+        datastream metadata will be updated without modifying the content.
+
+        On success, the returned response should have a status code 200;
+        on failure, the response body may include an error message.
+
+        :param pid: object pid
+        :param dsID: id for the new datastream
+        :param dslabel: label for the new datastream (optional)
+        :param mimeType: mimetype for the new datastream (optional)
+        :param logMessage: log message for the object history (optional)
+        :param dsLocation: URL where the content should be ingested from (optional)
+        :param altIDs: alternate ids (optional)
+        :param versionable: configure datastream versioning (optional)
+        :param dsState: datastream state (optional)
+        :param formatURI: datastream format (optional)
+        :param checksumType: checksum type (optional)
+        :param checksum: checksum (optional)
+        :param content: datastream content, as a file-like object or
+            characterdata (optional)
+        :param force: force the update (default: False)
+        :rtype: :class:`requests.models.Response`
+        '''
         # /objects/{pid}/datastreams/{dsID} ? [dsLocation] [altIDs] [dsLabel] [versionable] [dsState] [formatURI] [checksumType] [checksum] [mimeType] [logMessage] [force] [ignoreContent]
         # NOTE: not implementing ignoreContent (unneeded)
-
-        # content via multipart file in request content, or dsLocation=URI
-        # if dsLocation or content is not specified, datastream content will not be updated
-        # content can be string or a file-like object
 
         # Unlike addDatastream, if checksum is sent without checksum
         # type, Fedora honors it (*does* error on invalid checksum
@@ -545,13 +642,20 @@ class REST_API(HTTP_API_Base):
 
         url = 'objects/%s/datastreams/%s' % (pid, dsID)
         return self.put(url, params=http_args, **content_args)
-        # expected response: 200 (success)
-        # response body contains error message, if any
-        # return success/failure and any additional information
-        # return r.content
-        # return (r.status_code == requests.codes.ok, r.content)
+
 
     def modifyObject(self, pid, label, ownerId, state, logMessage=None):
+        '''Modify object properties.  Returned response should have
+        a status of 200 on succuss.
+
+        :param pid: object pid
+        :param label: object label
+        :param ownerId: object owner
+        :param state: object state
+        :param logMessage: optional log message
+
+        :rtype: :class:`requests.models.Response`
+        '''
         # /objects/{pid} ? [label] [ownerId] [state] [logMessage]
         http_args = {'label' : label,
                     'ownerId' : ownerId,
@@ -560,22 +664,22 @@ class REST_API(HTTP_API_Base):
             http_args['logMessage'] = logMessage
         url = 'objects/%(pid)s' % {'pid': pid}
         return self.put(url, params=http_args)
-        # returns response code 200 on success
         # return r.status_code == requests.codes.ok
 
     def purgeDatastream(self, pid, dsID, startDT=None, endDT=None, logMessage=None,
             force=False):
-        """
-        Purge a datastream, or versions of a dastream, from a Fedora object.
+        """Purge a datastream, or specific versions of a dastream, from
+        a Fedora object.  On success, response content will include
+        a list of timestamps for the purged datastream versions; on failure,
+        response content may contain an error message.
 
         :param pid: object pid
         :param dsID: datastream ID
-        :param startDT: optional start datetime (when purging certain versions)
-        :param endDT: optional end datetime (when purging certain versions)
+        :param startDT: optional start datetime (when purging specific versions)
+        :param endDT: optional end datetime (when purging specific versions)
         :param logMessage: optional log message
-        :returns: tuple of success/failure and response content; on success,
-            response content is a list of timestamps for the datastream purged;
-            on failure, response content may contain an error message
+
+        :rtype: :class:`requests.models.Response`
         """
         # /objects/{pid}/datastreams/{dsID} ? [startDT] [endDT] [logMessage] [force]
         http_args = {}
@@ -605,15 +709,17 @@ class REST_API(HTTP_API_Base):
             # return r.status_code == 200, response.read()
 
     def purgeObject(self, pid, logMessage=None):
-        """
-        Purge an object from Fedora.
+        """Purge an object from Fedora.
+        Returned response shoudl have a status of 200 on success; response
+        content is a timestamp.
 
-        Wrapper function for `REST API purgeObject <http://fedora-commons.org/confluence/display/FCR30/REST+API#RESTAPI-purgeObject>`_
+        Wrapper function for
+        `REST API purgeObject <http://fedora-commons.org/confluence/display/FCR30/REST+API#RESTAPI-purgeObject>`_
 
         :param pid: pid of the object to be purged
         :param logMessage: optional log message
+        :rtype: :class:`requests.models.Response`
         """
-        # FIXME: return success/failure?
         http_args = {}
         if logMessage:
             http_args['logMessage'] = logMessage
@@ -625,14 +731,19 @@ class REST_API(HTTP_API_Base):
 
     def purgeRelationship(self, pid, subject, predicate, object, isLiteral=False,
                         datatype=None):
-        '''
-        Remove a relationship from an object.
+        '''Remove a relationship from an object.
 
-        Wrapper function for `Fedora REST API purgeRelationship <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-purgeRelationship>`_
+        Wrapper function for
+        `Fedora REST API purgeRelationship <https://wiki.duraspace.org/display/FEDORA34/REST+API#RESTAPI-purgeRelationship>`_
 
+        :param pid: object pid
+        :param subject: relationship subject
+        :param predicate: relationship predicate
+        :param object: relationship object
+        :param isLiteral: boolean (default: false)
+        :param datatype: optional datatype
         :returns: boolean; indicates whether or not a relationship was
             removed
-
         '''
 
         http_args = {'subject': subject, 'predicate': predicate,
@@ -641,27 +752,40 @@ class REST_API(HTTP_API_Base):
             http_args['datatype'] = datatype
 
         url = 'objects/%(pid)s/relationships' % {'pid': pid}
-        r = self.delete(url, params=http_args)
+        response = self.delete(url, params=http_args)
         # should have a status code of 200;
         # response body text indicates if a relationship was purged or not
-        return r.status_code == requests.codes.ok and r.content == 'true'
+        return response.status_code == requests.codes.ok and response.content == 'true'
 
     def setDatastreamState(self, pid, dsID, dsState):
+        '''Update datastream state.
+
+        :param pid: object pid
+        :param dsID: datastream id
+        :param dsState: datastream state
+        :returns: boolean success
+        '''
         # /objects/{pid}/datastreams/{dsID} ? [dsState]
         http_args = {'dsState' : dsState}
         url = 'objects/%(pid)s/datastreams/%(dsid)s' % {'pid': pid, 'dsid': dsID}
-        r = self.put(url, params=http_args)
+        response = self.put(url, params=http_args)
         # returns response code 200 on success
-        return r.status_code == requests.codes.ok
+        return response.status_code == requests.codes.ok
 
     def setDatastreamVersionable(self, pid, dsID, versionable):
-        # /objects/{pid}/datastreams/{dsID} ? [versionable]
-        http_args = { 'versionable' : versionable }
-        url = 'objects/%(pid)s/datastreams/%(dsid)s' % {'pid': pid, 'dsid': dsID}
-        r = self.put(url, params=http_args)
-        # returns response code 200 on success
-        return r.status_code == requests.codes.ok
+        '''Update datastream versionable setting.
 
+        :param pid: object pid
+        :param dsID: datastream id
+        :param versionable: boolean
+        :returns: boolean success
+        '''
+        # /objects/{pid}/datastreams/{dsID} ? [versionable]
+        http_args = {'versionable': versionable}
+        url = 'objects/%(pid)s/datastreams/%(dsid)s' % {'pid': pid, 'dsid': dsID}
+        response = self.put(url, params=http_args)
+        # returns response code 200 on success
+        return response.status_code == requests.codes.ok
 
     ### utility methods
 
@@ -709,7 +833,7 @@ class REST_API(HTTP_API_Base):
 
         try:
             response = self.post(url, data=menc, headers=headers)
-        except OverflowError as err:
+        except OverflowError:
             # Python __len__ uses integer so it is limited to system maxint,
             # and requests and requests-toolbelt use len() throughout.
             # This results in an overflow error when trying to upload a file
@@ -740,10 +864,9 @@ class API_A_LITE(HTTP_API_Base):
         except describeRepository.
     """
     def describeRepository(self):
-        """
-        Get information about a Fedora repository.
+        """Get information about a Fedora repository.
 
-        :rtype: string
+        :rtype: :class:`requests.models.Response`
         """
         http_args = {'xml': 'true'}
         return self.get('describe', params=http_args)
@@ -832,8 +955,8 @@ class ResourceIndex(HTTP_API_Base):
 
         url = 'risearch'
         try:
-            r = self.get(url, params=http_args)
-            data, abs_url = r.content, r.url
+            response = self.get(url, params=http_args)
+            data, abs_url = response.content, response.url
             # parse the result according to requested format
             if format == 'N-Triples':
                 return parse_rdf(data, abs_url, format='n3')
@@ -845,12 +968,12 @@ class ResourceIndex(HTTP_API_Base):
                 return int(data)
 
             # should we return the response as fallback?
-        except RequestFailed, f:
-            if 'Unrecognized query language' in f.detail:
-                raise UnrecognizedQueryLanguage(f.detail)
+        except RequestFailed as err:
+            if 'Unrecognized query language' in err.detail:
+                raise UnrecognizedQueryLanguage(err.detail)
             # could also see 'Unsupported output format'
             else:
-                raise f
+                raise err
 
 
     def spo_search(self, subject=None, predicate=None, object=None):
