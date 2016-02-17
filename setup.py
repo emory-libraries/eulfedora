@@ -51,7 +51,7 @@ setup(
         'indexdata_util': ['pyPdf'],
         'django': ['Django'],
         'dev': [
-            'sphinx',
+            'sphinx>=1.3.5',
             'nose',
             'coverage',
             'Django<1.7',
