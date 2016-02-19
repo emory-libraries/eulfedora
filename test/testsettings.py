@@ -42,6 +42,10 @@ EUL_INDEXER_ALLOWED_IPS = ['*']
 from .localsettings import *
 
 os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
-django.setup()
+try:
+    # not available or necessary on older versions of django
+    django.setup()
+except:
+    pass
 
 
