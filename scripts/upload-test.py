@@ -9,11 +9,11 @@ import argparse
 import base64
 import os
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
-from progressbar import ProgressBar, Percentage, Bar, RotatingMarker, ETA, \
-    FileTransferSpeed, AnimatedMarker
+import progressbar
 import pycurl
 
 from eulfedora.server import Repository
+from eulfedora.util import force_bytes, force_text
 from test import testsettings
 
 
@@ -22,42 +22,45 @@ def upload_file(filename):
                       testsettings.FEDORA_PASSWORD)
 
     filesize = os.path.getsize(filename)
-    widgets = ['Upload: ', Percentage(), ' ', Bar(),
-               ' ', ETA(), ' ', FileTransferSpeed()]
+    widgets = ['Upload: ', progressbar.widgets.Percentage(), ' ',
+               progressbar.widgets.Bar(), ' ', progressbar.widgets.ETA(),
+               ' ', progressbar.widgets.FileTransferSpeed()]
     # set initial progressbar size based on file; will be slightly larger because
     # of multipart boundary content
-    pbar = ProgressBar(widgets=widgets, maxval=filesize).start()
+    pbar = progressbar.ProgressBar(widgets=widgets, maxval=filesize).start()
 
     def upload_callback(monitor):
         # update the progressbar to actual maxval (content + boundary)
-        pbar.maxval = monitor.len
+        pbar.max_value = monitor.len
         # update current status
         pbar.update(monitor.bytes_read)
 
     with open(filename, 'rb') as f:
         upload_id = repo.api.upload(f, callback=upload_callback)
         pbar.finish()
-        print upload_id
+        print(upload_id)
 
 
 def curl_upload_file(filename):
-    print 'curl upload'
+    print('curl upload')
     conn = pycurl.Curl()
-    headers = {'Authorization' : 'Basic %s' % base64.b64encode("%s:%s" % (testsettings.FEDORA_USER, testsettings.FEDORA_PASSWORD))}
+    auth = base64.b64encode(force_bytes("%s:%s" % (testsettings.FEDORA_USER, testsettings.FEDORA_PASSWORD)))
+    headers = {'Authorization' : 'Basic %s' % force_text(auth)}
     conn.setopt(conn.URL, '%supload' % testsettings.FEDORA_ROOT_NONSSL)
     conn.setopt(pycurl.VERBOSE, 1)
     conn.setopt(pycurl.HTTPHEADER, ["%s: %s" % t for t in headers.items()])
 
     filesize = os.path.getsize(filename)
-    widgets = ['Upload: ', Percentage(), ' ', Bar(),
-               ' ', ETA(), ' ', FileTransferSpeed()]
+    widgets = ['Upload: ', progressbar.widgets.Percentage(), ' ',
+               progressbar.widgets.Bar(), ' ', progressbar.widgets.ETA(),
+               ' ', progressbar.widgets.FileTransferSpeed()]
     # set initial progressbar size based on file; will be slightly larger because
     # of multipart boundary content
-    pbar = ProgressBar(widgets=widgets, maxval=filesize).start()
+    pbar = progressbar.ProgressBar(widgets=widgets, maxval=filesize).start()
 
     def progress(dl_total, dl, up_total, up):
         # update the progressbar to actual maxval (content + boundary)
-        pbar.maxval = up_total
+        pbar.max_value = up_total
         # update current status
         pbar.update(up)
 
@@ -78,9 +81,9 @@ def curl_upload_file(filename):
     conn.perform()
 
     # HTTP response code, e.g. 200.
-    print 'Status: %d' % conn.getinfo(conn.RESPONSE_CODE)
+    print('Status: %d' % conn.getinfo(conn.RESPONSE_CODE))
     # Elapsed time for the transfer.
-    print 'Time: %f' % conn.getinfo(conn.TOTAL_TIME)
+    print('Time: %f' % conn.getinfo(conn.TOTAL_TIME))
 
     conn.close()
 

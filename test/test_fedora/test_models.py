@@ -725,14 +725,16 @@ class TestDigitalObject(FedoraTestCase):
         self.obj.text.checksum_type = "MD5"
         self.obj.text.checksum = "avcd"
 
-        #Saving with incorrect checksum should fail.
+        # Saving with incorrect checksum should fail.
         expected_error = None
         try:
             self.obj.save()
-        except models.DigitalObjectSaveFailure as e:
-            #Error should go here
-            expected_error = e
-        self.assert_(str(expected_error).endswith('successfully backed out '), 'Incorrect checksum should back out successfully.')
+        except models.DigitalObjectSaveFailure as err:
+            # Error should go here
+            expected_error = err
+
+        self.assert_('successfully backed out' in str(expected_error),
+            'Incorrect checksum should back out successfully.')
 
         # re-initialize the object. do it with a unicode pid to test a regression.
         self.obj = MyDigitalObject(self.api, force_text(self.pid))

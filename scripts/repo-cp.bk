@@ -1,0 +1,476 @@
+#!/usr/bin/env python
+
+# file scripts/repo-cp
+#
+#   Copyright 2015 Emory University Libraries & IT Services
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+import argparse
+import base64
+import binascii
+from copy import copy
+from cStringIO import StringIO
+import ConfigParser
+import hashlib
+from lxml import etree
+import math
+import os
+import re
+
+from eulxml.xmlmap import load_xmlobject_from_string
+from eulfedora.server import Repository
+from eulfedora.models import DigitalObject
+from eulfedora.util import ChecksumMismatch, PermissionDenied, \
+    RequestFailed
+from eulfedora.xml import FoxmlDigitalObject
+
+try:
+    from progressbar import ProgressBar, Bar, Counter, ETA, \
+        FileTransferSpeed, Percentage, \
+        RotatingMarker, SimpleProgress, Timer
+except ImportError:
+    ProgressBar = None
+
+
+
+def repo_copy():
+
+    parser = argparse.ArgumentParser()
+
+    # config file options
+    cfg_args = parser.add_argument_group('Config file options')
+    cfg_args.add_argument('--config', '-c',
+        default='$HOME/.repocpcfg',
+        help='Load the specified config file (default: %(default)s')
+
+    cfg_args.add_argument('source',
+        help='Source repository for content to be copied')
+    cfg_args.add_argument('dest',
+        help='Destination repository for content to be copied')
+
+    # list of pids
+    parser.add_argument('pids', metavar='PID', nargs='*',
+        help='list of pids to copy')
+    parser.add_argument('--file', '-f',
+        help='Input file with a list of pids, one pid per line',
+        required=False)
+
+    args = parser.parse_args()
+
+    cfg = ConfigParser.ConfigParser()
+    configfile_path = args.config.replace('$HOME', os.environ['HOME'])
+    with open(configfile_path) as cfgfile:
+            cfg.readfp(cfgfile)
+
+    if not cfg.has_section(args.source):
+        print 'Source repository %s is not configured' % args.source
+        return
+    if not cfg.has_section(args.dest):
+        print 'Destination repository %s is not configured' % args.dest
+        return
+
+    src_repo = Repository(cfg.get(args.source, 'fedora_root'),
+        cfg.get(args.source, 'fedora_user'),
+        cfg.get(args.source, 'fedora_password'))
+
+    dest_repo = Repository(cfg.get(args.dest, 'fedora_root'),
+        cfg.get(args.dest, 'fedora_user'),
+        cfg.get(args.dest, 'fedora_password'))
+
+    # regex to match start or end of binary content
+    bincontent_regex = re.compile('(</?foxml:binaryContent>)')
+        # dsinfo_regex = re.compile('SIZE="(?P<size>\d+)".*DIGEST="(?P<digest>[0-9a-f]+)"',
+    dsinfo_regex = re.compile('SIZE="(?P<size>\d+)".*DIGEST="(?P<digest>[0-9a-f]+)"',
+        flags=re.MULTILINE|re.DOTALL)
+
+
+    if ProgressBar:
+        widgets = ['Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
+                   Timer(format='%s')] # time only, no label like "elapsed time: 00:00"
+    else:
+        pbar = None
+
+    pids = []
+    if args.pids:
+        pids = args.pids
+    elif args.file:
+        with open(args.file) as pidlistfile:
+            pids = pidlistfile.read().splitlines()
+    else:
+        print 'Specify either one or more pids or a file with a list of pids'
+        parser.print_help()
+        return
+
+    for pid in pids:
+        try:
+            src_obj = src_repo.get_object(pid)
+            # calculate rough estimate of object size
+            size_estimate = 250000   # start rough estimate for foxml size
+            for ds in src_obj.ds_list:
+                dsobj = src_obj.getDatastreamObject(ds)
+                for version in dsobj.history().versions:
+                    size_estimate += version.size
+            if ProgressBar:
+                # create a new progress bar with current pid and size
+                current_widgets = [pid,
+                    ' Estimated size: %s || ' % humanize_file_size(size_estimate)]
+                current_widgets += widgets
+                pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
+
+            response = src_repo.api.export(pid, context='archive', stream=True)
+
+            # use iterparse to go through the response in chunks
+            context = etree.iterparse(response.raw, events=("start", "end"),
+                huge_tree=True)
+
+
+
+            # generator to serve out foxml export in chunks
+            def ignore_export_data():
+                for action, elem in context:
+                    if elem.tag == '{%s}contentDigest' % DigitalObject.FOXML_NS:
+                        if action == 'start':
+                            print elem.getparent().get('ID')
+                            print elem.get('TYPE'), elem.get('DIGEST')
+                    if elem.tag == '{%s}binaryContent' % DigitalObject.FOXML_NS:
+                        # when binary content is found, get the base64 encoded
+                        # content, decode it, and post to fedora, then
+                        # yield a content location tag with the upload id
+
+                        if action == 'start':
+                            # NOTE: this fails on binary datastreams
+                            # (decoding fails or checksum mismatch);
+                            # possibly because the iterparse hasn't
+                            # yet handled the entire element...
+                            # print elem.getparent().get('ID')  # ds version id, for context
+                            encoded_content = StringIteratorIO(elem.itertext())
+                            decoded_content = StringIO()
+                            base64.decode(encoded_content, decoded_content)
+                            upload_id = dest_repo.api.upload(decoded_content)
+                            # clear element contents
+                            elem.clear()
+                            content_location = elem.getparent().makeelement('{%s}contentLocation' % DigitalObject.FOXML_NS,
+                                attrib={'REF': upload_id, 'TYPE': 'URL'})
+                            yield etree.tostring(content_location)
+
+                    elif elem.tag == '{%s}xmlContent' % DigitalObject.FOXML_NS:
+                        # serialize xml content unchanged, to avoid generating
+                        # xml content in a way that results in checksum mismatches
+                        if action == 'start':
+                            yield etree.tostring(elem)
+                        elif action == 'end':
+                            elem.clear()
+
+                    else:
+                        if elem.xpath('count(ancestor::foxml:xmlContent)',
+                                     namespaces={'foxml': DigitalObject.FOXML_NS}):
+                            # skip elements under xml content
+                            # - theoretically, clearing the xml element
+                            # should mean they don't get processed,
+                            # but in practice that seems not to be the case,
+                            # and clearing the node removes context that
+                            # makes it possible to determine if a node
+                            # is inside an xmlcontent block
+                            continue
+
+                        # if a node has children, handle differently
+                        if list(elem):
+                            output_copy = copy(elem)
+                            for child in output_copy.iterchildren():
+                                output_copy.remove(child)
+                            output = etree.tostring(output_copy)
+                            # generate start and end tags for this element
+                            start, end = output.split('</')
+                            end = '</%s' % end
+                            if action == 'start':
+                                # on start event, yield the open tag
+                                yield start
+                            if action == 'end':
+                                # on end event, yield the closetag
+                                yield end
+                        else:
+                            # otherwise (no child nodes), serialize the whole element
+                            if action == 'start':
+                                yield etree.tostring(elem)
+                                elem.clear()
+
+            # generator to read src repo request in chunks and stream
+            # to dest repo
+
+            def b64decode(content):
+                return binascii.a2b_base64(content)
+
+
+            def binary_data(sections, response):
+                print '*** binary data, %d sections' % len(sections)
+                # return a generator of data to be uploaded to fedora
+                found_end = False
+                size = 0
+                md5 = hashlib.md5()
+                for content in sections:
+                    if content == '</foxml:binaryContent>':
+                        print 'binary data method, found end of binary content'
+                        print 'total size %s md5 %s' % (size, md5.hexdigest())
+                        found_end = True
+                        break
+                    else:
+                        print 'decoding and yielding content'
+                        decoded_content = b64decode(content)
+                        md5.update(decoded_content)
+                        size += len(decoded_content)
+                        print 'decoded content = ', decoded_content
+                        yield decoded_content
+
+                # if end was not found in current chunk, get next chunk
+                # and keep going
+                if not found_end:
+                    print 'fixme end not found in current chunk'
+                    pass
+
+
+
+            def export_data():
+                size = 0
+                binary_content_in_progress = False
+                resp_content = response.iter_content(4096*1024)
+                for chunk in resp_content:
+                    size += len(chunk)
+                    print 'chunk, total size is %s' % size
+
+                    # check if this chunk includes a start or end binaryContent
+                    if bincontent_regex.search(chunk):
+                        # split into before/after binary content
+                        # could possibly contain multiple small binary
+                        # content sections in a single chunk
+                        subsections = bincontent_regex.split(chunk)
+
+                        print 'subsections'
+
+                        for i in range(len(subsections)):
+                            # debug preview of subsections
+                            print i, ' ', len(subsections[i]), ' ', subsections[i][:100]
+                        print 'end subsections'
+                        ds_size = 0
+                        md5sum = hashlib.md5()
+
+                        in_file = False
+                        for content in subsections:
+                            idx = subsections.index(content)
+                            if content == '<foxml:binaryContent>':
+                                print '** found binary content start'
+                                print subsections[idx-1][-200:]
+                                m = dsinfo_regex.search(subsections[idx-1][-200:])
+                                print m.groupdict()
+                                in_file = True
+                                data = binary_data(subsections[idx+1:], resp_content)
+                                print 'file data = ', ''.join(data)
+                                upload_id = dest_repo.api.upload(binary_data(subsections[idx+1:], response))
+                                print 'upload id is ', upload_id
+                                yield '<foxml:contentLocation REF="%s" TYPE="URL"/>' % upload_id
+
+                            elif content == '</foxml:binaryContent>':
+                                print 'found binary content end'
+                                in_file = False
+                                # print '** finished binary content, decoding and uploading'
+                                # # upload_id = dest_repo.api.upload(decoded_content)
+                                # print 'upload id is ', upload_id
+                                # yield '<foxml:contentLocation REF="%s" TYPE="URL"/>' % upload_id
+
+                                # in_file = False
+
+                            elif in_file:
+                                print 'section in file, ignoring'
+
+                            else:
+                                print 'yielding as is'
+                                # not start or end of binary content, and not
+                                # within a file, so yield as is (e.g., datastream tags
+                                # between small files)
+                                yield content
+
+
+                    # chunk without any binary content tags - yield normally
+                    else:
+                        yield chunk
+
+                    # error; ignoring for now
+                    # # update progressbar if we have one
+                    # if pbar:
+                    #     # progressbar doesn't like it when size exceeds maxval,
+                    #     # but we don't actually know maxval; adjust the maxval up
+                    #     # when necessary
+                    #     if pbar.maxval < size:
+                    #         pbar.maxval = size
+                    #     pbar.update(size)
+
+
+            with open('/tmp/foxml-export.xml', 'w') as testoutput:
+                for chunk in export_data():
+                    testoutput.write(chunk)
+
+            # raise Exception
+
+        except RequestFailed as err:
+            err_type = 'Error'
+            if isinstance(err, PermissionDenied):
+                err_type = 'Permission denied'
+            err_msg = unicode(err)
+            if '404' in err_msg:
+                err_msg = 'object not found'
+            print '%s exporting %s from %s: %s' % \
+                (err_type, pid, args.source, err_msg)
+
+            continue
+
+        dest_obj = dest_repo.get_object(pid)
+        if dest_obj.exists:
+            if cfg.has_option(args.dest, 'allow_overwrite') and \
+              cfg.getboolean(args.dest, 'allow_overwrite'):
+
+                print '%s already exists in %s, purging' % (pid, args.dest)
+                try:
+                    dest_repo.purge_object(pid)
+                except RequestFailed as err:
+                    err_type = 'Error'
+                    if isinstance(err, PermissionDenied):
+                        err_type = 'Permission denied'
+                    print '%s purging %s from %s: %s' % \
+                        (err_type, pid, args.dest, err)
+                    # if object exists and purge fails, go to next pid
+                    continue
+            else:
+                print '%s already exists in %s but overwrite is not allowed; skipping'\
+                    % (pid, args.dest)
+                continue
+
+        try:
+            if pbar:
+                pbar.start()
+
+
+            result = dest_repo.ingest(export_data())
+            if pbar:
+                pbar.finish()
+            print '%s copied' % result
+        except ChecksumMismatch:
+            # print 'ChecksumMismatch on %s, removing checksums for DC/RELS-EXT' % pid
+            print 'ChecksumMismatch on %s' % pid
+            # export_xml = load_xmlobject_from_string(export, FoxmlDigitalObject)
+            # for ds in export_xml.datastreams:
+            #     print ds.id
+            #     if ds.id in ['DC', 'RELS-EXT']:
+            #         for version in ds.versions:
+            #             del version.content_digest
+
+            # result = dest_repo.ingest(export_xml.serialize(pretty=True))
+            # print '%s copied' % result
+
+
+        except RequestFailed as err:
+            err_type = 'Error'
+            if isinstance(err, PermissionDenied):
+                err_type = 'Permission denied'
+            print '%s importing %s to %s: %s' % \
+                (err_type, pid, args.dest, err)
+
+            continue
+
+
+
+def humanize_file_size(size):
+    # human-readable file size from
+    # http://stackoverflow.com/questions/1094841/reusable-library-to-get-human-readable-version-of-file-size
+    size = abs(size)
+    if size == 0:
+        return "0B"
+    units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
+    p = math.floor(math.log(size, 2)/10)
+    return "%.2f%s" % (size/math.pow(1024, p), units[int(p)])
+
+
+class FileSizeCounter(Counter):
+    # file size counter widget for progressbar
+
+    def update(self, pbar):
+        return humanize_file_size(pbar.currval)
+
+# from http://stackoverflow.com/questions/12593576/adapt-an-iterator-to-behave-like-a-file-like-object-in-python
+import io
+class StringIteratorIO(io.TextIOBase):
+
+    def __init__(self, iter):
+        self._iter = iter
+        self._left = ''
+
+    def readable(self):
+        return True
+
+    def _read1(self, n=None):
+        while not self._left:
+            try:
+                self._left = next(self._iter)
+            except StopIteration:
+                break
+        ret = self._left[:n]
+        self._left = self._left[len(ret):]
+        return ret
+
+    def read(self, n=None):
+        l = []
+        if n is None or n < 0:
+            while True:
+                m = self._read1()
+                if not m:
+                    break
+                l.append(m)
+        else:
+            while n > 0:
+                m = self._read1(n)
+                if not m:
+                    break
+                n -= len(m)
+                l.append(m)
+        return ''.join(l)
+
+    def readline(self):
+        l = []
+        while True:
+            i = self._left.find('\n')
+            if i == -1:
+                l.append(self._left)
+                try:
+                    self._left = next(self._iter)
+                except StopIteration:
+                    self._left = ''
+                    break
+            else:
+                l.append(self._left[:i+1])
+                self._left = self._left[i+1:]
+                break
+        return ''.join(l)
+
+# base64 decode stream to stream
+# -- should be able to generate without intervening file-like objects
+# def decode(input, output):
+#     """Decode a file."""
+#     while True:
+#         line = input.readline()
+#         if not line:
+#             break
+#         s = binascii.a2b_base64(line)
+#         output.write(s)
+
+
+if __name__ == '__main__':
+    repo_copy()

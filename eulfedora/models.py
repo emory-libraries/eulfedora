@@ -2205,7 +2205,7 @@ class DigitalObjectSaveFailure(Exception):
     """
     def __init__(self, pid, failure, to_be_saved, saved, cleaned):
         self.obj_pid = pid
-        self.failure = failure
+        self.failure = force_text(failure)
         self.to_be_saved = to_be_saved
         self.saved = saved
         self.cleaned = cleaned

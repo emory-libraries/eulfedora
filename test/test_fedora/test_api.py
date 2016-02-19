@@ -698,7 +698,7 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
             upload_id = self.rest_api.upload(f)
         # current format looks like uploaded://####
         pattern = re.compile('uploaded://[0-9]+')
-        self.assert_(pattern.match(force_text(upload_id)))
+        self.assert_(pattern.match(upload_id))
         self.assertTrue(pattern.match(upload_id))
 
     def test_upload_generator(self):
@@ -714,13 +714,13 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
 
         upload_id = self.rest_api.upload(data_generator(), size=size, content_type='text/plain')
         pattern = re.compile('uploaded://[0-9]+')
-        self.assertTrue(pattern.match(force_text(upload_id)))
+        self.assertTrue(pattern.match(upload_id))
 
         # check that the *right* content was uploaded by adding
         # a datastream using the computed MD5 and generated upload id
         obj = load_fixture_data('basic-object.foxml')
         response = self.rest_api.ingest(obj)
-        pid = response.content
+        pid = response.text
         add_response = self.rest_api.addDatastream(pid, 'text', controlGroup='M',
             dsLocation=upload_id, mimeType='text/plain',
             checksumType='MD5', checksum=content_md5)

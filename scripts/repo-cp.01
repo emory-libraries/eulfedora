@@ -1,0 +1,487 @@
+#!/usr/bin/env python
+
+# file scripts/repo-cp
+#
+#   Copyright 2015 Emory University Libraries & IT Services
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+
+
+import argparse
+from copy import copy
+import ConfigParser
+from lxml import etree
+import math
+import os
+
+from eulxml.xmlmap import load_xmlobject_from_string
+from eulfedora.server import Repository
+from eulfedora.models import DigitalObject
+from eulfedora.util import ChecksumMismatch, PermissionDenied, \
+    RequestFailed
+from eulfedora.xml import FoxmlDigitalObject
+
+try:
+    from progressbar import ProgressBar, Bar, Counter, ETA, \
+        FileTransferSpeed, Percentage, \
+        RotatingMarker, SimpleProgress, Timer
+except ImportError:
+    ProgressBar = None
+
+
+
+def repo_copy():
+
+    parser = argparse.ArgumentParser()
+
+    # config file options
+    cfg_args = parser.add_argument_group('Config file options')
+    cfg_args.add_argument('--config', '-c',
+        default='$HOME/.repocpcfg',
+        help='Load the specified config file (default: %(default)s')
+
+    cfg_args.add_argument('source',
+        help='Source repository for content to be copied')
+    cfg_args.add_argument('dest',
+        help='Destination repository for content to be copied')
+
+    # list of pids
+    parser.add_argument('pids', metavar='PID', nargs='*',
+        help='list of pids to copy')
+    parser.add_argument('--file', '-f',
+        help='Input file with a list of pids, one pid per line',
+        required=False)
+    parser.add_argument('--export-format', '-e',
+        choices=['migrate', 'archive'], default='migrate',
+        help='Fedora export format to use.  Use archive if migrate exports ' \
+           + 'fail with checksum errors or if content URLs are not accessible '
+           + 'to the destination server (default: %(default)s')
+
+    args = parser.parse_args()
+
+    cfg = ConfigParser.ConfigParser()
+    configfile_path = args.config.replace('$HOME', os.environ['HOME'])
+    with open(configfile_path) as cfgfile:
+            cfg.readfp(cfgfile)
+
+    if not cfg.has_section(args.source):
+        print 'Source repository %s is not configured' % args.source
+        return
+    if not cfg.has_section(args.dest):
+        print 'Destination repository %s is not configured' % args.dest
+        return
+
+    src_repo = Repository(cfg.get(args.source, 'fedora_root'),
+        cfg.get(args.source, 'fedora_user'),
+        cfg.get(args.source, 'fedora_password'))
+
+    dest_repo = Repository(cfg.get(args.dest, 'fedora_root'),
+        cfg.get(args.dest, 'fedora_user'),
+        cfg.get(args.dest, 'fedora_password'))
+
+    if ProgressBar:
+        widgets = ['Transferred: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
+                   Timer(format='%s')] # time only, no label like "elapsed time: 00:00"
+    else:
+        pbar = None
+
+    pids = []
+    if args.pids:
+        pids = args.pids
+    elif args.file:
+        with open(args.file) as pidlistfile:
+            pids = pidlistfile.read().splitlines()
+    else:
+        print 'Specify either one or more pids or a file with a list of pids'
+        parser.print_help()
+        return
+
+    for pid in pids:
+        try:
+            src_obj = src_repo.get_object(pid)
+            # size estimate / progress bar only relevant to archive exports
+            if args.export_format == 'archive':
+                # calculate rough estimate of object size
+                size_estimate = 250000   # start rough estimate for foxml size
+                for ds in src_obj.ds_list:
+                    dsobj = src_obj.getDatastreamObject(ds)
+                    for version in dsobj.history().versions:
+                        size_estimate += version.size
+                    # TODO: adjust managed datastream sizes to account
+                    # for size-increase caused by base64 encoding
+
+                if ProgressBar:
+                    # create a new progress bar with current pid and size
+                    current_widgets = [pid,
+                        ' Estimated size: %s || ' % humanize_file_size(size_estimate)]
+                    current_widgets += widgets
+                    pbar = ProgressBar(widgets=current_widgets, maxval=size_estimate)
+
+            response = src_repo.api.export(pid, context=args.export_format, stream=True)
+
+
+            FOXML_NS = 'info:fedora/fedora-system:def/foxml#'
+            # context = etree.iterparse(response.raw, events=("start", ),
+            #     tag='{%s}binaryContent' % FOXML_NS)
+            context = etree.iterparse(response.raw, events=("start", "end"),
+                huge_tree=True)
+            import hashlib
+
+            def export_data():
+                # foxml:binaryContent
+                for action, elem in context:
+                    # print 'action = %s, elem = %s' % (action, elem)
+                    if elem.tag == '{%s}contentDigest' % FOXML_NS:
+                        if action == 'start':
+                            # hack to test
+                            # if elem.getparent().get('ID') == 'PDF.0':
+                            #     # skip this one, because the checksum doesn't
+                            #     # match the decoded data
+                            #     continue
+                            print elem.getparent().get('ID')
+                            print elem.get('TYPE'), elem.get('DIGEST')
+                    if elem.tag == '{%s}binaryContent' % FOXML_NS:
+                        if action == 'end':
+                            print elem.getparent().get('ID')
+
+                            # encoded_content = IterStringIO(elem.itertext())
+                            import base64
+                            print elem.text[-20:]
+
+                            # # decoded_content = base64.b64decode(elem.text.replace(" ", ""))
+                            # try:
+                            # # decoded_content = base64.b64decode(re.sub(r"\s+", "", txt, flags=re.UNICODE))
+                            #     decoded_content = base64_decode_autopad(elem.text)
+                            #     # decoded_content = base64_decode_autopad(re.sub(pattern, elem.text, ''))
+                            #     # if elem.getparent().get('ID') != 'source-image.0':
+                            #     #     print 'decoded content'
+                            #     #     print decoded_content
+                            # except TypeError:
+                            #     print 'b64 decode failed on ', elem.getparent().get('ID')
+                            #     yield etree.tostring(elem)
+                            #     next
+
+
+                            # upload_id = dest_repo.api.upload(decoded_content)
+                            encoded_content = StringIteratorIO(elem.itertext())
+                            import base64
+                            from cStringIO import StringIO
+                            decoded_content = StringIO()
+
+                            # print 'encoded content '
+                            base64.decode(encoded_content, decoded_content)
+                            # print 'decoded content'
+                            # print decoded_content.getvalue()
+                            m = hashlib.md5()
+                            m.update(decoded_content.getvalue())
+                            # FIXME: decoded PDF has different MD5!!!!
+                            # what's going on here?
+
+                            # TODO: pull out export/base64 logic
+                            # get archive, save to file, md5, compare
+                            # to original
+
+                            print m.hexdigest()
+                            upload_id = dest_repo.api.upload(decoded_content)
+                            print 'upload id = ', upload_id
+                            # clear element contents
+                            elem.clear()
+                            # E = ElementMaker(namespace=DigitalObject.FOXML_NS,
+                            #     nsmap={'foxml': DigitalObject.FOXML_NS})
+                            content_location = elem.getparent().makeelement('{%s}contentLocation' % DigitalObject.FOXML_NS,
+                                attrib={'REF': upload_id, 'TYPE': 'URL'})
+                            # print 'content location', content_location
+                            yield etree.tostring(content_location)
+                            # content_location = E('contentLocation')
+                            # content_location.set('REF', upload_id)
+                            # content_location.set('TYPE', 'URI')
+                             # <foxml:contentLocation REF="demo:999+DRAWING-BETTER+DRAWING-BETTER.0" TYPE="INTERNAL_ID"/>
+                            # elem.getparent().replace(elem, content_location)
+                            # yield etree.tostring(content_location)
+
+                    elif elem.tag == '{%s}xmlContent' % DigitalObject.FOXML_NS:
+
+                        if action == 'start':
+                            # print 'yielding xmlContent ', elem
+                            yield etree.tostring(elem)
+                            # elem.clear()
+                            # elem.getparent().remove(elem)
+                        elif action == 'end':
+                            elem.clear()
+
+                    else:
+                        # print 'xmlcontent ancestor = ', elem.xpath('count(ancestor::foxml:xmlContent)',
+                                                                 # namespaces={'foxml': DigitalObject.FOXML_NS})
+                        if elem.xpath('count(ancestor::foxml:xmlContent)',
+                                     namespaces={'foxml': DigitalObject.FOXML_NS}):
+                            # print '*** elem %s is under xmlcontent, skipping'
+                            continue
+
+                        # if has children, handle differently
+                        if list(elem):
+                            output_copy = copy(elem)
+                            for child in output_copy.iterchildren():
+                                output_copy.remove(child)
+                            output = etree.tostring(output_copy)
+                            # print 'output = ', output
+                            start, end = output.split('</')
+                            end = '</%s' % end
+                            # print 'start = ', start
+                            # print 'end = ', end
+                            if action == 'start':
+                                yield start
+                            if action == 'end':
+                                yield end
+                        else:
+                            if action == 'start':
+                                yield etree.tostring(elem)
+                                elem.clear()
+
+            # with open('/tmp/export-foxml.xml', 'w') as tmpfile:
+            #     for chunk in export_data():
+            #         tmpfile.write(chunk)
+
+            # raise Exception
+
+            # generator to read src repo request in chunks and stream
+            # to dest repo
+<<<<<<< HEAD
+            # def export_data():
+            #     size = 0
+            #     for chunk in response.iter_content(4096*1024):
+            #         size += len(chunk)
+            #         # update progressbar if we have one
+            #         if pbar:
+            #             # progressbar doesn't like it when size exceeds maxval,
+            #             # but we don't actually know maxval; adjust the maxval up
+            #             # when necessary
+            #             if pbar.maxval < size:
+            #                 pbar.maxval = size
+            #             pbar.update(size)
+            #         yield chunk
+=======
+            def export_data():
+                size = 0
+                for chunk in response.iter_content(4096*1024):
+                    size += len(chunk)
+                    # update progressbar if we have one & export format is archive
+                    if pbar and args.export_format == 'archive':
+                        # progressbar doesn't like it when size exceeds maxval,
+                        # but we don't actually know maxval; adjust the maxval up
+                        # when necessary
+                        if pbar.maxval < size:
+                            pbar.maxval = size
+                        pbar.update(size)
+                    yield chunk
+>>>>>>> develop
+
+        except RequestFailed as err:
+            err_type = 'Error'
+            if isinstance(err, PermissionDenied):
+                err_type = 'Permission denied'
+            err_msg = unicode(err)
+            if '404' in err_msg:
+                err_msg = 'object not found'
+            print '%s exporting %s from %s: %s' % \
+                (err_type, pid, args.source, err_msg)
+
+            continue
+
+        dest_obj = dest_repo.get_object(pid)
+        if dest_obj.exists:
+            if cfg.has_option(args.dest, 'allow_overwrite') and \
+              cfg.getboolean(args.dest, 'allow_overwrite'):
+
+                print '%s already exists in %s, purging' % (pid, args.dest)
+                try:
+                    dest_repo.purge_object(pid)
+                except RequestFailed as err:
+                    err_type = 'Error'
+                    if isinstance(err, PermissionDenied):
+                        err_type = 'Permission denied'
+                    print '%s purging %s from %s: %s' % \
+                        (err_type, pid, args.dest, err)
+                    # if object exists and purge fails, go to next pid
+                    continue
+            else:
+                print '%s already exists in %s but overwrite is not allowed; skipping'\
+                    % (pid, args.dest)
+                continue
+
+        try:
+            if pbar:
+                pbar.start()
+
+
+            result = dest_repo.ingest(export_data())
+            if pbar:
+                pbar.finish()
+            print '%s copied' % result
+        except ChecksumMismatch:
+            # print 'ChecksumMismatch on %s, removing checksums for DC/RELS-EXT' % pid
+            print 'ChecksumMismatch on %s' % pid
+            # export_xml = load_xmlobject_from_string(export, FoxmlDigitalObject)
+            # for ds in export_xml.datastreams:
+            #     print ds.id
+            #     if ds.id in ['DC', 'RELS-EXT']:
+            #         for version in ds.versions:
+            #             del version.content_digest
+
+            # result = dest_repo.ingest(export_xml.serialize(pretty=True))
+            # print '%s copied' % result
+
+
+        except RequestFailed as err:
+            err_type = 'Error'
+            if isinstance(err, PermissionDenied):
+                err_type = 'Permission denied'
+            print '%s importing %s to %s: %s' % \
+                (err_type, pid, args.dest, err)
+
+            continue
+
+
+
+def humanize_file_size(size):
+    # human-readable file size from
+    # http://stackoverflow.com/questions/1094841/reusable-library-to-get-human-readable-version-of-file-size
+    size = abs(size)
+    if size == 0:
+        return "0B"
+    units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
+    p = math.floor(math.log(size, 2)/10)
+    return "%.2f%s" % (size/math.pow(1024, p), units[int(p)])
+
+
+class FileSizeCounter(Counter):
+    # file size counter widget for progressbar
+
+    def update(self, pbar):
+        return humanize_file_size(pbar.currval)
+
+
+import io
+class StringIteratorIO(io.TextIOBase):
+
+    def __init__(self, iter):
+        self._iter = iter
+        self._left = ''
+
+    def readable(self):
+        return True
+
+    def _read1(self, n=None):
+        while not self._left:
+            try:
+                self._left = next(self._iter)
+            except StopIteration:
+                break
+        ret = self._left[:n]
+        self._left = self._left[len(ret):]
+        return ret
+
+    def read(self, n=None):
+        l = []
+        if n is None or n < 0:
+            while True:
+                m = self._read1()
+                if not m:
+                    break
+                l.append(m)
+        else:
+            while n > 0:
+                m = self._read1(n)
+                if not m:
+                    break
+                n -= len(m)
+                l.append(m)
+        return ''.join(l)
+
+    def readline(self):
+        l = []
+        while True:
+            i = self._left.find('\n')
+            if i == -1:
+                l.append(self._left)
+                try:
+                    self._left = next(self._iter)
+                except StopIteration:
+                    self._left = ''
+                    break
+            else:
+                l.append(self._left[:i+1])
+                self._left = self._left[i+1:]
+                break
+        return ''.join(l)
+
+import itertools as it
+from io import TextIOBase
+
+
+# base64 decode stream to stream
+# def decode(input, output):
+#     """Decode a file."""
+#     while True:
+#         line = input.readline()
+#         if not line:
+#             break
+#         s = binascii.a2b_base64(line)
+#         output.write(s)
+
+
+
+# thanks to http://stackoverflow.com/questions/12593576/adapt-an-iterator-to-behave-like-a-file-like-object-in-python
+class IterStringIO(TextIOBase):
+    def __init__(self, iterable=None):
+        iterable = iterable or []
+        self.iter = it.chain.from_iterable(iterable)
+
+    def not_newline(self, s):
+        return s not in {'\n', '\r', '\r\n'}
+
+    # def write(self, iterable):
+    #     to_chain = it.chain.from_iterable(iterable)
+    #     self.iter = it.chain.from_iterable([self.iter, to_chain])
+
+    def read(self, n=None):
+        return bytearray(it.islice(self.iter, None, n))
+
+    def readline(self, n=None):
+        to_read = it.takewhile(self.not_newline, self.iter)
+        return bytearray(it.islice(to_read, None, n))
+
+# http://stackoverflow.com/questions/2941995/python-ignore-incorrect-padding-error-when-base64-decoding
+def base64_decode_autopad(s):
+    """Add missing padding to string and return the decoded base64 string."""
+    print 'len = ', len(s)
+    s = str(s).strip()
+    print 'len = ', len(s)
+    import base64
+    try:
+        return base64.b64decode(s)
+    except TypeError:
+        padding = len(s) % 4
+        print 'padding = ', padding
+        if padding == 1:
+            print "ERR Invalid base64 string"
+            # print "ERR Invalid base64 string: {}".format(s)
+            return ''
+        elif padding == 2:
+            s += b'=='
+        elif padding == 3:
+            s += b'='
+        return base64.b64decode(s)
+
+if __name__ == '__main__':
+    repo_copy()

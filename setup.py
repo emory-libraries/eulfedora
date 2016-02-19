@@ -47,12 +47,12 @@ dev_requirements = [
     'sphinx',
     'nose',
     'coverage',
-    'Django',
+    'Django<1.9',
     'mock',
     'unittest2',
     'pyPdf',
     'tox',
-    'progressbar'
+    'progressbar2'
 ]
 
 if sys.version_info < (3, 0):

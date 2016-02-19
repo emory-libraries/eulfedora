@@ -72,9 +72,9 @@ class RequestFailed(IOError):
         #  response = HttpResponse with the error information
         #  content = optional content of the response body, if it needed to be read
         #            to determine what kind of exception to raise
-        super(RequestFailed, self).__init__('%d %s' % (response.status_code, response.content))
+        super(RequestFailed, self).__init__('%d %s' % (response.status_code, response.text))
         self.code = response.status_code
-        self.reason = response.content
+        self.reason = response.text
         if response.status_code == requests.codes.server_error:
             # grab the response content if not passed in
             if content is None:
@@ -160,8 +160,8 @@ def file_md5sum(filename):
     # duplicated from keep.common.utils
     # possibly at some point this should be moved to a common codebase/library
     md5 = hashlib.md5()
-    with open(filename,'rb') as f:
-        for chunk in iter(lambda: f.read(128 * md5.block_size), ''):
+    with open(filename, 'rb') as filedata:
+        for chunk in iter(lambda: filedata.read(128 * md5.block_size), b''):
             md5.update(chunk)
     return md5.hexdigest()
 
@@ -172,20 +172,21 @@ def md5sum(content):
     :returns: hex-digest formatted MD5 checksum as a string
     '''
     md5 = hashlib.md5()
-    md5.update(content)
+    md5.update(force_bytes(content))
     return md5.hexdigest()
 
 
 class ReadableIterator(object):
     '''Adaptor to allow an iterable with known size to be treated like
     a file-like object so it can be uploaded via requests/requests-toolbelt.
+    Expects data as bytes, not string data.
     '''
     # adapted from "some_magic_adaptor" here:
     # http://stackoverflow.com/questions/12593576/adapt-an-iterator-to-behave-like-a-file-like-object-in-python
 
     def __init__(self, iterable, size):
         self.iterable = iterable
-        self.next_chunk = ""
+        self.next_chunk = b''
         self.size = size
         self.amount_read = 0
 
@@ -197,7 +198,7 @@ class ReadableIterator(object):
         return self.size - self.amount_read
 
     def grow_chunk(self):
-        self.next_chunk = self.next_chunk + self.iterable.next()
+        self.next_chunk = self.next_chunk + force_bytes(six.next(self.iterable))
 
     def read(self, size):
         if self.next_chunk == None:

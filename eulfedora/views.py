@@ -164,7 +164,7 @@ def _raw_datastream(request, pid, dsid, repo=None, headers=None,
     if 'ETag' in resp_headers:
         resp_headers['Content-MD5'] = resp_headers['ETag']
 
-    for header, value in resp_headers.iteritems():
+    for header, value in six.iteritems(resp_headers):
         dj_response[header] = value
 
     return dj_response

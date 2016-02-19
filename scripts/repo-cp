@@ -20,8 +20,7 @@ import argparse
 import base64
 import binascii
 from copy import copy
-from cStringIO import StringIO
-import ConfigParser
+from six.moves import configparser
 import hashlib
 from lxml import etree
 import math
@@ -86,16 +85,16 @@ def repo_copy():
         help='Use archive-xml export format (equivalent to --export-format archive-xml)')
     args = parser.parse_args()
 
-    cfg = ConfigParser.ConfigParser()
+    cfg = configparser.ConfigParser()
     configfile_path = args.config.replace('$HOME', os.environ['HOME'])
     with open(configfile_path) as cfgfile:
             cfg.readfp(cfgfile)
 
     if not cfg.has_section(args.source):
-        print 'Source repository %s is not configured' % args.source
+        print('Source repository %s is not configured' % args.source)
         return
     if not cfg.has_section(args.dest):
-        print 'Destination repository %s is not configured' % args.dest
+        print('Destination repository %s is not configured' % args.dest)
         return
 
     src_repo = Repository(cfg.get(args.source, 'fedora_root'),
@@ -113,7 +112,7 @@ def repo_copy():
         with open(args.file) as pidlistfile:
             pids = pidlistfile.read().splitlines()
     else:
-        print 'Specify either one or more pids or a file with a list of pids'
+        print('Specify either one or more pids or a file with a list of pids')
         parser.print_help()
         return
 
@@ -127,16 +126,16 @@ def repo_copy():
             result = sync_object(src_obj, dest_repo, export_context=args.export_format,
                 overwrite=allow_overwrite, show_progress=args.progress,
                 requires_auth=args.requires_auth)
-            print '%s copied' % result
+            print('%s copied' % result)
         except ChecksumMismatch:
-            print 'ChecksumMismatch on %s' % pid
+            print('ChecksumMismatch on %s' % pid)
 
         except RequestFailed as err:
             err_type = 'Error'
             if isinstance(err, PermissionDenied):
                 err_type = 'Permission denied'
-            print '%s importing %s to %s: %s' % \
-                (err_type, pid, args.dest, err)
+            print('%s importing %s to %s: %s' % \
+                (err_type, pid, args.dest, err))
 
 
 

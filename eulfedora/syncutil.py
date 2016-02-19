@@ -16,19 +16,20 @@
 
 
 import binascii
-import cStringIO
 import hashlib
+import io
 import logging
 import math
 import re
-from urlparse import urlparse
+import six
+from six.moves.urllib.parse import urlparse
 
 try:
-    from progressbar import ProgressBar, Bar, Counter, ETA, \
-        FileTransferSpeed, Percentage, \
-        RotatingMarker, SimpleProgress, Timer
+    import progressbar
 except ImportError:
-    ProgressBar = None
+    progressbar = None
+
+from eulfedora.util import force_bytes, force_text
 
 
 logger = logging.getLogger(__name__)
@@ -64,23 +65,28 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
     # NOTE: currently exceptions are expected to be handled by the
     # calling method; see repo-cp script for an example
 
-    if show_progress and ProgressBar:
+    if show_progress and progressbar:
         # calculate rough estimate of object size
         size_estimate = estimate_object_size(src_obj,
             archive=(export_context in ['archive', 'archive-xml']))
         # create a new progress bar with current pid and size
         widgets = [src_obj.pid,
             ' Estimated size: %s // ' % humanize_file_size(size_estimate),
-            'Read: ', FileSizeCounter(), ' ', FileTransferSpeed(), ' ',
-            '| Uploaded: ', FileSizeCounter('upload'), ' // ',
+            'Read: ', progressbar.widgets.DataSize(), ' ',
+            progressbar.widgets.AdaptiveTransferSpeed(), ' ',
+            '| Uploaded: ', progressbar.widgets.DataSize(value='upload'), ' // ',
             # FileTransferSpeed('upload'), currently no way to track upload speed...
-             Timer(), ' | ', ETA()
+             progressbar.widgets.Timer(), ' | ', progressbar.widgets.AdaptiveETA()
             ]
 
-        class DownUpProgressBar(ProgressBar):
+        class DownUpProgressBar(progressbar.ProgressBar):
             upload = 0
+            def data(self):
+                data = super(DownUpProgressBar, self).data()
+                data['upload'] = self.upload
+                return data
 
-        pbar = DownUpProgressBar(widgets=widgets, maxval=size_estimate)
+        pbar = DownUpProgressBar(widgets=widgets, max_value=size_estimate)
     else:
         pbar = None
 
@@ -94,7 +100,9 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
         export = ArchiveExport(src_obj, dest_repo,
             progress_bar=pbar, requires_auth=requires_auth,
             xml_only=(export_context == 'archive-xml'))
-        export_data = export.object_data()
+        # NOTE: should be possible to pass BytesIO to be read, but that is failing
+        export_data = export.object_data().getvalue()
+
     else:
         raise Exception('Unsupported export context %s', export_context)
 
@@ -109,13 +117,13 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
     result = dest_repo.ingest(export_data)
     if pbar:
         pbar.finish()
-    return result
+    return force_text(result)
 
 ## constants for binary content end and start
 #: foxml binary content start tag
-BINARY_CONTENT_START = '<foxml:binaryContent>'
+BINARY_CONTENT_START = b'<foxml:binaryContent>'
 #: foxml binary content end tag
-BINARY_CONTENT_END = '</foxml:binaryContent>'
+BINARY_CONTENT_END = b'</foxml:binaryContent>'
 
 
 class ArchiveExport(object):
@@ -166,7 +174,7 @@ class ArchiveExport(object):
             self.url_credentials = '%s:%s@' % (obj.api.username, obj.api.password)
 
         self.processed_size = 0
-        self.foxml_buffer = cStringIO.StringIO()
+        self.foxml_buffer = io.BytesIO()
         self.within_file = False
 
     _export_response = None
@@ -187,7 +195,7 @@ class ArchiveExport(object):
     partial_chunk = False
     section_start_idx = None
     end_of_last_chunk = None
-    _chunk_leftover = ''
+    _chunk_leftover = b''
 
     def get_next_chunk(self):
         self.partial_chunk = False
@@ -197,7 +205,7 @@ class ArchiveExport(object):
         if self._current_chunk is not None:
             self.end_of_last_chunk = self._current_chunk[-200:]
 
-        self._current_chunk = self._chunk_leftover + self._iter_content.next()
+        self._current_chunk = self._chunk_leftover + six.next(self._iter_content)
 
         # check if chunk ends with a partial binary content tag
         len_to_save = (endswith_partial(self._current_chunk, BINARY_CONTENT_START) \
@@ -207,10 +215,9 @@ class ArchiveExport(object):
             self._chunk_leftover = self._current_chunk[-len_to_save:]
             self._current_chunk = self._current_chunk[:-len_to_save]
         else:
-            self._chunk_leftover = ''
+            self._chunk_leftover = b''
 
         return self._current_chunk
-
 
     _current_sections = None
     def get_next_section(self):
@@ -248,7 +255,7 @@ class ArchiveExport(object):
         if len(dsinfo) < 250 and self.end_of_last_chunk is not None:
             dsinfo = self.end_of_last_chunk + dsinfo
 
-        infomatch = self.dsinfo_regex.search(dsinfo)
+        infomatch = self.dsinfo_regex.search(force_text(dsinfo))
         if infomatch:
             return infomatch.groupdict()
 
@@ -259,8 +266,8 @@ class ArchiveExport(object):
             # progressbar doesn't like it when size exceeds maxval,
             # but we don't actually know maxval; adjust the maxval up
             # when necessary
-            if self.progress_bar.maxval < self.processed_size:
-                self.progress_bar.maxval = self.processed_size
+            if self.progress_bar.max_value < self.processed_size:
+                self.progress_bar.max_value = self.processed_size
             self.progress_bar.update(self.processed_size)
 
 
@@ -268,10 +275,10 @@ class ArchiveExport(object):
         '''Process the archival export and return a buffer with foxml
         content for ingest into the destination repository.
 
-        :returns: :class:`cStringIO.StringIO` for ingest, with references
+        :returns: :class:`io.BytesIO` for ingest, with references
             to uploaded datastream content or content location urls
         '''
-        self.foxml_buffer = cStringIO.StringIO()
+        self.foxml_buffer = io.BytesIO()
 
         if self.progress_bar:
             self.progress_bar.start()
@@ -329,12 +336,12 @@ class ArchiveExport(object):
                             self.progress_bar.upload = monitor.bytes_read
                         upload_args = {'callback': upload_callback}
 
-                    # use upload id as concent location
+                    # use upload id as content location
                     content_location = self.dest_repo.api.upload(self.encoded_datastream(),
                         size=int(dsinfo['size']), **upload_args)
 
-                self.foxml_buffer.write('<foxml:contentLocation REF="%s" TYPE="URL"/>' \
-                    % content_location)
+                self.foxml_buffer.write(force_bytes('<foxml:contentLocation REF="%s" TYPE="URL"/>' \
+                    % content_location))
 
             elif section == BINARY_CONTENT_END:
                 # should not occur here; this section will be processed by
@@ -396,7 +403,7 @@ class ArchiveExport(object):
                 # if there was leftover binary content from the last chunk,
                 # add it to the content now
                 if leftover is not None:
-                    content = ''.join([leftover, content])
+                    content = b''.join([leftover, content])
                     leftover = None
 
                 try:
@@ -405,9 +412,9 @@ class ArchiveExport(object):
                 except binascii.Error:
                     # decoding can fail with a padding error when
                     # a line of encoded content runs across a read chunk
-                    lines = content.split('\n')
+                    lines = content.split(b'\n')
                     # decode and yield all but the last line of encoded content
-                    decoded_content = binascii.a2b_base64(''.join(lines[:-1]))
+                    decoded_content = binascii.a2b_base64(b''.join(lines[:-1]))
                     # store the leftover to be decoded with the next chunk
                     leftover = lines[-1]
 
@@ -434,13 +441,13 @@ def binarycontent_sections(chunk):
         # split on common portion of foxml:binaryContent
         sections = chunk.split(binary_content_tag)
         for sec in sections:
-            extra = ''
+            extra = b''
             # check the end of the section to determine start/end tag
-            if sec.endswith('</'):
+            if sec.endswith(b'</'):
                 extra = sec[-2:]
                 yield sec[:-2]
 
-            elif sec.endswith('<'):
+            elif sec.endswith(b'<'):
                 extra = sec[-1:]
                 yield sec[:-1]
 
@@ -450,7 +457,7 @@ def binarycontent_sections(chunk):
             if extra:
                 # yield the actual binary content tag
                 # (delimiter removed by split, but needed for processing)
-                yield ''.join([extra, binary_content_tag])
+                yield b''.join([extra, binary_content_tag])
 
 
 def estimate_object_size(obj, archive=True):
@@ -500,16 +507,4 @@ def endswith_partial(text, partial_str):
             return len(test_str)
         test_str = test_str[:-1]
     return False
-
-
-if ProgressBar:
-    class FileSizeCounter(Counter):
-        # file size counter widget for progressbar
-
-        def __init__(self, val='currval'):
-            self.val = val
-
-        def update(self, pbar):
-            return humanize_file_size(getattr(pbar, self.val))
-
 

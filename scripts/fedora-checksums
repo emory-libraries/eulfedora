@@ -27,8 +27,9 @@ from eulfedora.server import Repository
 from eulfedora.rdfns import model as modelns
 from getpass import getpass
 import os
-from Queue import Queue, Empty as EmptyQueue
 import signal
+import six
+from six.moves.queue import Queue, Empty as EmptyQueue
 import sys
 import threading
 from time import sleep
@@ -123,13 +124,16 @@ class FedoraChecksums(object):
         self.config_arg_parser()
         self.args = self.parser.parse_args()
 
+        if not self.args.mode:
+            self.parser.print_help()
+            return
 
         # if in validation mode and csv-file is specified, open the
         # file and write the header row
         if self.args.mode == 'validate' and self.args.csv_file:
             # TODO: error handling for file open/write failure
             self.csv_file = open(self.args.csv_file, 'wb')
-            self.csv = csv.writer(self.csv_file,  quoting=csv.QUOTE_ALL)
+            self.csv = csv.writer(self.csv_file, quoting=csv.QUOTE_ALL)
             self.csv.writerow(['pid', 'datastream id', 'date created', 'status',
                                'mimetype', 'versioned', 'control group', 'content models'])
 
@@ -149,7 +153,7 @@ class FedoraChecksums(object):
                                   if line.strip() != '' and not line.startswith('#')])
         else:
             # otherwise, process all find-able objects
-            object_pids = list(repo.risearch.get_subjects(modelns.hasModel , self.object_model))
+            object_pids = list(repo.risearch.get_subjects(modelns.hasModel, self.object_model))
 
         # initalize progress bar
         pid_pbar = None
@@ -191,12 +195,12 @@ class FedoraChecksums(object):
         for pid in object_pids:
             obj = repo.get_object(pid=pid)
             if not obj.exists:
-                print "Error: %s does not exist or is inaccessible" % pid
+                print("Error: %s does not exist or is inaccessible" % pid)
                 continue
 
             self.queued[obj.pid] = 0
 
-            for dsid in obj.ds_list.iterkeys():
+            for dsid in six.iterkeys(obj.ds_list):
                 dsobj = obj.getDatastreamObject(dsid)
                 self.stats['ds'] += 1
 
@@ -254,7 +258,7 @@ class FedoraChecksums(object):
                     self.queued[pid] += 1
                     self.stats['ds_versions'] += 1
             except Exception as e:
-                print "error getting history for %s %r" % (pid, e)
+                print("error getting history for %s %r" % (pid, e))
 
         else:
             # current version only
@@ -267,10 +271,10 @@ class FedoraChecksums(object):
         totals = '\nTested %(objects)d object(s), %(ds)d datastream(s)' % self.stats
         if self.args.all_versions:
             totals += ', %(ds_versions)d datastream version(s)' % self.stats
-        print totals
+        print(totals)
         if not self.args.missing_only:
-            print '%(invalid)d invalid checksum(s)' % self.stats
-        print '%(missing)d datastream(s) with no checksum' % self.stats
+            print('%(invalid)d invalid checksum(s)' % self.stats)
+        print('%(missing)d datastream(s) with no checksum' % self.stats)
 
     def queue_repair(self, dsobj):
         '''Add information to the ``to-do`` queue for datastream
@@ -299,17 +303,17 @@ class FedoraChecksums(object):
                 if saved:
                     self.stats['ds_updated'] += 1
             except Exception as e:
-                print 'Error saving %s/%s : %s' % \
-                      (dsobj.obj.pid, dsobj.id, e)
+                print('Error saving %s/%s : %s' % \
+                      (dsobj.obj.pid, dsobj.id, e))
                 self.stats['ds_err'] += 1
 
     def repair_summary(self):
         '''Summarize what was done when the script was run in
         **repair** mode.'''
-        print '\nChecked %(objects)d object(s), updated %(ds_updated)d datastream(s)' % \
-              self.stats
+        print('\nChecked %(objects)d object(s), updated %(ds_updated)d datastream(s)' % \
+              self.stats)
         if self.stats['ds_err']:
-            print 'Error saving %(ds_err)d datastream(s)' % self.stats
+            print('Error saving %(ds_err)d datastream(s)' % self.stats)
 
     def interrupt_handler(self, signum, frame):
         '''Gracefully handle a SIGINT, if possible. Sets a flag so main script
@@ -322,8 +326,8 @@ class FedoraChecksums(object):
             # set interrupt flag so main loop knows to quit at a reasonable time
             self.interrupted = True
             # report if script is in the middle of an object
-            print 'Script will exit after processing the current object.'
-            print '(Ctrl-C / Interrupt again to quit immediately)'
+            print('Script will exit after processing the current object.' + \
+                 '\n(Ctrl-C / Interrupt again to quit immediately)')
 
 class DatastreamWorker(threading.Thread):
     '''Thread class with common logic for processing items in the
@@ -454,7 +458,7 @@ class ValidationWorker(DatastreamWorker):
                 status = 'ok'
         except Exception as e:
             status = 'error'
-            print "error validating checksum %s %s %r" % (pid, dsid, e)
+            print("error validating checksum %s %s %r" % (pid, dsid, e))
 
         return ValidationResult(pid, dsid, date or dsobj.created, status,
                                 dsobj.mimetype, dsobj.versionable,
@@ -468,7 +472,7 @@ class ValidationReporter(Reporter):
 
         if not result.valid:
             if not self.quiet:
-                print result.msg()
+                print(result.msg())
         # output to csv if requested and result is invalid or all output requested
         if self.csv and not result.valid or self.options.csv_all:
             self.csv.writerow(result.csv_data())
@@ -525,7 +529,7 @@ class RepairReporter(Reporter):
         if result.saved:
             self.stats['ds_updated'] += 1
         if result.error:
-            print result.error
+            print(result.error)
             self.stats['ds_err'] += 1
 
 

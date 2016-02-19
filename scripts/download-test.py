@@ -9,12 +9,12 @@ import argparse
 import base64
 import os
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
-from progressbar import ProgressBar, Percentage, Bar, RotatingMarker, ETA, \
-    FileTransferSpeed, AnimatedMarker
+import progressbar
 import pycurl
 import tempfile
 
 from eulfedora.server import Repository
+from eulfedora.util import force_bytes, force_text
 from test import testsettings
 
 
@@ -25,16 +25,17 @@ def download_file(pid, dsid):
     obj = repo.get_object(pid)
     ds = obj.getDatastreamObject(dsid)
 
-    widgets = ['Download: ', Percentage(), ' ', Bar(),
-               ' ', ETA(), ' ', FileTransferSpeed()]
+    widgets = ['Download: ', progressbar.widgets.Percentage(), ' ',
+               progressbar.widgets.Bar(), ' ', progressbar.widgets.ETA(),
+               ' ', progressbar.widgets.FileTransferSpeed()]
     # set initial progressbar size based on file; will be slightly larger because
     # of multipart boundary content
-    pbar = ProgressBar(widgets=widgets, maxval=ds.size).start()
+    pbar = progressbar.ProgressBar(widgets=widgets, max_value=ds.size).start()
 
     # download content to a tempfile
     tmpfile = tempfile.NamedTemporaryFile(
         prefix='%s-%s_' % (pid, dsid), delete=False)
-    print 'writing to ', tmpfile.name
+    print('writing to ', tmpfile.name)
     size_read = 0
     try:
         for chunk in ds.get_chunked_content():
@@ -53,21 +54,22 @@ def curl_download_file(pid, dsid):
 
     tmpfile = tempfile.NamedTemporaryFile(
         prefix='%s-%s_' % (pid, dsid), delete=False)
-    print 'writing to ', tmpfile.name
+    print('writing to ', tmpfile.name)
 
-    widgets = ['Upload: ', Percentage(), ' ', Bar(),
-               ' ', ETA(), ' ', FileTransferSpeed()]
+    widgets = ['Download: ', progressbar.widgets.Percentage(), ' ',
+               progressbar.widgets.Bar(), ' ', progressbar.widgets.ETA(),
+               ' ', progressbar.widgets.FileTransferSpeed()]
     # set initial progressbar size based on file; will be slightly larger because
     # of multipart boundary content
-    pbar = ProgressBar(widgets=widgets, maxval=ds.size).start()
+    pbar = progressbar.ProgressBar(widgets=widgets, max_value=ds.size).start()
 
     def progress(dl_total, dl, up_total, up):
         # update current status
         pbar.update(dl)
 
     c = pycurl.Curl()
-    headers = {'Authorization' : 'Basic %s' % \
-        base64.b64encode("%s:%s" % (testsettings.FEDORA_USER, testsettings.FEDORA_PASSWORD))}
+    auth = base64.b64encode(force_bytes("%s:%s" % (testsettings.FEDORA_USER, testsettings.FEDORA_PASSWORD)))
+    headers = {'Authorization' : 'Basic %s' % force_text(auth)}
     c.setopt(pycurl.VERBOSE, 1)
     c.setopt(pycurl.HTTPHEADER, ["%s: %s" % t for t in headers.items()])
 
@@ -81,9 +83,9 @@ def curl_download_file(pid, dsid):
     c.perform()
 
     # HTTP response code, e.g. 200.
-    print 'Status: %d' % c.getinfo(c.RESPONSE_CODE)
+    print('Status: %d' % c.getinfo(c.RESPONSE_CODE))
     # Elapsed time for the transfer.
-    print 'Time: %f' % c.getinfo(c.TOTAL_TIME)
+    print('Time: %f' % c.getinfo(c.TOTAL_TIME))
 
     c.close()
 

@@ -15,6 +15,7 @@
 #   limitations under the License.
 
 import os
+import django
 
 # test secret key for eulfedora.cryptutil tests
 SECRET_KEY = 'abcdefghijklmnopqrstuvwxyz1234567890'
@@ -39,3 +40,8 @@ DATABASES = {
 EUL_INDEXER_ALLOWED_IPS = ['*']
 
 from .localsettings import *
+
+os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
+django.setup()
+
+
