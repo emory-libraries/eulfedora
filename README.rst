@@ -1,6 +1,5 @@
-EULFedora
+eulfedora
 ^^^^^^^^^
-
 
 .. image:: https://img.shields.io/pypi/v/eulfedora.svg
    :target: https://pypi.python.org/pypi/eulfedora
@@ -15,8 +14,10 @@ EULFedora
    :target: https://codeclimate.com/github/emory-libraries/eulfedora
    :alt: Code Climate
 
+.. image:: http://eulfedora.readthedocs.org/en/master/?badge=master
 
-EULfedora is a `Python <http://www.python.org/>`_ module that provides
+
+eulfedora is a `Python <http://www.python.org/>`_ module that provides
 utilities, API wrappers, and classes for interacting with the
 `Fedora-Commons Repository <http://fedora-commons.org/>`_
 in a pythonic, object-oriented way, with optional
