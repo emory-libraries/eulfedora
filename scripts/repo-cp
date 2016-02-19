@@ -36,14 +36,6 @@ from eulfedora.xml import FoxmlDigitalObject
 from eulfedora.syncutil import estimate_object_size, ArchiveExport, \
     humanize_file_size, sync_object
 
-try:
-    from progressbar import ProgressBar, Bar, Counter, ETA, \
-        FileTransferSpeed, Percentage, \
-        RotatingMarker, SimpleProgress, Timer
-except ImportError:
-    ProgressBar = None
-
-
 
 def repo_copy():
 
@@ -136,14 +128,6 @@ def repo_copy():
                 err_type = 'Permission denied'
             print('%s importing %s to %s: %s' % \
                 (err_type, pid, args.dest, err))
-
-
-
-class FileSizeCounter(Counter):
-    # file size counter widget for progressbar
-
-    def update(self, pbar):
-        return humanize_file_size(pbar.currval)
 
 
 
