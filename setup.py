@@ -33,7 +33,7 @@ requirements = [
     'eulxml>=1.0.0',
     'rdflib>=3.0',
     'python-dateutil',
-    'requests>=2.5.0,<2.9',
+    'requests>2.9',
     'requests-toolbelt',
     'pycrypto',
     'pypdf2',
