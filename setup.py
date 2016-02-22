@@ -13,7 +13,7 @@ except:
     pass
 
 CLASSIFIERS = [
-    'Development Status :: 4 - Beta',
+    'Development Status :: 5 - Production/Stable',
     'Framework :: Django',
     'Intended Audience :: Developers',
     'License :: OSI Approved :: Apache Software License',
@@ -47,7 +47,7 @@ dev_requirements = [
     'sphinx',
     'nose',
     'coverage',
-    'Django<1.9',
+    'Django',
     'mock',
     'unittest2',
     'pyPdf',
@@ -78,5 +78,6 @@ setup(
     description='Idiomatic access to digital objects in a Fedora Commons repository',
     long_description=LONG_DESCRIPTION,
     classifiers=CLASSIFIERS,
-    scripts=['scripts/fedora-checksums', 'scripts/validate-checksums',],
+    scripts=['scripts/fedora-checksums', 'scripts/validate-checksums',
+        'scripts/repo-cp'],
 )
