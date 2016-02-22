@@ -14,7 +14,7 @@ eulfedora
 
 **documentation**
   .. image:: https://readthedocs.org/projects/eulfedora/badge/?version=master
-    :target: http://eulfedora.readthedocs.org/en/develop/?badge=master
+    :target: http://eulfedora.readthedocs.org/en/master/?badge=master
     :alt: Documentation Status
 
 **code**
