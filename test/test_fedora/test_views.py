@@ -75,7 +75,7 @@ class FedoraViewsTest(unittest.TestCase):
         # DC
         response = raw_datastream_old(rqst, self.obj.pid, 'DC')
         expected, got = 200, response.status_code
-        text = response.text
+        content = force_text(response.content)
         self.assertEqual(expected, got,
             'Expected %s but returned %s for raw_datastream_old view of DC' \
                 % (expected, got))
@@ -86,7 +86,7 @@ class FedoraViewsTest(unittest.TestCase):
         self.assertEqual(self.obj.dc.checksum, response['ETag'],
             'datastream checksum should be set as ETag header in the response')
         self.assertEqual(self.obj.dc.checksum, response['Content-MD5'])
-        self.assert_('<dc:title>%s</dc:title>' % self.obj.dc.content.title in text)
+        self.assert_('<dc:title>%s</dc:title>' % self.obj.dc.content.title in content)
 
         # RELS-EXT
         response = raw_datastream_old(rqst, self.obj.pid, 'RELS-EXT')
