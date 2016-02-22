@@ -30,6 +30,7 @@ Using these views (in the simpler cases) should be as easy as::
 
 '''
 
+from __future__ import unicode_literals
 import logging
 
 from django.contrib.auth import views as authviews
@@ -37,10 +38,12 @@ from django.http import HttpResponse, Http404, HttpResponseBadRequest, \
     StreamingHttpResponse
 from django.views.decorators.http import require_http_methods, condition
 from django.views.generic import View
+import six
 
-from eulfedora.util import RequestFailed
-from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
 from eulfedora.cryptutil import encrypt
+from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
+from eulfedora.util import RequestFailed, parse_xml_object
+from eulfedora.xml import DatastreamProfile
 
 
 logger = logging.getLogger(__name__)
@@ -52,36 +55,31 @@ class HttpResponseRangeNotSatisfiable(HttpResponseBadRequest):
     status_code = 416
 
 
-def datastream_etag(request, pid, dsid, type=None, repo=None,
-                    accept_range_request=False, as_of_date=None,
-                    **kwargs):
+def datastream_etag(request, pid, dsid, repo=None,
+    as_of_date=None, **kwargs):
     '''Method suitable for use as an etag function with
     :class:`django.views.decorators.http.condition`.  Takes the same
     arguments as :meth:`~eulfedora.views.raw_datastream`.
     '''
-
     # if a range is requested and it is not for the entire file,
     # do *NOT* return an etag
-    if accept_range_request and request.META.get('HTTP_RANGE', None) and \
-       request.META['HTTP_RANGE'] != 'bytes=1-':
-        return None
+
+    # NOTE: using api directly here instead of object/ds models
+    # to avoid making unneeded api calls
 
     try:
         if repo is None:
             repo = Repository()
-        get_obj_opts = {}
-        if type is not None:
-            get_obj_opts['type'] = type
-        obj = repo.get_object(pid, **get_obj_opts)
-        ds = obj.getDatastreamObject(dsid, as_of_date=as_of_date)
-        if ds and ds.exists and ds.checksum_type != 'DISABLED':
-            return ds.checksum
+        resp = repo.api.getDatastream(pid, dsid, asOfDateTime=as_of_date)
+        dsprofile = parse_xml_object(DatastreamProfile, resp.content, resp.url)
+        if dsprofile and dsprofile.checksum_type != 'DISABLED':
+            return dsprofile.checksum
     except RequestFailed:
         pass
 
     return None
 
-def datastream_lastmodified(request, pid, dsid, type=None, repo=None,
+def datastream_lastmodified(request, pid, dsid, repo=None,
     as_of_date=None, *args, **kwargs):
     '''Method suitable for use as a a last-modified function with
     :class:`django.views.decorators.http.condition`.  Takes basically
@@ -90,24 +88,102 @@ def datastream_lastmodified(request, pid, dsid, type=None, repo=None,
     try:
         if repo is None:
             repo = Repository()
-        get_obj_opts = {}
-        if type is not None:
-            get_obj_opts['type'] = type
-        obj = repo.get_object(pid, **get_obj_opts)
-        ds = obj.getDatastreamObject(dsid, as_of_date=as_of_date)
-        if ds and ds.exists:
-            return ds.created
+        resp = repo.api.getDatastream(pid, dsid, asOfDateTime=as_of_date)
+        dsprofile = parse_xml_object(DatastreamProfile, resp.content, resp.url)
+        if dsprofile:
+            return dsprofile.created
     except RequestFailed:
         pass
 
 
+@condition(etag_func=datastream_etag, last_modified_func=datastream_lastmodified)
+@require_http_methods(['GET', 'HEAD'])
+def raw_datastream(request, pid, dsid, repo=None, headers=None,
+       as_of_date=None):
+    '''
+    Access raw datastream content from a Fedora object.
+    Returns :class:`~django.http.HttpResponse` for HEAD requests,
+    :class:`~django.http.StreamingHttpResponse` for GET requests.  The
+    headers and status code from Fedora response are set on the
+    django response; any headers specified in the parameters will
+    override Fedora headers.  If an HTTP_RANGE header is present on the
+    request, it is passed through to Fedora.
+
+    This view method is wrapped with ETag and last modified conditionals.
+
+    :param request: HttpRequest
+    :param pid: Fedora object PID
+    :param dsid: datastream ID
+    :param repo: :class:`~eulcore.django.fedora.server.Repository` instance to use,
+        in case your application requires custom repository initialization (optional)
+    :param headers: dictionary of additional headers to include in the response
+    :param as_of_date: access a historical version of the datastream
+    '''
+    return _raw_datastream(request, pid, dsid, repo=repo, headers=headers,
+       as_of_date=as_of_date)
+
+def _raw_datastream(request, pid, dsid, repo=None, headers=None,
+       as_of_date=None):
+    '''Version of :meth:`raw_datastream` without conditionals, for use
+    in class-based views or elsewhere.'''
+    if repo is None:
+        repo = Repository()
+
+    # if a range request is present, pass it through to fedora
+    rqst_headers = {}
+    if 'HTTP_RANGE' in request.META:
+        rqst_headers['RANGE'] = request.META['HTTP_RANGE']
+
+    try:
+        if request.method == 'HEAD':
+            response = repo.api.getDatastreamDissemination(pid, dsid, asOfDateTime=as_of_date,
+                head=True, rqst_headers=rqst_headers)
+            dj_response = HttpResponse()
+        else:
+            response = repo.api.getDatastreamDissemination(pid, dsid, asOfDateTime=as_of_date,
+                stream=True, rqst_headers=rqst_headers)
+            dj_response = StreamingHttpResponse(response.iter_content(4096))
+    except RequestFailed as rf:
+        # if error is object not found, raise generic django 404
+        if rf.code == 404:
+            raise Http404
+
+        # otherwise, raise the error
+        raise
+
+    # make sure django response code matches fedora code
+    # e.g. error code or 206 partial content for range requests
+    dj_response.status_code = response.status_code
+
+    # copy fedora response headers to the django response
+    resp_headers = response.headers
+    # any headers passed in should take precedence
+    if headers is not None:
+        resp_headers.update(headers)
+    # etag needn't always be content md5, but for fedora datastreams it is
+    if 'ETag' in resp_headers:
+        resp_headers['Content-MD5'] = resp_headers['ETag']
+
+    for header, value in six.iteritems(resp_headers):
+        dj_response[header] = value
+
+    return dj_response
+
 
 @condition(etag_func=datastream_etag)
 @require_http_methods(['GET', 'HEAD'])
-def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
+def raw_datastream_old(request, pid, dsid, type=None, repo=None, headers={},
                    accept_range_request=False, as_of_date=None,
                    streaming=False):
-    '''View to display a raw datastream that belongs to a Fedora Object.
+    '''
+    .. NOTE::
+
+        This version of :meth:`raw_datastream` is deprecated, and you
+        should update to the new :meth:`raw_datastream`.  This version
+        is still available if you are using a version of Fedora
+        prior to 3.7 and need the additional functionality.
+
+    View to display a raw datastream that belongs to a Fedora Object.
     Returns an :class:`~django.http.HttpResponse` with the response content
     populated with the content of the datastream.  The following HTTP headers
     may be included in all the responses:
@@ -257,7 +333,7 @@ def raw_datastream(request, pid, dsid, type=None, repo=None, headers={},
                              (partial_length, cont_range))
 
             # set any user-specified headers that were passed in
-            for header, val in headers.iteritems():
+            for header, val in six.iteritems(headers):
                 response[header] = val
 
             # Fix for old Fedora data bug where the `Content-Length`
@@ -291,14 +367,14 @@ def get_range_content(ds, start, end):
 
     content_chunks = ds.get_chunked_content(chunksize=chunksize)
     length = 0
-    for i in range(end/chunksize + 10):
+    for i in range(int(end/chunksize) + 10):
         chunk_start = chunksize  * i
         chunk_end = chunk_start + chunksize
 
         # probably shouldn't run out of data, but in case data doesn't
         # match datastream metadata size in fedora...
         try:
-            content = content_chunks.next()
+            content = next(content_chunks)
         except StopIteration:
             break
 
@@ -430,8 +506,9 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
 
 # class-based views
 
-class RawDatastreamView(View):
+class RawDatastreamViewOld(View):
     '''Class-based view for serving out datastream content from Fedora.
+    (View-based wrapper for :meth:`raw_datastream_old`.)
     '''
     #: subclass of DigitalObject, if needed
     object_type = None
@@ -500,8 +577,78 @@ class RawDatastreamView(View):
     def get(self, request, *args, **kwargs):
         pid = kwargs[self.pid_url_kwarg]
         date = kwargs.get(self.as_of_date_url_kwarg, None)
-        return raw_datastream(request, pid, self.get_datastream_id(),
+        return raw_datastream_old(request, pid, self.get_datastream_id(),
             type=self.object_type, repo=self.get_repository(),
             headers=self.get_headers(),
             accept_range_request=self.accept_range_request,
             as_of_date=date, streaming=self.streaming)
+
+
+class RawDatastreamView(View):
+    '''Class-based view for serving out datastream content from Fedora.
+    (View-based wrapper for :meth:`raw_datastream`.)
+    '''
+    #: datastream id
+    datastream_id = ''
+    #: url kwarg term for retrieving object pid (default: pid)
+    pid_url_kwarg = 'pid'
+    #: url kwarg term for retrieving date time, if used (default: date)
+    as_of_date_url_kwarg = 'date'
+    #: Repository class to use, if needed
+    repository_class = Repository
+    #: extra http headers to include
+    headers = {}
+
+    @classmethod
+    def etag(cls, request, *args, **kwargs):
+        '''Class method to generate an ETag for use with
+        conditional processing; calls :meth:`datastream_etag` with
+        class configuration.'''
+        pid = kwargs[cls.pid_url_kwarg]
+        date = kwargs.get(cls.as_of_date_url_kwarg, None)
+        return datastream_etag(request, pid, cls.datastream_id,
+            repo=cls.repository_class(request=request),
+            as_of_date=date)
+
+    @classmethod
+    def last_modified(cls, request, *args, **kwargs):
+        '''Class method to generate last-modified header for use with
+        conditional processing; calls :meth:`datastream_lastmodified` with
+        class configuration.'''
+        pid = kwargs[cls.pid_url_kwarg]
+        date = kwargs.get(cls.as_of_date_url_kwarg, None)
+        return datastream_lastmodified(request, pid, cls.datastream_id,
+            repo=cls.repository_class(request=request),
+            as_of_date=date)
+
+    @classmethod
+    def as_view(cls, **initkwargs):
+        view = super(RawDatastreamView, cls).as_view(**initkwargs)
+        # wrap view with conditional decorator for etag/last-modified
+        return condition(etag_func=cls.etag,
+            last_modified_func=cls.last_modified)(view)
+
+    def get_datastream_id(self):
+        return self.datastream_id
+
+    def get_repository(self):
+        '''Initialize and return the configured repository class,
+        passing in the current request.'''
+        return self.repository_class(request=self.request)
+
+    def get_headers(self):
+        '''Return headers to be included when generating the datastream
+        content response.  Default implementation is to return
+        :attr:`headers`.'''
+        return self.headers
+
+    def head(self, request, *args, **kwargs):
+        # raw_datastream method handles both head and get
+        return self.get(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        pid = kwargs[self.pid_url_kwarg]
+        date = kwargs.get(self.as_of_date_url_kwarg, None)
+        return _raw_datastream(request, pid, self.get_datastream_id(),
+            repo=self.get_repository(), headers=self.get_headers(),
+            as_of_date=date)

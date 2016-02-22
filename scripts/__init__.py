@@ -116,4 +116,53 @@ are found or when there are any errors saving objects, you can specify email
 addresses, a from email address, and an smtp server via the command line or a
 config file.
 
+
+----
+
+repo-cp
+-------
+
+**repo-cp** is a command line wrapper around
+:meth:`eulfedora.syncutil.sync_object` for synchronizing objects
+between Fedora repositories.
+
+To use it, you must make a config file with the connection information
+for repositories you want to copy from or into.  The config file
+should contain two or more repository definitions, each structured like
+this::
+
+    [qa-fedora]
+    allow_overwrite = yes
+    fedora_root = https://my.fedora.server.edu:8443/fedora
+    fedora_user = syncer
+    fedora_password = titanic
+
+By default the script looks for this at **$HOME/.repocpcfg**, but you
+can specify an alternate path as a command line parameter.
+
+Example use::
+
+  repo-cp qa-fedora dev-fedora pid:1 pid:2 pid:3
+
+By default, the script uses the Fedora **migrate** export, which requires
+that your destination repository have access to pull datastream content
+by URL.  If this is not the case, or if you run into checksum mismatch
+errors, you should try the archive export.  This may take longer, especially
+for objects with large binary datastreams since the Fedora archive export
+includes base64 encoded datastream content.  Example use with optional
+progress bar to show status::
+
+  repo-cp qa-fedora dev-fedora pid:1 pid:2 pid:3 --archive --progress
+
+This script includes a custom sync mode of `archive-xml` intended to
+support copying large objects which fail due to checksum errors on
+xml datastreams when copied via migrate exports.  This mode uses
+the Fedora archive export, but generates a content location URL
+for all content other than managed datastreams with a mimetype of text/xml.
+There is additionally a `--requires-auth` flag, only used in this mode,
+which adds the source Fedora credentials to the content location URL, in
+order to allow retrieving content that would otherwise be restricted.  This
+option should **NOT** be used to send content to a repository you do not
+control or with credentials that you care about.
+
 '''

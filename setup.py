@@ -13,27 +13,54 @@ except:
     pass
 
 CLASSIFIERS = [
-    'Development Status :: 4 - Beta',
+    'Development Status :: 5 - Production/Stable',
     'Framework :: Django',
     'Intended Audience :: Developers',
     'License :: OSI Approved :: Apache Software License',
     'Natural Language :: English',
     'Operating System :: OS Independent',
     'Programming Language :: Python',
+    'Programming Language :: Python :: 2',
+    'Programming Language :: Python :: 2.7',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.3',
+    'Programming Language :: Python :: 3.4',
+    'Programming Language :: Python :: 3.5',
     'Topic :: Software Development :: Libraries :: Python Modules',
 ]
 
 requirements = [
-    'eulxml>=0.18.0',
+    'eulxml>=1.0.1',
     'rdflib>=3.0',
     'python-dateutil',
-    'requests>=2.5.0,<2.9',
-    'requests-toolbelt',
+    'requests>2.9',
+    'requests-toolbelt>=0.6.0',
     'pycrypto',
+    'pypdf2',
+    'six',
 ]
 
 if sys.version_info < (2, 7):
     requirements.append('argparse')
+
+dev_requirements = [
+    'sphinx',
+    'nose',
+    'coverage',
+    'Django',
+    'mock',
+    'pyPdf',
+    'tox',
+    'progressbar2'
+]
+
+if sys.version_info < (3, 0):
+    requirements.append('progressbar')
+
+# unittest2 should only be included for py2.6
+if sys.version_info < (2, 7):
+    dev_requirements.append('unittest2')
+
 
 setup(
     name='eulfedora',
@@ -48,21 +75,13 @@ setup(
     # Be sure to include the below in your own pip dependencies file if you need to use
     # the built in indexer utility support.
     extras_require={
-        'indexdata_util': ['pyPdf'],
+        'indexdata_util': ['pypdf2'],
         'django': ['Django'],
-        'dev': [
-            'sphinx',
-            'nose',
-            'coverage',
-            'Django<1.7',
-            'mock',
-            'unittest2<0.7',  # optional testrunner in testutil
-            'pyPdf',
-            'progressbar',
-        ]
+        'dev': dev_requirements,
     },
     description='Idiomatic access to digital objects in a Fedora Commons repository',
     long_description=LONG_DESCRIPTION,
     classifiers=CLASSIFIERS,
-    scripts=['scripts/fedora-checksums', 'scripts/validate-checksums',],
+    scripts=['scripts/fedora-checksums', 'scripts/validate-checksums',
+        'scripts/repo-cp'],
 )

@@ -1,5 +1,5 @@
 # file eulfedora/indexdata/util.py
-# 
+#
 #   Copyright 2010,2011 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +14,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from pyPdf import PdfFileReader
+from PyPDF2 import PdfFileReader
 
 def pdf_to_text(pdfstream):
     '''Extract the text from a PDF document, e.g. to add PDF text
@@ -28,12 +28,10 @@ def pdf_to_text(pdfstream):
         text = pdf_to_text(pdfobj.pdf.content)
 
     :param pdfstream: A file-like object that supports read and seek
-	    methods, as required by :class:`pyPdf.PdfFileReader` 
+	    methods, as required by :class:`pyPdf.PdfFileReader`
 
     '''
     pdfreader = PdfFileReader(pdfstream)
     if pdfreader.isEncrypted:
         raise Exception('Cannot extract text from encrypted PDF documents')
     return '\n'.join([page.extractText() for page in pdfreader.pages])
-
-

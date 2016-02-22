@@ -1,16 +1,33 @@
-EULFedora
-=========
+eulfedora
+^^^^^^^^^
+
+**package**
+  .. image:: https://img.shields.io/pypi/v/eulfedora.svg
+    :target: https://pypi.python.org/pypi/eulfedora
+    :alt: PyPI
+
+  .. image:: https://img.shields.io/pypi/l/eulfedora.svg
+    :alt: License
+
+  .. image:: https://img.shields.io/pypi/dm/eulfedora.svg
+    :alt: PyPI downloads
+
+**documentation**
+  .. image:: https://readthedocs.org/projects/eulfedora/badge/?version=master
+    :target: http://eulfedora.readthedocs.org/en/develop/?badge=master
+    :alt: Documentation Status
+
+**code**
+  .. image:: https://codeclimate.com/github/emory-libraries/eulfedora/badges/gpa.svg
+    :target: https://codeclimate.com/github/emory-libraries/eulfedora
+    :alt: Code Climate
+
+  .. image:: https://requires.io/github/emory-libraries/eulfedora/requirements.svg?branch=master
+    :target: https://requires.io/github/emory-libraries/eulfedora/requirements/?branch=master
+    :alt: Requirements Status
 
 
-.. image:: https://img.shields.io/pypi/v/eulfedora.svg
-   :target: https://pypi.python.org/pypi/eulfedora
-
-.. image:: https://img.shields.io/pypi/l/eulfedora.svg
-
-.. image:: https://img.shields.io/pypi/dm/eulfedora.svg
-
-
-EULfedora is a `Python <http://www.python.org/>`_ module that provides
+eulfedora is a `Python <http://www.python.org/>`_ module that provides
 utilities, API wrappers, and classes for interacting with the
 `Fedora-Commons Repository <http://fedora-commons.org/>`_
 in a pythonic, object-oriented way, with optional
@@ -95,8 +112,11 @@ Running the unit tests requires a Fedora Commons repository instance.  Before
 running tests, you will need to copy ``test/localsettings.py.dist`` to
 ``test/localsettings.py`` and edit the configuration for your test repository.
 
-To run all unit tests::
+To run the tests, you should set an environment variable of
+**DJANGO_SETTINGS_MODULE** equal to ``testsettings.test`` or prefix
+the nosetests command with ``env DJANGO_SETTINGS_MODULE=testsettings.test``.
 
+To run all unit tests::
 
     nosetests test # for normal development
     nosetests test --with-coverage --cover-package=eulfedora --cover-xml --with-xunit   # for continuous integration

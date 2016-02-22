@@ -8,3 +8,5 @@ test/localsettings.py
 .coverage
 coverage.xml
 nosetests.xml
+test.db
+.tox

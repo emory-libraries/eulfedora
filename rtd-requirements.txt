@@ -1,0 +1,5 @@
+# optional/dev requirements needed to generate documentation on readthedocs
+Django
+pyPdf
+nose
+unittest2

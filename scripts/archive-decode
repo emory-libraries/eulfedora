@@ -1,0 +1,40 @@
+#!/usr/bin/env python
+
+import base64
+import hashlib
+from eulfedora.server import Repository
+from eulfedora.models import DigitalObject
+from lxml import etree
+
+
+def archive_decode():
+    repo = Repository('https://libfedqa1.library.emory.edu:8443/fedora',
+        username='fedoraAdmin', password='fedoraAdmin')
+    # response = repo.api.export('readux:p7g45', context='archive',
+    response = repo.api.export('readux:p7kcf', context='archive',
+        stream=True)
+    print response
+    xmlarchive = etree.fromstring(response.content)
+    print xmlarchive
+
+    img_ds = xmlarchive.xpath('//foxml:datastreamVersion[@ID="source-image.0"]',
+            namespaces={'foxml': DigitalObject.FOXML_NS})[0]
+    digest = img_ds.xpath('foxml:contentDigest',
+            namespaces={'foxml': DigitalObject.FOXML_NS})[0]
+    print 'Datastream %s size %s, %s %s' % \
+        (img_ds.get('ID'), img_ds.get('SIZE'),
+            digest.get('TYPE'), digest.get('DIGEST'))
+
+    binary_content = img_ds.xpath('foxml:binaryContent',
+            namespaces={'foxml': DigitalObject.FOXML_NS})[0]
+    decoded_content = base64.b64decode(binary_content.text)
+    size = len(decoded_content)
+    m = hashlib.md5()
+    m.update(decoded_content)
+    md5 = m.hexdigest()
+    print 'decoded content size %s, MD5 %s' % \
+        (size, md5)
+
+
+if __name__ == '__main__':
+    archive_decode()

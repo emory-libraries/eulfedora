@@ -15,13 +15,16 @@
 #   limitations under the License.
 
 import os
+import django
 
 # test secret key for eulfedora.cryptutil tests
 SECRET_KEY = 'abcdefghijklmnopqrstuvwxyz1234567890'
 
-
 INSTALLED_APPS = (
     'eulfedora',
+    # errors on django 1.9 if contenttypes is not included here
+    'django.contrib.auth',
+    'django.contrib.contenttypes'
 )
 
 
@@ -38,4 +41,14 @@ DATABASES = {
 
 EUL_INDEXER_ALLOWED_IPS = ['*']
 
-from localsettings import *
+from .localsettings import *
+
+
+TEMPLATES = []
+
+os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
+# run django setup if we are on a version of django that has it
+if hasattr(django, 'setup'):
+    django.setup()
+
+
