@@ -811,12 +811,16 @@ class REST_API(HTTP_API_Base):
         # fedora only expects content uploaded as multipart file;
         # make string content into a file-like object so requests.post
         # sends it the way Fedora expects.
-        if not hasattr(data, 'read') and not hasattr(data, '__next__'):
+        # NOTE: checking for both python 2.x next method and
+        # python 3.x __next__ to test if data is iteraable
+        if not hasattr(data, 'read') and \
+            not (hasattr(data, '__next__') or hasattr(data, 'next')):
             data = six.BytesIO(force_bytes(data))
 
         # if data is an iterable, wrap in a readable iterator that
         # requests-toolbelt can read data from
-        elif hasattr(data, '__next__') and not hasattr(data, 'read'):
+        elif not hasattr(data, 'read') and \
+            (hasattr(data, '__next__') or hasattr(data, 'next')):
             if size is None:
                 raise Exception('Cannot upload iterable with unknown size')
             data = ReadableIterator(data, size)
