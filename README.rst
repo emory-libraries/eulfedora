@@ -1,20 +1,30 @@
 eulfedora
 ^^^^^^^^^
 
-.. image:: https://img.shields.io/pypi/v/eulfedora.svg
-   :target: https://pypi.python.org/pypi/eulfedora
+**package**
+  .. image:: https://img.shields.io/pypi/v/eulfedora.svg
+    :target: https://pypi.python.org/pypi/eulfedora
+    :alt: PyPI
 
-.. image:: https://img.shields.io/pypi/l/eulfedora.svg
+  .. image:: https://img.shields.io/pypi/l/eulfedora.svg
+    :alt: License
 
-.. image:: https://img.shields.io/pypi/dm/eulfedora.svg
+  .. image:: https://img.shields.io/pypi/dm/eulfedora.svg
+    :alt: PyPI downloads
 
-.. image:: https://img.shields.io/pypi/dm/eulfedora.svg
+**documentation**
+  .. image:: https://readthedocs.org/projects/eulfedora/badge/?version=develop
+    :target: http://eulfedora.readthedocs.org/en/develop/?badge=develop
+    :alt: Documentation Status
 
-.. image:: https://codeclimate.com/github/emory-libraries/eulfedora/badges/gpa.svg
-   :target: https://codeclimate.com/github/emory-libraries/eulfedora
-   :alt: Code Climate
+**code**
+  .. image:: https://codeclimate.com/github/emory-libraries/eulfedora/badges/gpa.svg
+    :target: https://codeclimate.com/github/emory-libraries/eulfedora
+    :alt: Code Climate
 
-.. image:: http://eulfedora.readthedocs.org/en/master/?badge=master
+  .. image:: https://requires.io/github/emory-libraries/eulfedora/requirements.svg?branch=develop
+    :target: https://requires.io/github/emory-libraries/eulfedora/requirements/?branch=develop
+    :alt: Requirements Status
 
 
 eulfedora is a `Python <http://www.python.org/>`_ module that provides
