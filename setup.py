@@ -30,7 +30,7 @@ CLASSIFIERS = [
 ]
 
 requirements = [
-    'eulxml>=1.0.0',
+    'eulxml>=1.0.1',
     'rdflib>=3.0',
     'python-dateutil',
     'requests>2.9',
