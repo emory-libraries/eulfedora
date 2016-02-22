@@ -17,16 +17,17 @@
 import base64
 import json
 from mock import patch
-import unittest
 
 from django.conf import settings
 from django.http import Http404, HttpRequest
 from django.test import TestCase
 from django.test.utils import override_settings
+from django.utils.encoding import force_bytes
 
 from eulfedora.indexdata.views import index_config, index_data
 from eulfedora.models import DigitalObject, ContentModel
 from eulfedora.server import Repository
+from eulfedora.util import force_text
 
 from test.testsettings import FEDORA_PIDSPACE
 
@@ -95,7 +96,7 @@ class IndexDataViewsTest(TestCase):
                 'Expected %s but returned %s for mimetype on indexdata/index_details view' \
                 % (expected, got))
             # load json content so we can inspect the result
-            content = json.loads(response.content)
+            content = json.loads(response.content.decode('utf-8'))
             self.assertEqual(TEST_SOLR_URL, content['SOLR_URL'])
             self.assert_(SimpleObject.CONTENT_MODELS in content['CONTENT_MODELS'])
             self.assert_(LessSimpleDigitalObject.CONTENT_MODELS in content['CONTENT_MODELS'])
@@ -124,7 +125,7 @@ class IndexDataViewsTest(TestCase):
                 'Expected %s but returned %s for mimetype on indexdata/index_details view' \
                 % (expected, got))
             # load json content so we can inspect the result
-            content = json.loads(response.content)
+            content = json.loads(response.content.decode('utf-8'))
             self.assertEqual(settings.EUL_INDEXER_CONTENT_MODELS,
                 content['CONTENT_MODELS'])
 
@@ -156,14 +157,14 @@ class IndexDataViewsTest(TestCase):
             self.assertEqual(expected, got,
                 'Expected %s but returned %s for mimetype on index_data view' \
                 % (expected, got))
-            response_data = json.loads(response.content)
+            response_data = json.loads(response.content.decode('utf-8'))
             self.assertEqual(testobj.index_data(), response_data,
                'Response content loaded from JSON should be equal to object indexdata')
 
             # test with basic auth
             testuser, testpass = 'testuser', 'testpass'
-            token = base64.b64encode('%s:%s' % (testuser, testpass))
-            self.request.META['HTTP_AUTHORIZATION'] = 'Basic %s' % token
+            token = base64.b64encode(force_bytes('%s:%s' % (testuser, testpass)))
+            self.request.META['HTTP_AUTHORIZATION'] = 'Basic %s' % force_text(token)
             with patch('eulfedora.indexdata.views.TypeInferringRepository') as typerepo:
                 typerepo.return_value.get_object.return_value.index_data.return_value = {}
                 index_data(self.request, testobj.pid)

@@ -14,6 +14,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from __future__ import unicode_literals
 from eulxml import xmlmap
 from eulxml.xmlmap.fields import Field, SingleNodeManager, NodeMapper, \
                                  DateTimeField

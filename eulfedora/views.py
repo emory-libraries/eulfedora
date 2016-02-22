@@ -30,6 +30,7 @@ Using these views (in the simpler cases) should be as easy as::
 
 '''
 
+from __future__ import unicode_literals
 import logging
 
 from django.contrib.auth import views as authviews
@@ -37,6 +38,7 @@ from django.http import HttpResponse, Http404, HttpResponseBadRequest, \
     StreamingHttpResponse
 from django.views.decorators.http import require_http_methods, condition
 from django.views.generic import View
+import six
 
 from eulfedora.cryptutil import encrypt
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
@@ -162,7 +164,7 @@ def _raw_datastream(request, pid, dsid, repo=None, headers=None,
     if 'ETag' in resp_headers:
         resp_headers['Content-MD5'] = resp_headers['ETag']
 
-    for header, value in resp_headers.iteritems():
+    for header, value in six.iteritems(resp_headers):
         dj_response[header] = value
 
     return dj_response
@@ -331,7 +333,7 @@ def raw_datastream_old(request, pid, dsid, type=None, repo=None, headers={},
                              (partial_length, cont_range))
 
             # set any user-specified headers that were passed in
-            for header, val in headers.iteritems():
+            for header, val in six.iteritems(headers):
                 response[header] = val
 
             # Fix for old Fedora data bug where the `Content-Length`
@@ -365,14 +367,14 @@ def get_range_content(ds, start, end):
 
     content_chunks = ds.get_chunked_content(chunksize=chunksize)
     length = 0
-    for i in range(end/chunksize + 10):
+    for i in range(int(end/chunksize) + 10):
         chunk_start = chunksize  * i
         chunk_end = chunk_start + chunksize
 
         # probably shouldn't run out of data, but in case data doesn't
         # match datastream metadata size in fedora...
         try:
-            content = content_chunks.next()
+            content = next(content_chunks)
         except StopIteration:
             break
 
