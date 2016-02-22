@@ -1,4 +1,5 @@
 # optional/dev requirements needed to generate documentation on readthedocs
-Django<1.7
-unittest2<0.7
+Django
 pyPdf
+nose
+unittest2
