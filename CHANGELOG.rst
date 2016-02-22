@@ -9,6 +9,8 @@ The following is a summary of changes and improvements to
 1.5
 ---
 
+* Now Python 3 compatible, thanks to Morgan Aubert
+  (`@ellmetha <https://github.com/ellmetha>`_).
 * New, more efficient version of :class:`eulfedora.views.RawDatastreamView`
   and :meth:`eulfedora.views.raw_datastream`.  Passes response
   headers from Fedora, and takes advantage of support for HEAD
