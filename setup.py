@@ -34,7 +34,7 @@ requirements = [
     'rdflib>=3.0',
     'python-dateutil',
     'requests>2.9',
-    'requests-toolbelt',
+    'requests-toolbelt>=0.6.0',
     'pycrypto',
     'pypdf2',
     'six',
