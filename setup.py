@@ -49,7 +49,6 @@ dev_requirements = [
     'coverage',
     'Django',
     'mock',
-    'unittest2',
     'pyPdf',
     'tox',
     'progressbar2'
@@ -57,6 +56,11 @@ dev_requirements = [
 
 if sys.version_info < (3, 0):
     requirements.append('progressbar')
+
+# unittest2 should only be included for py2.6
+if sys.version_info < (2, 7):
+    dev_requirements.append('unittest2')
+
 
 setup(
     name='eulfedora',
