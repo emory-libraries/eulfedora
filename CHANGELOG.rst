@@ -9,7 +9,7 @@ The following is a summary of changes and improvements to
 1.5
 ---
 
-* Now Python 3 compatible, thanks to Morgan Aubert
+* Now Python 3 compatible, thanks in large part to Morgan Aubert
   (`@ellmetha <https://github.com/ellmetha>`_).
 * New, more efficient version of :class:`eulfedora.views.RawDatastreamView`
   and :meth:`eulfedora.views.raw_datastream`.  Passes response
@@ -19,6 +19,12 @@ The following is a summary of changes and improvements to
   as :class:`eulfedora.views.RawDatastreamViewOld` and
   :meth:`eulfedora.views.raw_datastream_old` for those who need the
   functionality.
+* Updated functionality for synchronizing content between Fedora
+  repositories: :mod:`eulfedora.syncutil` for programmatic access and
+  **repo-cp** for command-line.  Now supports Fedora archive export format
+  and better handling for large objects.
+* Upload API method (:meth:`eulfedoa.api.REST_API.upload`) now supports
+  iterable content with known size.
 
 1.4
 ---
