@@ -13,8 +13,8 @@ eulfedora
     :alt: PyPI downloads
 
 **documentation**
-  .. image:: https://readthedocs.org/projects/eulfedora/badge/?version=master
-    :target: http://eulfedora.readthedocs.org/en/develop/?badge=master
+  .. image:: https://readthedocs.org/projects/eulfedora/badge/?version=develop
+    :target: http://eulfedora.readthedocs.org/en/develop/?badge=develop
     :alt: Documentation Status
 
 **code**
@@ -22,8 +22,8 @@ eulfedora
     :target: https://codeclimate.com/github/emory-libraries/eulfedora
     :alt: Code Climate
 
-  .. image:: https://requires.io/github/emory-libraries/eulfedora/requirements.svg?branch=master
-    :target: https://requires.io/github/emory-libraries/eulfedora/requirements/?branch=master
+  .. image:: https://requires.io/github/emory-libraries/eulfedora/requirements.svg?branch=develop
+    :target: https://requires.io/github/emory-libraries/eulfedora/requirements/?branch=develop
     :alt: Requirements Status
 
 
