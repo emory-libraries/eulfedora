@@ -6,6 +6,13 @@ The following is a summary of changes and improvements to
 
 .. New features in each version should be listed, with any necessary information about installation or upgrade notes.
 
+1.5.1
+-----
+
+* Bugfix: datastream isModified detection error in some cases when
+  XML content is empty, resulting in errors attempting to save (especially
+  when the datastream does not exist; cannot add with no content)
+
 1.5
 ---
 
