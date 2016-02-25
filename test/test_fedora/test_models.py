@@ -260,6 +260,9 @@ class TestDatastreams(FedoraTestCase):
         self.assertFalse(self.obj.dc.isModified(),
             "isModified should return False after DC datastream has been saved")
 
+        # empty xml should also show as not modified
+        self.assertFalse(self.obj.extradc.isModified())
+
     def test_rdf_datastream(self):
         # add a relationship to test RELS-EXT/rdf datastreams
         foo123 = "info:fedora/foo:123"

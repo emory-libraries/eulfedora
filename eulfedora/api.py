@@ -344,7 +344,11 @@ class REST_API(HTTP_API_Base):
             warnings.warn('Fedora will ignore the checksum (%s) because no checksum type is specified' \
                           % checksum)
 
-        http_args = {'dsLabel': dsLabel, 'mimeType': mimeType}
+        http_args = {}
+        if dsLabel:
+            http_args['dsLabel'] = dsLabel
+        if mimeType:
+            http_args['mimeType'] = mimeType
         if logMessage:
             http_args['logMessage'] = logMessage
         if controlGroup:
@@ -378,7 +382,6 @@ class REST_API(HTTP_API_Base):
                 extra_args['data'] = content
 
             # set content-type header ?
-
         url = 'objects/%s/datastreams/%s' % (pid, dsID)
         return self.post(url, params=http_args, **extra_args)
         # expected response: 201 Created (on success)
