@@ -221,10 +221,10 @@ class DatastreamObject(object):
 
     def _content_digest(self):
         # generate a hash of the content so we can easily check if it has changed and should be saved
-        raw = force_bytes(self._raw_content())
+        raw = self._raw_content()
         # handle case where datastream is empty or does not yet exist
         if raw is not None:
-            return hashlib.sha1(raw).hexdigest()
+            return hashlib.sha1(force_bytes(raw)).hexdigest()
 
     ### access to datastream profile fields; tracks if changes are made for saving to Fedora
 
@@ -350,7 +350,7 @@ class DatastreamObject(object):
             if self.format:
                 save_opts['formatURI'] = self.format
             if self.checksum:
-                if(self.checksum_modified):
+                if self.checksum_modified:
                     save_opts['checksum'] = self.checksum
             if self.checksum_type:
                 save_opts['checksumType'] = self.checksum_type
@@ -368,6 +368,7 @@ class DatastreamObject(object):
         if self.ds_location is not None:
             save_opts['dsLocation'] = self.ds_location
         else:
+
             save_opts['content'] = self._raw_content()
 
         if self.exists:
@@ -561,7 +562,7 @@ class XmlDatastreamObject(DatastreamObject):
         # - consider the datastream to have no content if the xml is empty
         # (which, by default, means no attributes and no text content)
         if self.content is None or \
-            (hasattr(self.content, 'is_empty') and self.content.is_empty()):
+          (hasattr(self.content, 'is_empty') and self.content.is_empty()):
             return None
         return super(XmlDatastreamObject, self)._raw_content()
 
