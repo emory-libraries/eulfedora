@@ -203,7 +203,7 @@ class ArchiveExport(object):
             self._iter_content = self.get_export().iter_content(self.read_block_size)
 
         if self._current_chunk is not None:
-            self.end_of_last_chunk = self._current_chunk[-200:]
+            self.end_of_last_chunk = self._current_chunk[-400:]
 
         self._current_chunk = self._chunk_leftover + six.next(self._iter_content)
 
@@ -305,7 +305,8 @@ class ArchiveExport(object):
                 else:
                     # error if datastream info is not found, because either
                     # size or version date is required to handle content
-                    raise Exception('Failed to find datastream information from \n%s' % previous_section)
+                    raise Exception('Failed to find datastream information for %s from \n%s' \
+                        % (self.obj.pid, previous_section))
 
                 if self.xml_only and not dsinfo['mimetype'] == 'text/xml':  # possibly others?
                     try:
