@@ -154,7 +154,7 @@ class ArchiveExport(object):
 
     #: regular expression used to identify datastream version information
     #: that is needed for processing datastream content in an archival export
-    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*.*CREATED="(?P<created>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".* TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]*)"',
+    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*CREATED="(?P<created>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".*TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]*)"',
         flags=re.MULTILINE|re.DOTALL)
     # NOTE: regex allows for digest to be empty
 
@@ -249,10 +249,10 @@ class ArchiveExport(object):
             or None if no match is found
         '''
         # we only need to look at the end of this section of content
-        dsinfo = dsinfo[-250:]
+        dsinfo = dsinfo[-400:]
         # if not enough content is present, include the end of
         # the last read chunk, if available
-        if len(dsinfo) < 250 and self.end_of_last_chunk is not None:
+        if len(dsinfo) < 400 and self.end_of_last_chunk is not None:
             dsinfo = self.end_of_last_chunk + dsinfo
 
         infomatch = self.dsinfo_regex.search(force_text(dsinfo))
