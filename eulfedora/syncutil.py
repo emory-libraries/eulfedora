@@ -255,7 +255,22 @@ class ArchiveExport(object):
         if len(dsinfo) < 400 and self.end_of_last_chunk is not None:
             dsinfo = self.end_of_last_chunk + dsinfo
 
-        infomatch = self.dsinfo_regex.search(force_text(dsinfo))
+        # force text needed for python 3 compatibility (in python 3
+        # dsinfo is bytes instead of a string)
+        try:
+            text = force_text(dsinfo)
+        except UnicodeDecodeError as err:
+            # it's possible to see a unicode character split across
+            # read blocks; if we get an "invalid start byte" unicode
+            # decode error, try converting the text without the first
+            # character; if that's the problem, it's not needed
+            # for datastream context
+            if 'invalid start byte' in force_text(err):
+                text = force_text(dsinfo[1:])
+            else:
+                raise err
+
+        infomatch = self.dsinfo_regex.search(text)
         if infomatch:
             return infomatch.groupdict()
 
