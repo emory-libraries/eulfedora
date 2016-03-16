@@ -203,7 +203,7 @@ class ArchiveExport(object):
             self._iter_content = self.get_export().iter_content(self.read_block_size)
 
         if self._current_chunk is not None:
-            self.end_of_last_chunk = self._current_chunk[-200:]
+            self.end_of_last_chunk = self._current_chunk[-1000:]
 
         self._current_chunk = self._chunk_leftover + six.next(self._iter_content)
 
@@ -249,10 +249,10 @@ class ArchiveExport(object):
             or None if no match is found
         '''
         # we only need to look at the end of this section of content
-        dsinfo = dsinfo[-250:]
+        dsinfo = dsinfo[-1000:]
         # if not enough content is present, include the end of
         # the last read chunk, if available
-        if len(dsinfo) < 250 and self.end_of_last_chunk is not None:
+        if len(dsinfo) < 1000 and self.end_of_last_chunk is not None:
             dsinfo = self.end_of_last_chunk + dsinfo
 
         infomatch = self.dsinfo_regex.search(force_text(dsinfo))
