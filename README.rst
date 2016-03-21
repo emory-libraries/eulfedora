@@ -131,5 +131,13 @@ To generate sphinx documentation::
     cd doc
     make html
 
+To upload a tagged release to `PyPI <https://pypi.python.org/pypi>`_ with
+a `wheel <http://pythonwheels.com/>`_ package::
+
+  python setup.py sdist bdist_wheel upload
+
+To upload new artifacts for previously published versions, use
+`twine <https://github.com/pypa/twine>`_.
+
 
 
