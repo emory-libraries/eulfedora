@@ -55,7 +55,7 @@ dev_requirements = [
 ]
 
 if sys.version_info < (3, 0):
-    requirements.append('progressbar')
+    requirements.append('progressbar2')
 
 # unittest2 should only be included for py2.6
 if sys.version_info < (2, 7):
