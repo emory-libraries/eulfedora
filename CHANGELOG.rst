@@ -6,6 +6,13 @@ The following is a summary of changes and improvements to
 
 .. New features in each version should be listed, with any necessary information about installation or upgrade notes.
 
+1.5.2
+-----
+
+* Fix required progressbar version. Thanks to Graham Hukill (`@ghukill <https://github.com/ghukill>`_).
+  `#15 <https://github.com/emory-libraries/eulfedora/issues/15>`_,
+  `PR #16 <https://github.com/emory-libraries/eulfedora/pull/16>`_
+
 1.5.1
 -----
 
