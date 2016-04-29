@@ -619,20 +619,20 @@ class ValidateChecksums(object):
                         output.write('\t%s (%s)' % (dsid, d))
 
         if self.save_errors:
-            output.write('\nError saving the following objects:')
-            output.write('  ' + '\n  '.join(self.save_errors))
+            output.write(u'\nError saving the following objects:')
+            output.write(u'  ' + '\n  '.join(self.save_errors))
 
         if self.relsext_errors:
-            output.write('\nError updating the RELS-EXT for the following objects:')
-            output.write('  ' + '\n  '.join(self.relsext_errors))
+            output.write(u'\nError updating the RELS-EXT for the following objects:')
+            output.write(u'  ' + '\n  '.join(self.relsext_errors))
 
         if self.premis_errors:
-            output.write('\nError adding PREMIS fixity event for the following objects:')
-            output.write('  ' + '\n  '.join(self.premis_errors))
+            output.write(u'\nError adding PREMIS fixity event for the following objects:')
+            output.write(u'  ' + '\n  '.join(self.premis_errors))
 
         if self.fedora_errors:
-            output.write('\nFedora errors when attempting to validate checksums:')
-            output.write('  ' + '\n  '.join(self.fedora_errors))
+            output.write(u'\nFedora errors when attempting to validate checksums:')
+            output.write(u'  ' + u'\n  '.join(self.fedora_errors))
 
         msg = MIMEText(output.getvalue())
         output.close()
