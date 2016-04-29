@@ -265,7 +265,7 @@ class ValidateChecksums(object):
                 if self.args.max_size is not None and dsobj.size > self.args.max_size:
                     print('Datastream %s/%s size (%s) is above configured max, skipping' % \
                           (pid, dsid, humanize_file_size(dsobj.size)))
-                    next
+                    continue
 
                 self.stats['ds'] += 1
                 res = self.validate_datastream(dsobj)
@@ -301,7 +301,7 @@ class ValidateChecksums(object):
             if self.args.max is not None and self.stats['objects'] >= int(self.args.max):
                 if not self.args.quiet:
                     print('Processed %d objects (requested maximum of %d); stopping' \
-                        % (self.stats['objects'], self.args.max))
+                          % (self.stats['objects'], self.args.max))
                 break
 
             if self.args.timelimit and datetime.datetime.now() >= end_time:
@@ -442,6 +442,8 @@ class ValidateChecksums(object):
                     self.fedora_errors.append(msg)
                     print(msg)
 
+            return result
+
         else:
             # current version only
             try:
@@ -519,6 +521,7 @@ class ValidateChecksums(object):
             all_results = []
             for val in ds_results.values():
                 all_results += val
+
             result = 'pass' if all(v == 'valid' for v in all_results) else 'fail'
         else:
             result = 'pass' if all(v == 'valid' for v in ds_results.values()) else 'fail'
