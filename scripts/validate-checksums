@@ -180,7 +180,7 @@ class ValidateChecksums(object):
         proc_args.add_argument('--time-limit', '-t', dest='timelimit', type=int,
                                help='''Only run for the specified duration in minutes''')
         proc_args.add_argument('--max-size', dest='max_size', type=int,
-                               help='''Skip datastreams larger than the specified size''')
+                               help='''Skip datastreams larger than the specified size in bytes''')
 
         # email opts
         email_args = self.parser.add_argument_group('Email options')
