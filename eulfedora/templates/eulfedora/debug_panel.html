@@ -55,6 +55,7 @@
 				{{ header}}: {{ val }}{% if not forloop.last %}<br/>{% endif %}
 			{% endfor %}
 			<pre class="djdt-stack">{{ call.response.content|escape }}</pre>
+			<pre class="djdt-stack">{{ call.stack }}</pre>
 			</td>
 		</tr>
 	{% endfor %}
