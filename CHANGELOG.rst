@@ -6,6 +6,12 @@ The following is a summary of changes and improvements to
 
 .. New features in each version should be listed, with any necessary information about installation or upgrade notes.
 
+1.6
+---
+
+* New custom django-debug-toolbar panel to view Fedora API requests.
+  used to generate a django page.
+
 1.5.2
 -----
 

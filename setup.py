@@ -83,5 +83,7 @@ setup(
     long_description=LONG_DESCRIPTION,
     classifiers=CLASSIFIERS,
     scripts=['scripts/fedora-checksums', 'scripts/validate-checksums',
-        'scripts/repo-cp'],
+             'scripts/repo-cp'],
+    include_package_data=True,
+    package_data={'eulfedora': ['eulfedora/templates/eulfedora/*.html']},
 )

@@ -1,0 +1,63 @@
+{% load i18n %}{% load cycle from debug_toolbar_compat %}
+<h4>{% trans "Summary" %}</h4>
+<table>
+	<thead>
+	<tr>
+		<th>{% trans "Total API Calls" %}</th>
+		<th>{% trans "Total time" %}</th>
+	</tr>
+	</thead>
+	<tbody>
+	<tr>
+		<td>{{ total_calls }}</td>
+		<td>{{ total_time }} ms</td>
+	</tr>
+	</tbody>
+</table>
+{% if api_calls %}
+<h4>{% trans "API Calls" %}</h4>
+<table>
+	<thead>
+		<tr>
+			<th colspan="2">{% trans "Time (ms)" %}</th>
+			<th>{% trans "Method" %}</th>
+			<th style="width:75%">{% trans "URL" %}</th>
+			<th>{% trans "Arguments" %}</th>
+		</tr>
+	</thead>
+	<tbody>
+	{% for call in api_calls %}
+
+		<tr class="{% cycle 'djDebugOdd' 'djDebugEven' %}" id="existdbMain_{{ forloop.counter }}">
+			<td class="djdt-toggle">
+				<a class="djToggleSwitch" data-toggle-name="cacheMain" data-toggle-id="{{ forloop.counter }}" data-toggle-open="+" data-toggle-close="-" href>+</a>
+			</td>
+			<td>{{ call.time|floatformat:"4" }}</td>
+			<td>{{ call.method|upper }}</td>
+			<td>{{ call.url }}</td>
+			<td>
+				<ul>
+				{% for param, val in call.kwargs.params.iteritems %}
+					<li><b>{{ param }}</b>: {{ val }}</li>
+				{% endfor %}
+				{% for opt, val in call.kwargs.iteritems %}
+					{% if opt != 'params'  %}{# ignore, handled above #}
+						<li><b>{{ opt }}</b>: {{ val }}</li>
+					{% endif %}
+				{% endfor %}
+  				</ul>
+			</td>
+		</tr>
+		<tr class="djUnselected djDebugHoverable {% cycle 'djDebugOdd' 'djDebugEven' %} djToggleDetails_{{ forloop.counter }}" id="cacheDetails_{{ forloop.counter }}">
+			<td colspan="5">
+			{{ call.response.status_code }} {{ call.response.reason }}<br/>
+			{% for header, val in call.response.headers.iteritems %}
+				{{ header}}: {{ val }}{% if not forloop.last %}<br/>{% endif %}
+			{% endfor %}
+			<pre class="djdt-stack">{{ call.response.content|escape }}</pre>
+			</td>
+		</tr>
+	{% endfor %}
+	</tbody>
+</table>
+{% endif %}
