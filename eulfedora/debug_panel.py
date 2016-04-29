@@ -1,0 +1,101 @@
+'''
+Panel for use with
+`django-debug-toolbar <https://django-debug-toolbar.readthedocs.org/>`_.
+
+To install, add:
+
+    'eulfedora.debug_panel.FedoraPanel',
+
+to your configured **DEBUG_TOOLBAR_PANELS**.
+
+Reports on the Fedora API requests used run to generate a page, including
+time to run the query, arguments passed, and response returned.
+'''
+
+import time
+from django.dispatch import Signal
+from debug_toolbar.panels import Panel
+
+import eulfedora
+from eulfedora.api import ApiFacade
+
+# implementation based on django-debug-toolbar cache panel
+
+
+api_called = Signal(providing_args=[
+    "time_taken", "method", "url", "args", "kwargs"])
+
+
+class ApiTracker(ApiFacade):
+    # subclass api request method in order to api query calls
+
+    def _make_request(self, reqmeth, url, *args, **kwargs):
+        start = time.time()
+        response = super(ApiTracker, self)._make_request(reqmeth, url,
+                                                         *args, **kwargs)
+        total_time = time.time() - start
+        api_called.send(sender=self.__class__, time_taken=total_time,
+                        method=reqmeth, url=url, response=response,
+                        args=args, kwargs=kwargs)
+        return response
+
+
+class FedoraPanel(Panel):
+
+    name = 'Fedora'
+    has_content = True
+
+    template = 'eulfedora/debug_panel.html'
+
+    def __init__(self, *args, **kwargs):
+        super(FedoraPanel, self).__init__(*args, **kwargs)
+        self.total_time = 0
+        self.api_calls = []
+
+        api_called.connect(self._store_api_info)
+
+    def _store_api_info(self, sender, time_taken=0, method=None, url=None,
+                        response=None, args=None, kwargs=None, **kw):
+
+        time_taken *= 1000
+        self.total_time += time_taken
+        self.api_calls.append({
+            'time': time_taken,
+            'method': method.__name__,
+            'url': url,
+            'args': args,
+            'kwargs': kwargs,
+            'response': response
+        })
+
+    @property
+    def nav_title(self):
+        return self.name
+
+    def url(self):
+        return ''
+
+    def title(self):
+        return self.name
+
+    def nav_subtitle(self):
+        return "%(calls)d API calls in %(time).2fms" % \
+               {'calls': len(self.api_calls), 'time': self.total_time}
+
+    def enable_instrumentation(self):
+        # patch tracking api facade subclass in for the real one
+        eulfedora.server.RealApiFacade = eulfedora.server.ApiFacade
+        eulfedora.server.ApiFacade = ApiTracker
+        # also patch into the manager module (already imported)
+        # eulexistdb.manager.ExistDB = db.ExistDB
+
+    def disable_instrumentation(self):
+        eulfedora.server.ApiFacade = eulfedora.server.RealApiFacade
+
+    def generate_stats(self, request, response):
+        # statistics for display in the template
+        self.record_stats({
+            'total_calls': len(self.api_calls),
+            'api_calls': self.api_calls,
+            'total_time': self.total_time,
+        })
