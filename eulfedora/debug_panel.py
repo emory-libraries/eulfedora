@@ -13,8 +13,13 @@ time to run the query, arguments passed, and response returned.
 '''
 
 import time
+import traceback
 from django.dispatch import Signal
+from debug_toolbar import settings as dt_settings
 from debug_toolbar.panels import Panel
+from debug_toolbar.utils import render_stacktrace, tidy_stacktrace, \
+    get_stack
+
 
 import eulfedora
 from eulfedora.api import ApiFacade
@@ -59,13 +64,22 @@ class FedoraPanel(Panel):
 
         time_taken *= 1000
         self.total_time += time_taken
+
+        # use debug-toolbar utilities to get & render stacktrace
+        # skip last two entries, which are in eulfedora.debug_panel
+        if dt_settings.CONFIG['ENABLE_STACKTRACES']:
+            stacktrace = tidy_stacktrace(reversed(get_stack()))[:-2]
+        else:
+            stacktrace = []
+
         self.api_calls.append({
             'time': time_taken,
             'method': method.__name__,
             'url': url,
             'args': args,
             'kwargs': kwargs,
-            'response': response
+            'response': response,
+            'stack': render_stacktrace(stacktrace)
         })
 
     @property
