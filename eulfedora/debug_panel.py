@@ -22,7 +22,7 @@ from debug_toolbar.utils import render_stacktrace, tidy_stacktrace, \
 
 
 import eulfedora
-from eulfedora.api import ApiFacade
+from eulfedora.api import ApiFacade, ResourceIndex
 
 # implementation based on django-debug-toolbar cache panel
 
@@ -34,6 +34,7 @@ api_called = Signal(providing_args=[
 class ApiTracker(ApiFacade):
     # subclass api request method in order to api query calls
 
+    # all rest api methods go through _make_request
     def _make_request(self, reqmeth, url, *args, **kwargs):
         start = time.time()
         response = super(ApiTracker, self)._make_request(reqmeth, url,
@@ -43,6 +44,23 @@ class ApiTracker(ApiFacade):
                         method=reqmeth, url=url, response=response,
                         args=args, kwargs=kwargs)
         return response
+
+
+class ResourceIndexTracker(ResourceIndex):
+
+    # all risearch methods go through _query
+    def _query(self, *args, **kwargs):
+        start = time.time()
+        response = super(ResourceIndexTracker, self)._query(*args, **kwargs)
+        total_time = time.time() - start
+        # FIXME: response is currently a csv.DictReader, which
+        # can only be read once, so response can't currently be displayed
+        # in debug panel output
+        api_called.send(sender=self.__class__, time_taken=total_time,
+                        method='risearch', url='', response=response,
+                        args=args, kwargs=kwargs)
+        return response
+
 
 
 class FedoraPanel(Panel):
@@ -72,9 +90,14 @@ class FedoraPanel(Panel):
         else:
             stacktrace = []
 
+        try:
+            method_name = method.__name__.upper()
+        except AttributeError:
+            method_name = method
+
         self.api_calls.append({
             'time': time_taken,
-            'method': method.__name__,
+            'method': method_name,
             'url': url,
             'args': args,
             'kwargs': kwargs,
@@ -99,12 +122,17 @@ class FedoraPanel(Panel):
     def enable_instrumentation(self):
         # patch tracking api facade subclass in for the real one
         eulfedora.server.RealApiFacade = eulfedora.server.ApiFacade
+        eulfedora.server.RealResourceIndex = eulfedora.server.ResourceIndex
+        eulfedora.models.RealResourceIndex = eulfedora.models.ResourceIndex
+
         eulfedora.server.ApiFacade = ApiTracker
-        # also patch into the manager module (already imported)
-        # eulexistdb.manager.ExistDB = db.ExistDB
+        eulfedora.server.ResourceIndex = ResourceIndexTracker
+        eulfedora.models.ResourceIndex = ResourceIndexTracker
 
     def disable_instrumentation(self):
         eulfedora.server.ApiFacade = eulfedora.server.RealApiFacade
+        eulfedora.server.ResourceIndex = eulfedora.server.RealResourceIndex
+        eulfedora.models.ResourceIndex = eulfedora.models.RealResourceIndex
 
     def generate_stats(self, request, response):
         # statistics for display in the template
