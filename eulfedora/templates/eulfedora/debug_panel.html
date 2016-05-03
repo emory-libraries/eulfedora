@@ -33,8 +33,13 @@
 				<a class="djToggleSwitch" data-toggle-name="cacheMain" data-toggle-id="{{ forloop.counter }}" data-toggle-open="+" data-toggle-close="-" href>+</a>
 			</td>
 			<td>{{ call.time|floatformat:"4" }}</td>
-			<td>{{ call.method|upper }}</td>
+			<td>{{ call.method }}</td>
+			{% if call.method == 'risearch' %}
+			<td><pre>{{ call.args.1.query }}</pre>
+			</td>
+			{% else %}
 			<td>{{ call.url }}</td>
+			{% endif %}
 			<td>
 				<ul>
 				{% for param, val in call.kwargs.params.iteritems %}
@@ -50,11 +55,17 @@
 		</tr>
 		<tr class="djUnselected djDebugHoverable {% cycle 'djDebugOdd' 'djDebugEven' %} djToggleDetails_{{ forloop.counter }}" id="cacheDetails_{{ forloop.counter }}">
 			<td colspan="5">
-			{{ call.response.status_code }} {{ call.response.reason }}<br/>
-			{% for header, val in call.response.headers.iteritems %}
-				{{ header}}: {{ val }}{% if not forloop.last %}<br/>{% endif %}
-			{% endfor %}
-			<pre class="djdt-stack">{{ call.response.content|escape }}</pre>
+			{% if call.response.status_code %} {# http response #}
+				{{ call.response.status_code }} {{ call.response.reason }}<br/>
+				{% for header, val in call.response.headers.iteritems %}
+					{{ header}}: {{ val }}{% if not forloop.last %}<br/>{% endif %}
+				{% endfor %}
+				<pre class="djdt-stack">{{ call.response.content|escape }}</pre>
+
+			{% else %} {# risearch result #}
+			<pre class="djdt-stack">{% for row in call.response %}{{ row }}{% endfor %}</pre>
+			{% endif %}
+
 			<pre class="djdt-stack">{{ call.stack }}</pre>
 			</td>
 		</tr>
