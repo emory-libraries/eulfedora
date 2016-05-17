@@ -165,4 +165,14 @@ order to allow retrieving content that would otherwise be restricted.  This
 option should **NOT** be used to send content to a repository you do not
 control or with credentials that you care about.
 
+(Experimental): repo-cp now supports export to and import from a file
+directory, nicknamed here an "airlock".  To configure an airlock, add
+another section to your .repocfg file with the option `airlock = true`
+and a path where files should be exported or imported (the directory
+should exist).  For example::
+
+  [airlock]
+  airlock = true
+  path = airlock/data/files/
+
 '''
