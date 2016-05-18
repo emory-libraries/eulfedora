@@ -91,7 +91,7 @@ def repo_copy():
         return
 
     if is_airlock(cfg, args.source):
-        src_repo = Airlock(cfg.get(args.source, 'path'))
+       src_repo = Airlock(cfg.get(args.source, 'path'))
     else:
         src_repo = Repository(cfg.get(args.source, 'fedora_root'),
             cfg.get(args.source, 'fedora_user'),
@@ -104,26 +104,22 @@ def repo_copy():
             cfg.get(args.dest, 'fedora_user'),
             cfg.get(args.dest, 'fedora_password'))
 
-
     # special case
     if isinstance(src_repo, Airlock):
         # if source is an "airlock", then our "pids" are  files
-        pids = glob.glob(os.path.join(src_repo.path, '*.xml'))
-
-        return
-
-
-    pids = []
-    if args.pids:
-        pids = args.pids
-    elif args.file:
-        with open(args.file) as pidlistfile:
-            pids = pidlistfile.read().splitlines()
+       pids = glob.glob(os.path.join(src_repo.path, '*.xml'))
 
     else:
-        print('Specify either one or more pids or a file with a list of pids')
-        parser.print_help()
-        return
+        pids = []
+        if args.pids:
+            pids = args.pids
+        elif args.file:
+            with open(args.file) as pidlistfile:
+                pids = pidlistfile.read().splitlines()
+        else:
+            print('Specify either one or more pids or a file with a list of pids')
+            parser.print_help()
+            return
 
     allow_overwrite = cfg.has_option(args.dest, 'allow_overwrite') and \
         cfg.getboolean(args.dest, 'allow_overwrite')
@@ -136,8 +132,7 @@ def repo_copy():
                 with open(pid, 'rb') as export:
                     result = dest_repo.ingest(export)
                     print('%s copied' % result)
-
-                next
+                continue
 
             src_obj = src_repo.get_object(pid)
 
