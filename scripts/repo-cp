@@ -83,31 +83,33 @@ def repo_copy():
     with open(configfile_path) as cfgfile:
             cfg.readfp(cfgfile)
 
-    if not cfg.has_section(args.source):
+    if is_airlock(cfg, args.source):
+       src_repo = Airlock(args.source)
+    elif not cfg.has_section(args.source):
         print('Source repository %s is not configured' % args.source)
         return
-    if not cfg.has_section(args.dest):
+    else:
+        src_repo = Repository(cfg.get(args.source, 'fedora_root'),
+                              cfg.get(args.source, 'fedora_user'),
+                              cfg.get(args.source, 'fedora_password'))
+
+    if is_airlock(cfg, args.dest):
+        dest_repo = Airlock(args.dest)
+
+    elif not cfg.has_section(args.dest):
         print('Destination repository %s is not configured' % args.dest)
         return
 
-    if is_airlock(cfg, args.source):
-       src_repo = Airlock(cfg.get(args.source, 'path'))
-    else:
-        src_repo = Repository(cfg.get(args.source, 'fedora_root'),
-            cfg.get(args.source, 'fedora_user'),
-            cfg.get(args.source, 'fedora_password'))
-
-    if is_airlock(cfg, args.dest):
-        dest_repo = Airlock(cfg.get(args.dest, 'path'))
     else:
         dest_repo = Repository(cfg.get(args.dest, 'fedora_root'),
-            cfg.get(args.dest, 'fedora_user'),
-            cfg.get(args.dest, 'fedora_password'))
+                               cfg.get(args.dest, 'fedora_user'),
+                               cfg.get(args.dest, 'fedora_password'))
 
     # special case
     if isinstance(src_repo, Airlock):
-        # if source is an "airlock", then our "pids" are  files
-       pids = glob.glob(os.path.join(src_repo.path, '*.xml'))
+        # if source is an "airlock", then the "pids" to sync are any
+        # xml files in the directory
+        pids = glob.glob(os.path.join(src_repo.path, '*.xml'))
 
     else:
         pids = []
@@ -164,9 +166,11 @@ def repo_copy():
                 (err_type, pid, args.dest, err))
 
 
-def is_airlock(cfg, section):
-    if cfg.has_option(section, 'airlock'):
-        return cfg.get(section, 'airlock')
+def is_airlock(cfg, name):
+    # if a name is not in the config file and is a directory,
+    # consider it an airlock
+    if not cfg.has_section(name) and os.path.isdir(name):
+        return True
     return False
 
 
