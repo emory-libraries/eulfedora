@@ -173,13 +173,8 @@ class DatastreamObject(object):
         '''contents of the datastream; for existing datastreams,
         content is only pulled from Fedora when first requested, and
         cached after first access; can be used to set or update
-        datastream contents by means of text content or a file-like
-        object.  For example, if you have a :class:`DigitalObject`
-        subclass with a :class:`FileDatastream` defined as ``image``::
-
-            with open(filename) as imgfile:
-                myobj.image.content = imgfile
-
+        datastream contents.
+        
         For an alternate method to set datastream content, see
         :attr:`ds_location`.''')
 
