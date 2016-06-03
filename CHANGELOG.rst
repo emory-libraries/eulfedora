@@ -11,6 +11,11 @@ The following is a summary of changes and improvements to
 
 * New custom django-debug-toolbar panel to view Fedora API requests.
   used to generate a django page.
+* Clarify confusing documentation for setting content on
+  ``DatastreamObject`` and ``FileDatastreamObject``.  Thanks to
+  `@bcail <https://github.com/bcail>`_.
+  `#20 <https://github.com/emory-libraries/eulfedora/issues/20>`_,
+  `PR #21 <https://github.com/emory-libraries/eulfedora/pull/21>`_
 
 1.5.2
 -----
