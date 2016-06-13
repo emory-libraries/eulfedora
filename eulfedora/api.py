@@ -15,6 +15,7 @@
 #   limitations under the License.
 
 from __future__ import unicode_literals
+import sys
 import csv
 import logging
 import requests
@@ -569,6 +570,10 @@ class REST_API(HTTP_API_Base):
         headers = {'Content-Type': 'text/xml'}
 
         url = 'objects/new'
+        
+        if sys.version_info >= (3, ):
+            text = bytes(text.encode('utf-8'))
+        
         return self.post(url, data=text, params=http_args, headers=headers)
 
 
