@@ -70,6 +70,8 @@ def repo_copy():
         help='Fedora export format to use.  Use archive if migrate exports ' \
            + 'fail with checksum errors or if content URLs are not accessible '
            + 'to the destination server. (default: %(default)s)')
+    parser.add_argument('--omit-checksums', default=False, action='store_true',
+        help='Omit checksums from datastreams (default: %(default)s)',)
     parser.add_argument('--archive', '-a', action='store_const',
         const='archive', dest='export_format',
         help='Use archive export format (equivalent to --export-format archive)')
@@ -153,7 +155,7 @@ def repo_copy():
             else:
                 result = sync_object(src_obj, dest_repo, export_context=args.export_format,
                     overwrite=allow_overwrite, show_progress=args.progress,
-                    requires_auth=args.requires_auth)
+                    requires_auth=args.requires_auth, omit_checksums=args.omit_checksums)
                 print('%s copied' % result)
         except ChecksumMismatch:
             print('ChecksumMismatch on %s' % pid)
