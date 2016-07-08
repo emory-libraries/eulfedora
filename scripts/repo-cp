@@ -24,6 +24,7 @@ from six.moves import configparser
 import hashlib
 from lxml import etree
 import math
+import glob
 import os
 import re
 
@@ -69,6 +70,8 @@ def repo_copy():
         help='Fedora export format to use.  Use archive if migrate exports ' \
            + 'fail with checksum errors or if content URLs are not accessible '
            + 'to the destination server. (default: %(default)s)')
+    parser.add_argument('--omit-checksums', default=False, action='store_true',
+        help='Omit checksums from datastreams (default: %(default)s)',)
     parser.add_argument('--archive', '-a', action='store_const',
         const='archive', dest='export_format',
         help='Use archive export format (equivalent to --export-format archive)')
@@ -82,43 +85,78 @@ def repo_copy():
     with open(configfile_path) as cfgfile:
             cfg.readfp(cfgfile)
 
-    if not cfg.has_section(args.source):
+    if is_airlock(cfg, args.source):
+       src_repo = Airlock(args.source)
+    elif not cfg.has_section(args.source):
         print('Source repository %s is not configured' % args.source)
         return
-    if not cfg.has_section(args.dest):
+    else:
+        src_repo = Repository(cfg.get(args.source, 'fedora_root'),
+                              cfg.get(args.source, 'fedora_user'),
+                              cfg.get(args.source, 'fedora_password'))
+
+    if is_airlock(cfg, args.dest):
+        dest_repo = Airlock(args.dest)
+
+    elif not cfg.has_section(args.dest):
         print('Destination repository %s is not configured' % args.dest)
         return
 
-    src_repo = Repository(cfg.get(args.source, 'fedora_root'),
-        cfg.get(args.source, 'fedora_user'),
-        cfg.get(args.source, 'fedora_password'))
-
-    dest_repo = Repository(cfg.get(args.dest, 'fedora_root'),
-        cfg.get(args.dest, 'fedora_user'),
-        cfg.get(args.dest, 'fedora_password'))
-
-    pids = []
-    if args.pids:
-        pids = args.pids
-    elif args.file:
-        with open(args.file) as pidlistfile:
-            pids = pidlistfile.read().splitlines()
     else:
-        print('Specify either one or more pids or a file with a list of pids')
-        parser.print_help()
-        return
+        dest_repo = Repository(cfg.get(args.dest, 'fedora_root'),
+                               cfg.get(args.dest, 'fedora_user'),
+                               cfg.get(args.dest, 'fedora_password'))
+
+    # special case
+    if isinstance(src_repo, Airlock):
+        # if source is an "airlock", then the "pids" to sync are any
+        # xml files in the directory
+        pids = glob.glob(os.path.join(src_repo.path, '*.xml'))
+
+    else:
+        pids = []
+        if args.pids:
+            pids = args.pids
+        elif args.file:
+            with open(args.file) as pidlistfile:
+                pids = pidlistfile.read().splitlines()
+        else:
+            print('Specify either one or more pids or a file with a list of pids')
+            parser.print_help()
+            return
 
     allow_overwrite = cfg.has_option(args.dest, 'allow_overwrite') and \
         cfg.getboolean(args.dest, 'allow_overwrite')
 
     for pid in pids:
         try:
+
+            # if source is a repo, "pid" is actually a file
+            if isinstance(src_repo, Airlock):
+                with open(pid, 'rb') as export:
+                    result = dest_repo.ingest(export)
+                    print('%s copied' % result)
+                continue
+
             src_obj = src_repo.get_object(pid)
 
-            result = sync_object(src_obj, dest_repo, export_context=args.export_format,
-                overwrite=allow_overwrite, show_progress=args.progress,
-                requires_auth=args.requires_auth)
-            print('%s copied' % result)
+            # special case: if destination is an airlock
+            # save the fedora export to a file in that airlock path
+            if isinstance(dest_repo, Airlock):
+                export_filename = os.path.join(dest_repo.path,
+                                               '%s.xml' % src_obj.pid)
+                with open(export_filename, 'wb') as export:
+                    response = src_obj.api.export(
+                        src_obj, context=args.export_format, stream=True)
+                    for chunk in response.iter_content(4096*1024):
+                        export.write(chunk)
+                    print('Exported %s to %s' % (src_obj.pid, export_filename))
+
+            else:
+                result = sync_object(src_obj, dest_repo, export_context=args.export_format,
+                    overwrite=allow_overwrite, show_progress=args.progress,
+                    requires_auth=args.requires_auth, omit_checksums=args.omit_checksums)
+                print('%s copied' % result)
         except ChecksumMismatch:
             print('ChecksumMismatch on %s' % pid)
 
@@ -129,6 +167,19 @@ def repo_copy():
             print('%s importing %s to %s: %s' % \
                 (err_type, pid, args.dest, err))
 
+
+def is_airlock(cfg, name):
+    # if a name is not in the config file and is a directory,
+    # consider it an airlock
+    if not cfg.has_section(name) and os.path.isdir(name):
+        return True
+    return False
+
+
+class Airlock(object):
+
+    def __init__(self, path):
+        self.path = path
 
 
 if __name__ == '__main__':

@@ -165,4 +165,18 @@ order to allow retrieving content that would otherwise be restricted.  This
 option should **NOT** be used to send content to a repository you do not
 control or with credentials that you care about.
 
+(Experimental): repo-cp now supports export to and import from a file
+directory, nicknamed here an "airlock".  Airlocks do not require
+configuration; simplify specify a directory name as your source
+or target repository.  As long as your source or target is not in your
+config file and is an existing directory, it will be treated as
+a path where objects should be imported or exported as xml files.
+
+  repo-cp qa-fedora dev-fedora path/to/airlock pid:1 pid:2 pid:3 --archive --progress
+
+.. Note::
+
+  Airlock functionality currently does not support the allow overwrite
+  option available in the config.
+
 '''
