@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 def sync_object(src_obj, dest_repo, export_context='migrate',
                 overwrite=False, show_progress=False,
-                requires_auth=False):
+                requires_auth=False, omit_checksums=False):
     '''Copy an object from one repository to another using the Fedora
     export functionality.
 
@@ -58,6 +58,9 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
     :param requires_auth: content datastreams require authentication,
         and should have credentials patched in (currently only supported
         in archive-xml export mode)  (default: False)
+    :param omit_checksums: scrubs contentDigest -- aka checksums -- from datastreams;
+        helpful for datastreams with Redirect (R) or External (E) contexts
+        (default: False)
     :returns: result of Fedora ingest on the destination repository on
         success
     '''
@@ -101,10 +104,14 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
             progress_bar=pbar, requires_auth=requires_auth,
             xml_only=(export_context == 'archive-xml'))
         # NOTE: should be possible to pass BytesIO to be read, but that is failing
-        export_data = export.object_data().getvalue()
+        export_data = export.object_data().getvalue()       
 
     else:
         raise Exception('Unsupported export context %s', export_context)
+
+    # wipe checksums from FOXML if flagged in options
+    if omit_checksums:
+        export_data = re.sub(r'<foxml:contentDigest.+?/>', '', export_data)
 
     dest_obj = dest_repo.get_object(src_obj.pid)
     if dest_obj.exists:
