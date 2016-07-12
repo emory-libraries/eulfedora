@@ -27,6 +27,11 @@ from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor, \
 import six
 from six.moves.urllib.parse import urljoin
 
+try:
+    from django.dispatch import Signal
+except ImportError:
+    Signal = None
+
 from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import datetime_to_fedoratime, \
     RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf, \
@@ -56,6 +61,13 @@ def _get_items(query, doseq):
                 yield k, e
         else:
             yield k, str(v)
+
+
+if Signal is not None:
+    api_called = Signal(providing_args=[
+        "time_taken", "method", "url", "args", "kwargs"])
+else:
+    api_called = None
 
 
 class HTTP_API_Base(object):
@@ -108,8 +120,15 @@ class HTTP_API_Base(object):
         rqst_options.update(kwargs)
         start = time.time()
         response = reqmeth(self.prep_url(url), *args, **rqst_options)
+        total_time = time.time() - start
         logger.debug('%s %s=>%d: %f sec' % (reqmeth.__name__.upper(), url,
-            response.status_code, time.time() - start))
+                     response.status_code, total_time))
+
+        # if django signals are available, send api called
+        if api_called is not None:
+            api_called.send(sender=self.__class__, time_taken=total_time,
+                            method=reqmeth, url=url, response=response,
+                            args=args, kwargs=kwargs)
 
         # NOTE: currently doesn't do anything with 3xx  responses
         # (likely handled for us by requests)
@@ -947,7 +966,6 @@ class ResourceIndex(HTTP_API_Base):
         }
         return self._query(format, http_args, flush)
 
-
     def _query(self, format, http_args, flush=None):
         # if flush parameter was not specified, use class setting
         if flush is None:
@@ -960,9 +978,17 @@ class ResourceIndex(HTTP_API_Base):
 
         url = 'risearch'
         try:
+            start = time.time()
             response = self.get(url, params=http_args)
             data, abs_url = response.content, response.url
+            total_time = time.time() - start
             # parse the result according to requested format
+            if api_called is not None:
+                api_called.send(sender=self.__class__, time_taken=total_time,
+                                method='risearch', url='', response=response,
+                                args=[], kwargs={'format': format,
+                                                 'http_args': http_args,
+                                                 'flush': flush})
             if format == 'N-Triples':
                 return parse_rdf(data, abs_url, format='n3')
             elif format == 'CSV':
