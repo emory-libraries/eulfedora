@@ -57,36 +57,33 @@ def _get_items(query, doseq):
         else:
             yield k, str(v)
 
-_sessions = {}
 
 class HTTP_API_Base(object):
-    def __init__(self, base_url, username=None, password=None):
+
+    def __init__(self, base_url, username=None, password=None, retries=None):
         # standardize url format; ensure we have a trailing slash,
         # adding one if necessary
         if not base_url.endswith('/'):
             base_url = base_url + '/'
 
-        # TODO: can we re-use sessions safely across instances?
-        global _sessions
-
-        # check for an existing session for this fedora
-        if base_url in _sessions:
-            self.session = _sessions[base_url]
-        else:
-            # create a new session and add to global sessions
-            self.session = requests.Session()
-            # Set headers to be passed with every request
-            # NOTE: only headers that will be common for *all* requests
-            # to this fedora should be set in the session
-            # (i.e., do NOT include auth information here)
-            self.session.headers = {
-                'User-Agent': user_agent('eulfedora', eulfedora_version),
-                # 'user-agent': 'eulfedora/%s (python-requests/%s)' % \
-                    # (eulfedora_version, requests.__version__),
-                'verify': True,  # verify SSL certs by default
-            }
-
-            _sessions[base_url] = self.session
+        # create a new session and add to global sessions
+        self.session = requests.Session()
+        # Set headers to be passed with every request
+        # NOTE: only headers that will be common for *all* requests
+        # to this fedora should be set in the session
+        # (i.e., do NOT include auth information here)
+        self.session.headers = {
+            'User-Agent': user_agent('eulfedora', eulfedora_version),
+            # 'user-agent': 'eulfedora/%s (python-requests/%s)' % \
+            # (eulfedora_version, requests.__version__),
+            'verify': True,  # verify SSL certs by default
+        }
+        # no retries is requests current default behavior, so only
+        # customize if a value is set
+        if retries is not None:
+            adapter = requests.adapters.HTTPAdapter(max_retries=retries)
+            self.session.mount('http://', adapter)
+            self.session.mount('https://', adapter)
 
         self.base_url = base_url
         self.username = username
