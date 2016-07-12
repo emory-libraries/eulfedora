@@ -19,6 +19,10 @@ The following is a summary of changes and improvements to
 * New Django exception filter `eulfedora.util.SafeExceptionReporterFilter`
   to suppress Fedora session password when an exception occurs within
   the API request
+* Add retries option to :class:`eulfedora.server.Repository`
+  to configure requests max retries when making API calls, in case of
+  errors establishing the connection. (Defaults to 3; configurable in
+  Django settings as **FEDORA_CONNECTION_RETRIES**)
 
 1.5.2
 -----

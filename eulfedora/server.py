@@ -98,30 +98,44 @@ class Repository(object):
         * If none of these options are available, fedora credentials
           will be set in django settings will be used.
 
-
+    If a retries value is specified, this will override the default
+    set in :attr:`Repository.retries` which is used to configure the
+    maximum number of requests retries for connection errors (see
+    http://docs.python-requests.org/en/master/api/#requests.adapters.HTTPAdapter).
+    Retries can also be specified via Django settings as
+    **FEDORA_CONNECTION_RETRIES**; if an iniitalization parameter is specified,
+    that will override the Django setting.
     """
 
     default_object_type = DigitalObject
     "Default type to use for methods that return fedora objects - :class:`DigitalObject`"
     default_pidspace = None
 
-    search_fields = ['pid', 'label', 'state', 'ownerId', 'cDate', 'mDate',
-    'dcmDate', 'title', 'creator', 'subject', 'description', 'publisher',
-    'contributor', 'date', 'type', 'format', 'identifier', 'source', 'language',
-    'relation', 'coverage', 'rights']
+    #: default number of retries to request for API connections; see
+    #: http://docs.python-requests.org/en/master/api/#requests.adapters.HTTPAdapter
+    retries = 3
+
+    default_retry_option = object()
+    # default retry option, so None can be recognized as an option
+
+    search_fields = [
+        'pid', 'label', 'state', 'ownerId', 'cDate', 'mDate',
+        'dcmDate', 'title', 'creator', 'subject', 'description', 'publisher',
+        'contributor', 'date', 'type', 'format', 'identifier', 'source',
+        'language', 'relation', 'coverage', 'rights']
     "fields that can be searched against in :meth:`find_objects`"
 
     search_fields_aliases = {
-        'owner' : 'ownerId',
-        'created' : 'cDate',
-        'modified' : 'mDate',
-        'dc_modified' : 'dcmDate'
+        'owner': 'ownerId',
+        'created': 'cDate',
+        'modified': 'mDate',
+        'dc_modified': 'dcmDate'
     }
     "human-readable aliases for oddly-named fedora search fields"
 
+    def __init__(self, root=None, username=None, password=None, request=None,
+                 retries=default_retry_option):
 
-    def __init__(self, root=None, username=None, password=None, request=None):
-        global _connection
         # when initialized via django, settings should be pulled from django conf
         if root is None:
 
@@ -150,8 +164,17 @@ class Repository(object):
                 if hasattr(settings, 'FEDORA_PIDSPACE'):
                     self.default_pidspace = settings.FEDORA_PIDSPACE
 
+                # if retries is specified in
+                if hasattr(settings, 'FEDORA_CONNECTION_RETRIES'):
+                    self.retries = settings.FEDORA_CONNECTION_RETRIES
+
             except ImportError:
                 pass
+
+        # if retries is specified in init options, that should override
+        # default value or django setting
+        if retries is not self.default_retry_option:
+            self.retries = retries
 
         if root is None:
             raise Exception('Could not determine Fedora root url from django settings or parameter')
@@ -344,7 +367,7 @@ class Repository(object):
             for obj_type in matches:
                 is_root_subclass = True
                 for possible_parent_type in matches:
-                    if not issubclass(obj_type,possible_parent_type):
+                    if not issubclass(obj_type, possible_parent_type):
                         is_root_subclass = False
                 if is_root_subclass:
                     return obj_type

@@ -1,4 +1,4 @@
-    # file test_fedora/test_api.py
+# file test_fedora/test_api.py
 #
 #   Copyright 2011 Emory University Libraries
 #
@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from dateutil.tz import tzutc
 import hashlib
 from lxml import etree
+from mock import patch
 from rdflib import URIRef
 import re
 import requests
@@ -732,6 +733,20 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         # clean up test object
         self.rest_api.purgeObject(pid)
 
+    def test_retries(self):
+        with patch('eulfedora.api.requests.adapters') as mockreq_adapters:
+            # retries not specified, retries = None
+            REST_API(FEDORA_ROOT_NONSSL, FEDORA_USER, FEDORA_PASSWORD)
+            # no custom adapter code needed
+            mockreq_adapters.HTTPAdapter.assert_not_called()
+
+            # retry value specified
+            REST_API(FEDORA_ROOT_NONSSL, FEDORA_USER, FEDORA_PASSWORD,
+                     retries=3)
+            # adapter should be initialized with max retries option
+            mockreq_adapters.HTTPAdapter.assert_called_with(max_retries=3)
+
+
 class TestAPI_A_LITE(FedoraTestCase):
     fixtures = ['object-with-pid.foxml']
     pidspace = FEDORA_PIDSPACE
@@ -808,7 +823,8 @@ class TestResourceIndex(FedoraTestCase):
         self.assert_({'obj': self.object.uri} in objects)
 
     def test_custom_errors(self):
-        self.assertRaises(UnrecognizedQueryLanguage,  self.risearch.find_statements,
+        self.assertRaises(UnrecognizedQueryLanguage,
+                          self.risearch.find_statements,
                           '* * *', language='bogus')
 
     def test_count_statements(self):
@@ -816,3 +832,4 @@ class TestResourceIndex(FedoraTestCase):
         q = '* <fedora-rels-ext:isMemberOf> <%s>' % self.related.uri
         total = self.risearch.count_statements(q)
         self.assertEqual(1, total)
+
