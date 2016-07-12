@@ -216,3 +216,41 @@ class ReadableIterator(object):
           self.amount_read += len(data)
           return data
 
+try:
+    from django.views import debug
+
+    class SafeExceptionReporterFilter(debug.SafeExceptionReporterFilter):
+        '''Under certain circumstances, an exception made when actually
+        making a request to Fedora can result in the auth username and password
+        being included in the stack trace.  This filter suppresses the
+        password.  To enable this filter, configure it in your Django
+        settings like this::
+
+            DEFAULT_EXCEPTION_REPORTER_FILTER = 'eulfedora.util.SafeExceptionReporterFilter'
+
+        '''
+
+        def get_traceback_frame_variables(self, request, tb_frame):
+            # let the parent class filter everything first
+            cleansed = super(SafeExceptionReporterFilter, self) \
+                .get_traceback_frame_variables(request, tb_frame)
+
+            return self.filter_cleansed(cleansed)
+
+        def filter_cleansed(self, cleansed):
+            # iterate through the stack trace variables that have
+            # already been cleaned by the django filter to check for
+            # request auth parameters set in api._make_request
+            for varname, values in cleansed:
+                if varname == 'rqst_options' and 'auth' in values:
+                    # auth is a tuple, which can't be edited,
+                    # so cnstruct a new one with subsitute value
+                    # instead of the actual password
+                    cleansed_auth = (values['auth'][0],
+                                     debug.CLEANSED_SUBSTITUTE)
+                    values['auth'] = cleansed_auth
+            return cleansed
+
+
+except ImportError:
+    pass

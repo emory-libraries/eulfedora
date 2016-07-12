@@ -16,6 +16,9 @@ The following is a summary of changes and improvements to
   `@bcail <https://github.com/bcail>`_.
   `#20 <https://github.com/emory-libraries/eulfedora/issues/20>`_,
   `PR #21 <https://github.com/emory-libraries/eulfedora/pull/21>`_
+* New Django exception filter `eulfedora.util.SafeExceptionReporterFilter`
+  to suppress Fedora session password when an exception occurs within
+  the API request
 
 1.5.2
 -----
