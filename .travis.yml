@@ -1,0 +1,39 @@
+language: python
+
+# ensure use container-based infrastructure for caching
+sudo: false
+
+python:
+  - "2.7"
+
+addons:
+  apt:
+    packages:
+      - oracle-java8-installer
+
+# versions of fedora test against
+# (install script doesn't yet support more than one)
+env:
+  - FCREPO_VERSION=fedora-3.8.1
+
+before_install:
+  - export FCREPO_FOLDER=${HOME}/jfs/${FCREPO_VERSION}
+  - export JAVA_HOME=/usr/lib/jvm/java-8-oracle
+
+install:
+  - ci/setup-fedora.sh
+  - pip install -e .
+  - pip install -e ".[dev]"
+  - pip install coveralls
+  - cp ci/testsettings.py test/localsettings.py
+
+before_script:
+  - ci/start-fedora.sh
+
+script:
+  tox
+
+after_success:
+  - coveralls
+
+cache: pip
