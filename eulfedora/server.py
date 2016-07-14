@@ -40,6 +40,8 @@ Projects that use this module should include the following settings in their
     FEDORA_PIDSPACE = 'changeme'
     FEDORA_TEST_ROOT = 'http://fedora.host.name:8180/fedora/'
     FEDORA_TEST_PIDSPACE = 'testme'
+    # optional retry setting (default is 3)
+    FEDORA_CONNECTION_RETRIES = None
 
 If username and password are not specified, the Repository instance
 will be initialized without credentials and access Fedora as an
@@ -75,14 +77,12 @@ logger = logging.getLogger(__name__)
 # a repository object, basically a handy facade for easy api access
 
 class Repository(object):
-    "Pythonic interface to a single Fedora Commons repository instance."
+    """Pythonic interface to a single Fedora Commons repository instance.
 
-    """Connect to a Fedora Repository based on configuration in ``settings.py``.
-
-    This class is a simple wrapper to initialize :class:`eulcore.fedora.server.Repository`,
-    based on Fedora connection parameters in a Django settings file.  If username
-    and password are specified, they will override fedora credentials configured
-    in Django settings.
+    Connect to a single Fedora Repository by passing in connection
+    parameters or based on configuration in a Django settings file.
+    If username and password are specified, they will override any
+    fedora credentials configuredin Django settings.
 
     If a request object is passed in and the user is logged in, this
     class will look for credentials in the session, as set by
@@ -98,7 +98,7 @@ class Repository(object):
         * If none of these options are available, fedora credentials
           will be set in django settings will be used.
 
-    If a retries value is specified, this will override the default
+    If a *retries* value is specified, this will override the default
     set in :attr:`Repository.retries` which is used to configure the
     maximum number of requests retries for connection errors (see
     http://docs.python-requests.org/en/master/api/#requests.adapters.HTTPAdapter).
