@@ -19,6 +19,7 @@ env:
 before_install:
   - export FCREPO_FOLDER=${HOME}/jfs/${FCREPO_VERSION}
   - export JAVA_HOME=/usr/lib/jvm/java-8-oracle
+  - export PATH=$JAVA_HOME/bin:$PATH
 
 install:
   - ci/setup-fedora.sh
