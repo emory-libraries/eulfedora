@@ -16,6 +16,7 @@
 
 from __future__ import unicode_literals
 from datetime import date
+from django.test import override_settings
 
 from eulfedora.rdfns import model as modelns
 from eulfedora.models import DigitalObject
@@ -200,3 +201,17 @@ class TestBasicFedoraFunctionality(FedoraTestCase):
         self.assertRaises(Exception, list, repo.find_objects(pid=pid))
 
         # FIXME: is there any way to test that RequestContextManager closes the connection?
+
+    def test_init_retries(self):
+        # default
+        repo = Repository('http://fedo.ra', 'user', 'passwd')
+        self.assertEqual(Repository.retries, repo.retries)
+
+        # number specified
+        repo = Repository('http://fedo.ra', 'user', 'passwd', retries=5)
+        self.assertEqual(5, repo.retries)
+
+        # No retries specified
+        repo = Repository('http://fedo.ra', 'user', 'passwd', retries=None)
+        self.assertEqual(None, repo.retries)
+

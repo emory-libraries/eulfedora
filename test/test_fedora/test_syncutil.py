@@ -55,6 +55,18 @@ class ArchiveExportTest(unittest.TestCase):
         self.assertEqual('text/xml', dsinfo['mimetype'])
         self.assertEqual('f53aec07f2607f536bac7ee03dbbfe7c', dsinfo['digest'])
 
+        # sample etd record with longer datastream info
+        etd_ds = '''</foxml:datastreamVersion><foxml:datastreamVersion ID="RELS-EXT.9" LABEL="Relationships to other objects" CREATED="2009-09-18T19:36:04.235Z" MIMETYPE="application/rdf+xml" FORMAT_URI="info:fedora/fedora-system:FedoraRELSExt-1.0" SIZE="716">
+<foxml:contentDigest TYPE="MD5" DIGEST="168fb675e5fcded1a3b8cc7251877744"/>'''
+
+        self.archex.end_of_last_chunk = ''
+        dsinfo = self.archex.get_datastream_info(etd_ds)
+        self.assertEqual('RELS-EXT.9', dsinfo['id'])
+        self.assertEqual('application/rdf+xml', dsinfo['mimetype'])
+        self.assertEqual('716', dsinfo['size'])
+        self.assertEqual('MD5', dsinfo['type'])
+        self.assertEqual('168fb675e5fcded1a3b8cc7251877744', dsinfo['digest'])
+
     def test_object_data(self):
         # mock api to read export data from a local fixture filie
         response = self.session.get('file://%s' % FIXTURES['sync1_export'])

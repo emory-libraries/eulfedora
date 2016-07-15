@@ -44,6 +44,7 @@ from eulfedora.models import DigitalObject, Relation, DigitalObjectSaveFailure, 
     XmlDatastream
 from eulfedora.util import RequestFailed, force_text
 from eulfedora import cryptutil
+from eulfedora.syncutil import humanize_file_size
 
 
 REPOMGMT = Namespace(rdflib.URIRef('http://pid.emory.edu/ns/2011/repo-management/#'))
@@ -94,7 +95,6 @@ class FixityObject(DigitalObject):
                                'Provenance metadata', premis.Premis)
     '''Optional ``provenanceMetadata`` datastream (expects PREMIS) for
     objects that follow Hydra naming conventions'''
-
 
     @property
     def premis_ds(self):
@@ -169,29 +169,27 @@ class ValidateChecksums(object):
         # processing opts
         proc_args = self.parser.add_argument_group('Processing options')
         proc_args.add_argument('--max', '-m', type=int, metavar='N',
-                                 help='Stop after processing the first %(metavar)s objects')
-
+                               help='Stop after processing the first %(metavar)s objects')
         proc_args.add_argument('--all-versions', '-a', dest='all_versions', action='store_true',
-                              help='''Check all versions of datastreams
-                              (by default, only current versions are checked)''')
-
+                               help='''Check all versions of datastreams
+                               (by default, only current versions are checked)''')
         proc_args.add_argument('--since', '-s', dest='since', type=int,
-                              default=self.default_days_betweeen_checks,
-                              help='''Check objects with a last fixity check older
-                              than the specified number of days (default: %(default)s)''')
-
+                               default=self.default_days_betweeen_checks,
+                               help='''Check objects with a last fixity check older
+                               than the specified number of days (default: %(default)s)''')
         proc_args.add_argument('--time-limit', '-t', dest='timelimit', type=int,
-                              help='''Only run for the specified duration in minutes''')
-
+                               help='''Only run for the specified duration in minutes''')
+        proc_args.add_argument('--max-size', dest='max_size', type=int,
+                               help='''Skip datastreams larger than the specified size in bytes''')
 
         # email opts
         email_args = self.parser.add_argument_group('Email options')
         email_args.add_argument('--email', '-e',
-                               help='''One or more email addresses (comma separated) where a report
-                               should be sent if any errors are encountered''')
+                                help='''One or more email addresses (comma separated) where a report
+                                should be sent if any errors are encountered''')
         email_args.add_argument('--smtp', help='''SMTP server to use for sending email (required for email)''')
         email_args.add_argument('--from', dest='from_email',
-            help='''Email address reports should come from (required for email)''')
+                                help='''Email address reports should come from (required for email)''')
 
         # optional list of pids
         self.parser.add_argument('pids', metavar='PID', nargs='*',
@@ -232,18 +230,16 @@ class ValidateChecksums(object):
 
         # TODO: needs fedora error handling (e.g., bad password, hostname, etc)
         self.repo = Repository(self.args.fedora_root,
-                          self.args.fedora_user, self.args.fedora_password)
+                               self.args.fedora_user, self.args.fedora_password)
 
         if self.args.pids:
             # if pids were specified on the command line, use those
             # get distinct pid list (only process each object once)
             object_pids = set(pid for pid in self.args.pids)
         else:
-            # otherwise, process all find-able objects
-            # TODO: find unchecked or last fixity check older than given time period
-            # object_pids = self.unchecked_pids()
+            # otherwise, process unchecked or last fixity check older
+            # than the specified time period
             object_pids = self.pids_to_check(days=self.args.since)
-            # TODO: should be unchecked (never) or unchecked since date (30 days)
 
         # if a time limit is requested, calculate when to stop
         if self.args.timelimit:
@@ -264,8 +260,13 @@ class ValidateChecksums(object):
 
             ds_results = {}
             for dsid in six.iterkeys(obj.ds_list):
-                # print dsid
                 dsobj = obj.getDatastreamObject(dsid)
+                # if a maximum size is set, check datastream size
+                if self.args.max_size is not None and dsobj.size > self.args.max_size:
+                    print('Datastream %s/%s size (%s) is above configured max, skipping' % \
+                          (pid, dsid, humanize_file_size(dsobj.size)))
+                    continue
+
                 self.stats['ds'] += 1
                 res = self.validate_datastream(dsobj)
                 ds_results[dsid] = res
@@ -300,7 +301,7 @@ class ValidateChecksums(object):
             if self.args.max is not None and self.stats['objects'] >= int(self.args.max):
                 if not self.args.quiet:
                     print('Processed %d objects (requested maximum of %d); stopping' \
-                        % (self.stats['objects'], self.args.max))
+                          % (self.stats['objects'], self.args.max))
                 break
 
             if self.args.timelimit and datetime.datetime.now() >= end_time:
@@ -351,8 +352,7 @@ class ValidateChecksums(object):
 
     def pids_to_check(self, days):
         '''Generator that returns a list of pids where the object has never had
-        a fixity check recorded'''
-        '''Generator that returns a list of pids where the object has not
+        a fixity check recorded or where the object has not
         been checked since the specified number of days.'''
 
         unchecked_count = self.repo.risearch.sparql_count(self.SPARQL_FIND_UNCHECKED)
@@ -442,6 +442,8 @@ class ValidateChecksums(object):
                     self.fedora_errors.append(msg)
                     print(msg)
 
+            return result
+
         else:
             # current version only
             try:
@@ -519,6 +521,7 @@ class ValidateChecksums(object):
             all_results = []
             for val in ds_results.values():
                 all_results += val
+
             result = 'pass' if all(v == 'valid' for v in all_results) else 'fail'
         else:
             result = 'pass' if all(v == 'valid' for v in ds_results.values()) else 'fail'
@@ -616,20 +619,20 @@ class ValidateChecksums(object):
                         output.write('\t%s (%s)' % (dsid, d))
 
         if self.save_errors:
-            output.write('\nError saving the following objects:')
-            output.write('  ' + '\n  '.join(self.save_errors))
+            output.write(u'\nError saving the following objects:')
+            output.write(u'  ' + '\n  '.join(self.save_errors))
 
         if self.relsext_errors:
-            output.write('\nError updating the RELS-EXT for the following objects:')
-            output.write('  ' + '\n  '.join(self.relsext_errors))
+            output.write(u'\nError updating the RELS-EXT for the following objects:')
+            output.write(u'  ' + '\n  '.join(self.relsext_errors))
 
         if self.premis_errors:
-            output.write('\nError adding PREMIS fixity event for the following objects:')
-            output.write('  ' + '\n  '.join(self.premis_errors))
+            output.write(u'\nError adding PREMIS fixity event for the following objects:')
+            output.write(u'  ' + '\n  '.join(self.premis_errors))
 
         if self.fedora_errors:
-            output.write('\nFedora errors when attempting to validate checksums:')
-            output.write('  ' + '\n  '.join(self.fedora_errors))
+            output.write(u'\nFedora errors when attempting to validate checksums:')
+            output.write(u'  ' + u'\n  '.join(self.fedora_errors))
 
         msg = MIMEText(output.getvalue())
         output.close()
@@ -694,6 +697,7 @@ class ValidateChecksums(object):
         config.set(self.proc_cfg, 'all_versions', str(self.args.all_versions))
         config.set(self.proc_cfg, 'since', str(self.args.since))
         config.set(self.proc_cfg, 'timelimit', str(self.args.timelimit))
+        config.set(self.proc_cfg, 'max_size', str(self.args.max_size))
         # email options
         config.add_section(self.email_cfg)
         config.set(self.email_cfg, 'email', str(self.args.email))
@@ -747,6 +751,13 @@ class ValidateChecksums(object):
               self.args.timelimit:
                 try:
                     self.args.timelimit = cfg.getint(self.proc_cfg, 'timelimit')
+                except:
+                    # if None or non-numeric, getint will fail; ignore invalid number
+                    pass
+            if cfg.has_option(self.proc_cfg, 'max_size') and not \
+              self.args.max_size:
+                try:
+                    self.args.max_size = cfg.getint(self.proc_cfg, 'max_size')
                 except:
                     # if None or non-numeric, getint will fail; ignore invalid number
                     pass

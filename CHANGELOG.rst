@@ -6,6 +6,24 @@ The following is a summary of changes and improvements to
 
 .. New features in each version should be listed, with any necessary information about installation or upgrade notes.
 
+1.6
+---
+
+* New custom django-debug-toolbar panel to view Fedora API requests.
+  used to generate a django page.
+* Clarify confusing documentation for setting content on
+  ``DatastreamObject`` and ``FileDatastreamObject``.  Thanks to
+  `@bcail <https://github.com/bcail>`_.
+  `#20 <https://github.com/emory-libraries/eulfedora/issues/20>`_,
+  `PR #21 <https://github.com/emory-libraries/eulfedora/pull/21>`_
+* New Django exception filter `eulfedora.util.SafeExceptionReporterFilter`
+  to suppress Fedora session password when an exception occurs within
+  the API request
+* Add retries option to :class:`eulfedora.server.Repository`
+  to configure requests max retries when making API calls, in case of
+  errors establishing the connection. (Defaults to 3; configurable in
+  Django settings as **FEDORA_CONNECTION_RETRIES**)
+
 1.5.2
 -----
 

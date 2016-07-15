@@ -27,6 +27,11 @@ from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor, \
 import six
 from six.moves.urllib.parse import urljoin
 
+try:
+    from django.dispatch import Signal
+except ImportError:
+    Signal = None
+
 from eulfedora import __version__ as eulfedora_version
 from eulfedora.util import datetime_to_fedoratime, \
     RequestFailed, ChecksumMismatch, PermissionDenied, parse_rdf, \
@@ -57,36 +62,40 @@ def _get_items(query, doseq):
         else:
             yield k, str(v)
 
-_sessions = {}
+
+if Signal is not None:
+    api_called = Signal(providing_args=[
+        "time_taken", "method", "url", "args", "kwargs"])
+else:
+    api_called = None
+
 
 class HTTP_API_Base(object):
-    def __init__(self, base_url, username=None, password=None):
+
+    def __init__(self, base_url, username=None, password=None, retries=None):
         # standardize url format; ensure we have a trailing slash,
         # adding one if necessary
         if not base_url.endswith('/'):
             base_url = base_url + '/'
 
-        # TODO: can we re-use sessions safely across instances?
-        global _sessions
-
-        # check for an existing session for this fedora
-        if base_url in _sessions:
-            self.session = _sessions[base_url]
-        else:
-            # create a new session and add to global sessions
-            self.session = requests.Session()
-            # Set headers to be passed with every request
-            # NOTE: only headers that will be common for *all* requests
-            # to this fedora should be set in the session
-            # (i.e., do NOT include auth information here)
-            self.session.headers = {
-                'User-Agent': user_agent('eulfedora', eulfedora_version),
-                # 'user-agent': 'eulfedora/%s (python-requests/%s)' % \
-                    # (eulfedora_version, requests.__version__),
-                'verify': True,  # verify SSL certs by default
-            }
-
-            _sessions[base_url] = self.session
+        # create a new session and add to global sessions
+        self.session = requests.Session()
+        # Set headers to be passed with every request
+        # NOTE: only headers that will be common for *all* requests
+        # to this fedora should be set in the session
+        # (i.e., do NOT include auth information here)
+        self.session.headers = {
+            'User-Agent': user_agent('eulfedora', eulfedora_version),
+            # 'user-agent': 'eulfedora/%s (python-requests/%s)' % \
+            # (eulfedora_version, requests.__version__),
+            'verify': True,  # verify SSL certs by default
+        }
+        # no retries is requests current default behavior, so only
+        # customize if a value is set
+        if retries is not None:
+            adapter = requests.adapters.HTTPAdapter(max_retries=retries)
+            self.session.mount('http://', adapter)
+            self.session.mount('https://', adapter)
 
         self.base_url = base_url
         self.username = username
@@ -111,8 +120,15 @@ class HTTP_API_Base(object):
         rqst_options.update(kwargs)
         start = time.time()
         response = reqmeth(self.prep_url(url), *args, **rqst_options)
+        total_time = time.time() - start
         logger.debug('%s %s=>%d: %f sec' % (reqmeth.__name__.upper(), url,
-            response.status_code, time.time() - start))
+                     response.status_code, total_time))
+
+        # if django signals are available, send api called
+        if api_called is not None:
+            api_called.send(sender=self.__class__, time_taken=total_time,
+                            method=reqmeth, url=url, response=response,
+                            args=args, kwargs=kwargs)
 
         # NOTE: currently doesn't do anything with 3xx  responses
         # (likely handled for us by requests)
@@ -950,7 +966,6 @@ class ResourceIndex(HTTP_API_Base):
         }
         return self._query(format, http_args, flush)
 
-
     def _query(self, format, http_args, flush=None):
         # if flush parameter was not specified, use class setting
         if flush is None:
@@ -963,9 +978,17 @@ class ResourceIndex(HTTP_API_Base):
 
         url = 'risearch'
         try:
+            start = time.time()
             response = self.get(url, params=http_args)
             data, abs_url = response.content, response.url
+            total_time = time.time() - start
             # parse the result according to requested format
+            if api_called is not None:
+                api_called.send(sender=self.__class__, time_taken=total_time,
+                                method='risearch', url='', response=response,
+                                args=[], kwargs={'format': format,
+                                                 'http_args': http_args,
+                                                 'flush': flush})
             if format == 'N-Triples':
                 return parse_rdf(data, abs_url, format='n3')
             elif format == 'CSV':
