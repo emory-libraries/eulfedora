@@ -32,7 +32,8 @@ before_script:
   - ci/start-fedora.sh
 
 script:
-  tox
+  nosetests test --with-coverage --cover-package=eulfedora --cover-xml --with-xunit
+# tox
 
 after_success:
   - coveralls
