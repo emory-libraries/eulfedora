@@ -16,15 +16,31 @@
 
 import base64
 import json
-from mock import patch
+from mock import patch, Mock
+from unittest import skipIf
 
-from django.conf import settings
-from django.http import Http404, HttpRequest
-from django.test import TestCase
-from django.test.utils import override_settings
-from django.utils.encoding import force_bytes
+try:
+    from django.conf import settings
+    from django.http import Http404, HttpRequest
+    from django.test import TestCase
+    from django.test.utils import override_settings
+    from django.utils.encoding import force_bytes
 
-from eulfedora.indexdata.views import index_config, index_data
+    from eulfedora.indexdata.views import index_config, index_data
+except ImportError:
+    django = None
+
+    # dummy do-nothing decator for override settings
+    def override_settings(*args, **kwargs):
+        def wrap(f):
+            def wrapped_f(*args, **kwargs):
+                f(*args, **kwargs)
+            return wrapped_f
+        return wrap
+
+    from unittest import TestCase
+
+
 from eulfedora.models import DigitalObject, ContentModel
 from eulfedora.server import Repository
 from eulfedora.util import force_text
@@ -43,6 +59,7 @@ class LessSimpleDigitalObject(DigitalObject):
 TEST_SOLR_URL = 'http://localhost:5555/'
 
 
+@skipIf(django is None, 'Requires Django')
 @override_settings(SOLR_SERVER_URL=TEST_SOLR_URL)
 class IndexDataViewsTest(TestCase):
 

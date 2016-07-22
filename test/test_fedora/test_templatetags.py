@@ -17,7 +17,10 @@
 import unittest
 from mock import Mock
 
-from django.template import Context, Template
+try:
+    from django.template import Context, Template
+except ImportError:
+    django = None
 
 from eulfedora.util import RequestFailed, PermissionDenied
 
@@ -34,6 +37,7 @@ class MockFedoraObject(object):
         return self._value
 
 
+@unittest.skipIf(django is None, 'Requires Django')
 class TemplateTagTest(unittest.TestCase):
     def test_parse_fedora_access(self):
         TEMPLATE_TEXT = """
