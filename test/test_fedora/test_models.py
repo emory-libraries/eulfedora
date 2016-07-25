@@ -1277,6 +1277,7 @@ class TestRelation(FedoraTestCase):
         obj2.parent = rev
         obj2.dc.content.title = 'title a'
         obj2.save()
+        self.fedora_fixtures_ingested.append(obj2.pid)  # save pid for cleanup in tearDown
         # run an risearch query with flush updates true
         # so that tests do not require syncUpdates to be enabled
         self.repo.risearch.count_statements('<%s> * *' % self.obj.pid,
