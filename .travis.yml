@@ -25,7 +25,7 @@ install:
   - ci/setup-fedora.sh
   - pip install --upgrade setuptools
   - pip install -e .
-  - pip install -e ".[dev]"
+  - pip install -e ".[test]"
   - pip install coveralls
   - cp ci/testsettings.py test/localsettings.py
 
