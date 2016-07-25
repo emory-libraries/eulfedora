@@ -17,6 +17,11 @@
 from __future__ import unicode_literals
 import unittest
 try:
+    from unittest import skipIf
+except ImportError:
+    from unittest2 import skipIf
+
+try:
     import django
 except ImportError:
     django = None
@@ -28,7 +33,7 @@ from eulfedora.util import force_text
 # settings for configuration; probably ok, since this is likely
 # only used within django
 
-@unittest.skipIf(django is None, 'Requires Django')
+@skipIf(django is None, 'Requires Django')
 class CryptTest(unittest.TestCase):
 
     def test_to_blocksize(self):

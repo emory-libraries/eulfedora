@@ -17,7 +17,10 @@
 from mock import Mock, patch
 import os
 import unittest
-from unittest import skipIf
+try:
+    from unittest import skipIf
+except ImportError:
+    from unittest2 import skipIf
 
 try:
     import django

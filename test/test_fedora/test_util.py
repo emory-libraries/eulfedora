@@ -22,7 +22,12 @@ try:
 except ImportError:
     django = None
 
-from unittest import TestCase, skipIf
+from unittest import TestCase
+try:
+    from unittest import skipIf
+except ImportError:
+    from unittest2 import skipIf
+
 import requests
 
 
