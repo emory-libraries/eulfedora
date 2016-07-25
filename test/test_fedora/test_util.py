@@ -15,6 +15,7 @@
 #   limitations under the License.
 
 try:
+    import django
     from django.views import debug
 
     from eulfedora.util import SafeExceptionReporterFilter

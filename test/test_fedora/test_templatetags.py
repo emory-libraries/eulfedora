@@ -18,6 +18,7 @@ import unittest
 from mock import Mock
 
 try:
+    import django
     from django.template import Context, Template
 except ImportError:
     django = None

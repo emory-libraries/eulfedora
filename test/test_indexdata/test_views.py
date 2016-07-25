@@ -20,6 +20,7 @@ from mock import patch, Mock
 from unittest import skipIf
 
 try:
+    import django
     from django.conf import settings
     from django.http import Http404, HttpRequest
     from django.test import TestCase
