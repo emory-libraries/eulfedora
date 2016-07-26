@@ -15,18 +15,16 @@ addons:
     packages:
       - oracle-java8-installer
 
-# versions of fedora test against
-# (install script doesn't yet support more than one)
 env:
-  - FCREPO_VERSION=fedora-3.8.1
+  # - FCREPO_VERSION=fedora-3.8.1
   # - DJANGO_VERSION=">=1.5,<1.6"
   - DJANGO=""   # no django
-  - DJANGO"Django>=1.6,<1.7"
+  # - DJANGO"Django>=1.6,<1.7"
   - DJANGO="Django>=1.7,<1.8"
   - DJANGO="Django>=1.8,<1.9"
   - DJANGO="Django>=1.9,<1.10"
 
-# if we enable py2.6, restrict which django versions are tested
+# if we enable py2.6, will need to restrict which django versions are tested
 # matrix:
 #   exclude:
 #   - python: 2.6
@@ -35,6 +33,7 @@ env:
 #     env: DJANGO="Django>=1.9,<1.10"
 
 before_install:
+  - export FCREPO_VERSION=fedora-3.8.1
   - export FCREPO_FOLDER=${HOME}/jfs/${FCREPO_VERSION}
   - export JAVA_HOME=/usr/lib/jvm/java-8-oracle
   - export PATH=$JAVA_HOME/bin:$PATH
