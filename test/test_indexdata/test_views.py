@@ -39,16 +39,27 @@ try:
     # only available in 1.8 +
     from django.test.utils import override_settings
 except ImportError:
-    # dummy do-nothing decator for override settings
+
+    # supply replacement for override settings
     def override_settings(*args, **kwargs):
         def wrap(f):
-            with patch(settings) as mocksettings:
-                for key, val in kwargs.iteritems():
-                    setattr(mocksettings, key, val)
+            # patch django settings using mock if we have django
+            # but not override_settings
+            if django is not None:
+                with patch(settings) as mocksettings:
+                    for key, val in kwargs.iteritems():
+                        setattr(mocksettings, key, val)
 
+                    def wrapped_f(*args, **kwargs):
+                        f(*args, **kwargs)
+                    return wrapped_f
+
+            # otherwise, do nothing
+            else:
                 def wrapped_f(*args, **kwargs):
                     f(*args, **kwargs)
                 return wrapped_f
+
         return wrap
 
 
