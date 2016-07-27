@@ -47,8 +47,8 @@ EUL_INDEXER_ALLOWED_IPS = ['*']
 try:
     from .localsettings import *
 except ImportError:
-    # this seould be fine for docs; probably not good for testing
-    print 'localsettings are not available'
+    # this should be fine for docs; probably not good for testing, so warn
+    print('localsettings are not available')
 
 
 TEMPLATES = []
