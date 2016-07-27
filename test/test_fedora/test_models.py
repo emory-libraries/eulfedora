@@ -14,6 +14,11 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+try:
+    from collections import OrderedDict
+except ImportError:
+    # not available in python 2.6
+    OrderedDict = None
 from datetime import datetime, timedelta
 import logging
 from lxml import etree
@@ -750,7 +755,7 @@ class TestDigitalObject(FedoraTestCase):
         self.obj.text.checksum = "1c83260ff729265470c0d349e939c755"
         return_status = self.obj.save()
 
-        #Correct checksum should modify correctly.
+        # Correct checksum should modify correctly.
         self.assertEqual(True, return_status)
 
         # confirm all changes were saved to fedora
@@ -764,12 +769,24 @@ class TestDigitalObject(FedoraTestCase):
 
         # force an error on saving DC to test backing out text datastream
         self.obj.text.content = "some new text"
-        self.obj.dc.content = "this is not dublin core!"    # NOTE: setting xml content like this could change...
+        self.obj.dc.content = "this is not dublin core!"    # not valid xml
+
+        # datastream save order is determined by dscache, which is a dict
+        # so order is not reliable; convert to ordered dict to enforce
+        # the save order expected by the tests below
+        if OrderedDict is not None:
+            # ordered dict not available in py2.6; do without if not available
+            self.obj.dscache = OrderedDict([
+                ('TEXT', self.obj.dscache['TEXT']),
+                ('DC', self.obj.dscache['DC'])
+            ])
+
         # catch the exception so we can inspect it
         try:
             self.obj.save()
         except models.DigitalObjectSaveFailure as f:
             save_error = f
+
         self.assert_(isinstance(save_error, models.DigitalObjectSaveFailure))
         self.assertEqual(save_error.obj_pid, self.obj.pid,
             "save failure exception should include object pid %s, got %s" % (self.obj.pid, save_error.obj_pid))
