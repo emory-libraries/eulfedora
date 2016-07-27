@@ -44,7 +44,11 @@ DATABASES = {
 
 EUL_INDEXER_ALLOWED_IPS = ['*']
 
-from .localsettings import *
+try:
+    from .localsettings import *
+except ImportError:
+    # this seould be fine for docs; probably not good for testing
+    print 'localsettings are not available'
 
 
 TEMPLATES = []
