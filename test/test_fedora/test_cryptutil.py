@@ -16,11 +16,24 @@
 
 from __future__ import unicode_literals
 import unittest
+try:
+    from unittest import skipIf
+except ImportError:
+    from unittest2 import skipIf
+
+try:
+    import django
+except ImportError:
+    django = None
 
 from eulfedora import cryptutil
 from eulfedora.util import force_text
 
+# NOTE: cryptutil currently requires django because it imports django
+# settings for configuration; probably ok, since this is likely
+# only used within django
 
+@skipIf(django is None, 'Requires Django')
 class CryptTest(unittest.TestCase):
 
     def test_to_blocksize(self):

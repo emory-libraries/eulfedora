@@ -6,6 +6,16 @@ The following is a summary of changes and improvements to
 
 .. New features in each version should be listed, with any necessary information about installation or upgrade notes.
 
+1.7 (preliminary)
+-----------------
+
+* Updated `syncrepo` for Django 1.9+ compatibility
+* Improved django-debug-toolbar integration and updated for current version.
+* Configured continuous integration on travis-ci.
+* Updated unit tests so they can be run with or without Django installed,
+  and work for multiple versions of Django.  Configured travis-ci
+  to test against multiple versions of Django and without Django.
+
 1.6
 ---
 

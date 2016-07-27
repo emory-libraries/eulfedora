@@ -21,7 +21,13 @@ import os
 from optparse import make_option
 
 from django.core.management.base import BaseCommand
-from django.db.models import get_apps
+try:
+    # newer versions of django
+    from django.apps import apps as django_apps
+except ImportError:
+    from django.db.models import get_apps
+    apps = None
+
 
 from eulfedora.server import Repository
 from eulfedora.models import ContentModel, DigitalObject
@@ -33,32 +39,31 @@ class Command(BaseCommand):
     def get_password_option(option, opt, value, parser):
         setattr(parser.values, option.dest, getpass())
 
-
     help = """Generate missing Fedora content model objects and load initial objects."""
 
+    # NOTE: will need to be converted to add_argument / argparse
+    # format for django 11 (optparse will be removed)
     option_list = BaseCommand.option_list + (
         make_option('--username', '-u',
-            dest='username',
-            action='store',
-            help='''Username to connect to fedora'''),
+                    dest='username',
+                    action='store',
+                    help='''Username to connect to fedora'''),
         make_option('--password',
-            dest='password',
-            action='callback', callback=get_password_option,
-            help='''Prompt for password required when username used'''),
-        )
-
+                    dest='password',
+                    action='callback', callback=get_password_option,
+                    help='''Prompt for password required when username used'''
+                ))
 
     def __init__(self, *args, **kwargs):
         super(Command, self).__init__(*args, **kwargs)
 
-
     def handle(self, *args, **options):
 
         repo_args = {}
-        if  options.get('username') is not None:
-		repo_args['username'] = options.get('username')
+        if options.get('username') is not None:
+            repo_args['username'] = options.get('username')
         if options.get('password') is not None:
-		repo_args['password'] = options.get('password')
+            repo_args['password'] = options.get('password')
 
         self.repo = Repository(**repo_args)
 
@@ -96,18 +101,25 @@ class Command(BaseCommand):
                     # if there is a detail message, display that
                     print "Error ingesting ContentModel for %s: %s" % (cls, rf.detail)
 
-
     def load_initial_objects(self):
         # look for any .xml files in apps under fixtures/initial_objects
         # and attempt to load them as Fedora objects
         # NOTE! any fixtures should have pids specified, or new versions of the
         # fixture will be created every time syncrepo runs
 
+        app_module_paths = []
 
-        app_module_paths =  []
+        if hasattr(django_apps, 'get_app_configs'):
+            apps = django_apps.get_app_configs()
+        else:
+            apps = get_apps()
+
         # monkey see django code, monkey do
-        for app in get_apps():
-            if hasattr(app, '__path__'):
+        for app in apps:
+            # newer django AppConfig
+            if hasattr(app, 'path'):
+                app_module_paths.append(app.path)
+            elif hasattr(app, '__path__'):
                 # It's a 'models/' subpackage
                 for path in app.__path__:
                     app_module_paths.append(path)
@@ -116,8 +128,8 @@ class Command(BaseCommand):
                 app_module_paths.append(app.__file__)
 
         app_fixture_paths = [os.path.join(os.path.dirname(path),
-                                            'fixtures', 'initial_objects', '*.xml')
-                                            for  path in app_module_paths]
+                                          'fixtures', 'initial_objects', '*.xml')
+                             for path in app_module_paths]
         fixture_count = 0
         load_count = 0
 

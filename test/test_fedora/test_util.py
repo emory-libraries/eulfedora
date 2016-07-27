@@ -14,13 +14,24 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from django.views import debug
+try:
+    import django
+    from django.views import debug
+
+    from eulfedora.util import SafeExceptionReporterFilter
+except ImportError:
+    django = None
+
 from unittest import TestCase
+try:
+    from unittest import skipIf
+except ImportError:
+    from unittest2 import skipIf
+
 import requests
 
-from eulfedora.util import SafeExceptionReporterFilter
 
-
+@skipIf(django is None, 'Requires Django')
 class SafeExceptionReportFilterTest(TestCase):
 
     def test_filter_cleansed(self):

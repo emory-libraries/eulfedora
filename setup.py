@@ -43,16 +43,17 @@ requirements = [
 if sys.version_info < (2, 7):
     requirements.append('argparse')
 
-dev_requirements = [
+test_requirements = [
     'sphinx',
     'nose',
     'coverage',
-    'Django',
     'mock',
     'pyPdf',
     'tox',
     'progressbar2'
 ]
+
+dev_requirements = test_requirements + ['Django']
 
 if sys.version_info < (3, 0):
     requirements.append('progressbar2')
@@ -78,6 +79,7 @@ setup(
         'indexdata_util': ['pypdf2'],
         'django': ['Django'],
         'dev': dev_requirements,
+        'test': test_requirements,
     },
     description='Idiomatic access to digital objects in a Fedora Commons repository',
     long_description=LONG_DESCRIPTION,
