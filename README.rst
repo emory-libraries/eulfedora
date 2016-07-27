@@ -26,6 +26,10 @@ eulfedora
     :target: https://coveralls.io/github/emory-libraries/eulfedora?branch=develop
     :alt: Code Coverage
 
+  .. image:: https://landscape.io/github/emory-libraries/eulfedora/develop/landscape.svg?style=flat
+     :target: https://landscape.io/github/emory-libraries/eulfedora/develop
+     :alt: Code Health
+
   .. image:: https://codeclimate.com/github/emory-libraries/eulfedora/badges/gpa.svg
     :target: https://codeclimate.com/github/emory-libraries/eulfedora
     :alt: Code Climate
