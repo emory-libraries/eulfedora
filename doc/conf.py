@@ -1,5 +1,11 @@
 # eulcore documentation build configuration file
 
+import os
+
+# sphinx needs django settings for some django-related code
+# introspect those modules for autodocs
+os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
+
 import eulfedora
 
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx']
