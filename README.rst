@@ -18,6 +18,14 @@ eulfedora
     :alt: Documentation Status
 
 **code**
+  .. image:: https://travis-ci.org/emory-libraries/eulfedora.svg?branch=develop
+    :target: https://travis-ci.org/emory-libraries/eulfedora
+    :alt: travis-ci build
+
+  .. image:: https://coveralls.io/repos/github/emory-libraries/eulfedora/badge.svg?branch=develop
+    :target: https://coveralls.io/github/emory-libraries/eulfedora?branch=develop
+    :alt: Code Coverage
+
   .. image:: https://codeclimate.com/github/emory-libraries/eulfedora/badges/gpa.svg
     :target: https://codeclimate.com/github/emory-libraries/eulfedora
     :alt: Code Climate
