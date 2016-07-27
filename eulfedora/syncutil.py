@@ -104,14 +104,21 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
             progress_bar=pbar, requires_auth=requires_auth,
             xml_only=(export_context == 'archive-xml'))
         # NOTE: should be possible to pass BytesIO to be read, but that is failing
-        export_data = export.object_data().getvalue()       
+        export_data = export.object_data().getvalue()
 
     else:
         raise Exception('Unsupported export context %s', export_context)
 
     # wipe checksums from FOXML if flagged in options
     if omit_checksums:
-        export_data = re.sub(r'<foxml:contentDigest.+?/>', '', export_data)
+        checksum_re = r'<foxml:contentDigest.+?/>'
+        try:
+            # export data is either a string
+            export_data = re.sub(checksum_re, '', export_data)
+        except TypeError:
+            # or a generator
+            export_data = (re.sub(checksum_re, '', chunk)
+                           for chunk in export_data)
 
     dest_obj = dest_repo.get_object(src_obj.pid)
     if dest_obj.exists:
@@ -256,10 +263,10 @@ class ArchiveExport(object):
             or None if no match is found
         '''
         # we only need to look at the end of this section of content
-        dsinfo = dsinfo[-400:]
+        dsinfo = dsinfo[-750:]
         # if not enough content is present, include the end of
         # the last read chunk, if available
-        if len(dsinfo) < 400 and self.end_of_last_chunk is not None:
+        if len(dsinfo) < 750 and self.end_of_last_chunk is not None:
             dsinfo = self.end_of_last_chunk + dsinfo
 
         # force text needed for python 3 compatibility (in python 3
