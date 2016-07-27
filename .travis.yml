@@ -28,7 +28,7 @@ env:
 matrix:
   exclude:
     # python 3.3 not supported by django 1.9
-    - python: 3.3
+    - python: "3.3"
       env: DJANGO="Django>=1.9,<1.10"
 # if we enable py2.6, will need to restrict which django versions are tested
 #   - python: 2.6
