@@ -15,9 +15,18 @@
 #   limitations under the License.
 
 import unittest
+try:
+    from unittest import skipIf
+except ImportError:
+    from unittest2 import skipIf
+
 from mock import Mock
 
-from django.template import Context, Template
+try:
+    import django
+    from django.template import Context, Template
+except ImportError:
+    django = None
 
 from eulfedora.util import RequestFailed, PermissionDenied
 
@@ -34,6 +43,7 @@ class MockFedoraObject(object):
         return self._value
 
 
+@skipIf(django is None, 'Requires Django')
 class TemplateTagTest(unittest.TestCase):
     def test_parse_fedora_access(self):
         TEMPLATE_TEXT = """

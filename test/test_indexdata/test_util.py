@@ -17,7 +17,11 @@
 import unittest
 import os
 
-from django.conf import settings
+try:
+    from django.conf import settings
+except ImportError:
+    import test.testsettings as settings
+
 from eulfedora.models import DigitalObject, FileDatastream
 from eulfedora.server import Repository
 

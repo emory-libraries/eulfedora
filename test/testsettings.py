@@ -15,7 +15,10 @@
 #   limitations under the License.
 
 import os
-import django
+try:
+    import django
+except ImportError:
+    django = None
 
 # test secret key for eulfedora.cryptutil tests
 SECRET_KEY = 'abcdefghijklmnopqrstuvwxyz1234567890'
@@ -41,14 +44,18 @@ DATABASES = {
 
 EUL_INDEXER_ALLOWED_IPS = ['*']
 
-from .localsettings import *
+try:
+    from .localsettings import *
+except ImportError:
+    # this should be fine for docs; probably not good for testing, so warn
+    print('localsettings are not available')
 
 
 TEMPLATES = []
 
-os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
 # run django setup if we are on a version of django that has it
-if hasattr(django, 'setup'):
+if django is not None and hasattr(django, 'setup'):
+    os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
     django.setup()
 
 

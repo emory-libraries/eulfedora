@@ -63,7 +63,7 @@ applications.
 """
 
 from __future__ import unicode_literals
-import codecs
+import base64
 import logging
 import json
 from django.conf import settings
@@ -115,6 +115,7 @@ def index_config(request):
 
     return HttpResponse(json.dumps(response), content_type='application/json')
 
+
 def index_data(request, id, repo=None):
     '''Return the fields and values to be indexed for a single object
     as JSON.  Index content is generated via
@@ -123,7 +124,7 @@ def index_data(request, id, repo=None):
     :param id: id of the object to be indexed; in this case a Fedora pid
     '''
 
-    #Ensure permission to this resource is allowed. Currently based on IP only.
+    # Ensure permission to this resource is allowed. Currently based on IP only.
     if _permission_denied_check(request):
         return HttpResponseForbidden('Access to this web service was denied.', content_type='text/html')
 
@@ -134,7 +135,10 @@ def index_data(request, id, repo=None):
         basic = 'Basic '
         if auth_info and auth_info.startswith(basic):
             basic_info = auth_info[len(basic):]
-            basic_info_decoded = codecs.decode(force_bytes(basic_info), 'base64')
+            basic_info_decoded = base64.b64decode(force_bytes(basic_info))
+            # NOTE: codecs.decode works everywhere but python 3.3. which
+            # complains about an unknown encoding
+            # basic_info_decoded = codecs.decode(force_bytes(basic_info), 'base64')
             u, p = force_text(basic_info_decoded).split(':')
             repo_opts.update({'username': u, 'password': p})
 
@@ -148,6 +152,7 @@ def index_data(request, id, repo=None):
         # (could also potentially be a permission error)
         raise Http404
 
+
 def _permission_denied_check(request):
     '''Internal function to verify that access to this webservice is allowed.
     Currently, based on the value of EUL_INDEXER_ALLOWED_IPS in settings.py.
@@ -156,7 +161,7 @@ def _permission_denied_check(request):
 
     '''
     allowed_ips = settings.EUL_INDEXER_ALLOWED_IPS
-    if(allowed_ips != "ANY" and not request.META['REMOTE_ADDR'] in allowed_ips):
+    if allowed_ips != "ANY" and not request.META['REMOTE_ADDR'] in allowed_ips:
         return True
 
     return False

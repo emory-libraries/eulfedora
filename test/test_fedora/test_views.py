@@ -17,14 +17,24 @@
 from mock import Mock, patch
 import os
 import unittest
+try:
+    from unittest import skipIf
+except ImportError:
+    from unittest2 import skipIf
 
-from django.conf import settings
-from django.http import Http404, HttpResponse, StreamingHttpResponse
+try:
+    import django
+    from django.conf import settings
+    from django.http import Http404, HttpResponse, StreamingHttpResponse
+
+    from eulfedora.views import raw_datastream, login_and_store_credentials_in_session, \
+         datastream_etag, datastream_lastmodified, raw_audit_trail, raw_datastream_old
+except ImportError:
+    django = None
+    import test.testsettings as settings
 
 from eulfedora.models import DigitalObject, Datastream, FileDatastream
 from eulfedora.server import Repository, FEDORA_PASSWORD_SESSION_KEY
-from eulfedora.views import raw_datastream, login_and_store_credentials_in_session, \
-     datastream_etag, datastream_lastmodified, raw_audit_trail, raw_datastream_old
 from eulfedora import cryptutil
 from eulfedora.util import force_bytes, force_text
 
@@ -47,6 +57,7 @@ class SimpleDigitalObject(DigitalObject):
         })
 
 
+@skipIf(django is None, 'Test requires Django')
 class FedoraViewsTest(unittest.TestCase):
 
     def setUp(self):
@@ -484,7 +495,6 @@ class FedoraViewsTest(unittest.TestCase):
             # should retrieve appropriate version of the content
             self.assertEqual(dsversion.content, response.content)
 
-
     def test_datastream_lastmodified(self):
         rqst = Mock()
         rqst.META = {}
@@ -531,6 +541,7 @@ class FedoraViewsTest(unittest.TestCase):
         self.assert_(force_bytes('<audit:justification>%s</audit:justification>' % changelog)
                      in response.content)
         self.assert_('Last-Modified' in response)
+
 
     def test_login_and_store_credentials_in_session(self):
         # only testing custom logic, which happens on POST

@@ -30,6 +30,14 @@ validate the checksum for each datastream (or optionally each version
 of any versioned datastream), reporting on invalid or missing
 checksums.
 
+.. NOTE::
+
+  Fedora has historically had issues with checksums on Inline XML
+  datastreams, and may report those datastreams as invalid even if
+  there is no corruption.  If this is a problem for your content, you
+  may want to look into Fedora documentation and tools to converting
+  inline XML datastreams to Managed.
+
 In **repair** mode, the script will iterate through all objects
 looking for datastreams with a checksum type of ``DISABLED`` and a
 checksum value of ``none``; any such datastreams will be updated in
@@ -37,18 +45,28 @@ Fedora with a new checksum type (either as specified via script
 argument ``--checksum-type`` or using the Fedora configured default),
 prompting Fedora to calculate and save a new checksum.
 
+.. NOTE::
+
+  The repair mode of this script is now deprecated, as there other
+  tools that are better suited to this task.  "Repairing" via this script
+  actually asks Fedora to resave the datastream and generate a new checksum,
+  so this is far from ideal and can do nothing for historical content with
+  bad checksums.  For checksum repair, we recommend
+  `fcsu <https://wiki.duraspace.org/display/~cwilper/A+New+Fedora+Storage+Utility>`_
+  (`github <https://github.com/fcrepo3/fcrepo-store>`_).
+
 Running this script in either mode requires passing Fedora connection
 information and credentials, for example::
 
   $ fedora-checksums validate --fedora-root=http://localhost:8080/fedora/
-  	--fedora-user=fedoraAdmin --fedora-password=fedoraAdmin
+    --fedora-user=fedoraAdmin --fedora-password=fedoraAdmin
 
 If you prefer not to specify your fedora password on the command line,
 specify the ``--fedora-password`` option with an empty value and you
 will be prompted::
 
   $ fedora-checksums validate --fedora-root=http://localhost:8080/fedora/
-  	--fedora-user=fedoraAdmin --fedora-password=
+    --fedora-user=fedoraAdmin --fedora-password=
 
 .. Note::
 

@@ -12,16 +12,11 @@ Reports on the Fedora API requests used run to generate a page, including
 time to run the query, arguments passed, and response returned.
 '''
 
-import time
-import traceback
-from django.dispatch import Signal
 from debug_toolbar import settings as dt_settings
 from debug_toolbar.panels import Panel
 from debug_toolbar.utils import render_stacktrace, tidy_stacktrace, \
     get_stack
 
-
-import eulfedora
 from eulfedora.api import api_called
 
 # implementation based on django-debug-toolbar cache panel
@@ -49,7 +44,7 @@ class FedoraPanel(Panel):
 
         # use debug-toolbar utilities to get & render stacktrace
         # skip last two entries, which are in eulfedora.debug_panel
-        if dt_settings.CONFIG['ENABLE_STACKTRACES']:
+        if dt_settings.get_config().get('ENABLE_STACKTRACES', False):
             stacktrace = tidy_stacktrace(reversed(get_stack()))[:-2]
         else:
             stacktrace = []

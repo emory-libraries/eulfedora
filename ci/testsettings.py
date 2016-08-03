@@ -1,6 +1,6 @@
-# file eulfedora/__init__.py
+# file ci/testsettings.py
 #
-#   Copyright 2010,2011 Emory University Libraries
+#   Copyright 2016 Emory University Libraries
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -14,15 +14,11 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+# local instancle of fedora via jfs
+FEDORA_ROOT = 'http://localhost:8080/fedora/'
+FEDORA_ROOT_NONSSL = FEDORA_ROOT
 
-__version_info__ = (1, 7, 0, None)
-
-
-# Dot-connect all but the last. Last is dash-connected if not None.
-__version__ = '.'.join([str(i) for i in __version_info__[:-1]])
-if __version_info__[-1] is not None:
-    __version__ += ('-%s' % (__version_info__[-1],))
-
-
-# declare django app config for django 1.9+
-default_app_config = 'eulfedora.django_app.EulfedoraAppConfig'
+# default credentials
+FEDORA_USER = 'fedoraAdmin'
+FEDORA_PASSWORD = 'fedoraAdmin'
+FEDORA_PIDSPACE = 'eulfedora-test'

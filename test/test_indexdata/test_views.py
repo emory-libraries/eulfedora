@@ -16,15 +16,54 @@
 
 import base64
 import json
-from mock import patch
+from mock import patch, Mock
+try:
+    from unittest import skipIf
+except ImportError:
+    from unittest2 import skipIf
 
-from django.conf import settings
-from django.http import Http404, HttpRequest
-from django.test import TestCase
-from django.test.utils import override_settings
-from django.utils.encoding import force_bytes
+try:
+    import django
+    from django.conf import settings
+    from django.http import Http404, HttpRequest
+    from django.test import TestCase
+    from django.utils.encoding import force_bytes
 
-from eulfedora.indexdata.views import index_config, index_data
+    from eulfedora.indexdata.views import index_config, index_data
+except ImportError:
+    # no version of django available
+    django = None
+    from unittest import TestCase
+
+try:
+    # only available in 1.8 +
+    from django.test.utils import override_settings
+except ImportError:
+
+    # supply replacement for override settings
+    def override_settings(*args, **kwargs):
+        def wrap(f):
+            # patch django settings using mock if we have django
+            # but not override_settings
+            if django is not None:
+                with patch(settings) as mocksettings:
+                    for key, val in kwargs.iteritems():
+                        setattr(mocksettings, key, val)
+
+                    def wrapped_f(*args, **kwargs):
+                        f(*args, **kwargs)
+                    return wrapped_f
+
+            # otherwise, do nothing
+            else:
+                def wrapped_f(*args, **kwargs):
+                    f(*args, **kwargs)
+                return wrapped_f
+
+        return wrap
+
+
+
 from eulfedora.models import DigitalObject, ContentModel
 from eulfedora.server import Repository
 from eulfedora.util import force_text
@@ -43,6 +82,7 @@ class LessSimpleDigitalObject(DigitalObject):
 TEST_SOLR_URL = 'http://localhost:5555/'
 
 
+@skipIf(django is None, 'Requires Django')
 @override_settings(SOLR_SERVER_URL=TEST_SOLR_URL)
 class IndexDataViewsTest(TestCase):
 
@@ -71,7 +111,7 @@ class IndexDataViewsTest(TestCase):
         # self.assertRaises(AttributeError, index_config, self.request)
 
         # Test with this IP not allowed to hit the service.
-        #settings.EUL_INDEXER_ALLOWED_IPS = ['0.13.23.134']
+        # settings.EUL_INDEXER_ALLOWED_IPS = ['0.13.23.134']
         with override_settings(EUL_INDEXER_ALLOWED_IPS=['0.13.23.134']):
             response = index_config(self.request)
             expected, got = 403, response.status_code
@@ -85,7 +125,7 @@ class IndexDataViewsTest(TestCase):
 
         # Test with this IP allowed to hit the view.
         with override_settings(EUL_INDEXER_ALLOWED_IPS=['0.13.23.134',
-                                                    self.request_ip]):
+                                                        self.request_ip]):
             response = index_config(self.request)
             expected, got = 200, response.status_code
             self.assertEqual(expected, got,
@@ -113,7 +153,7 @@ class IndexDataViewsTest(TestCase):
 
         # Test with 'EUL_INDEXER_CONTENT_MODELS' setting configured to override autodetect.
         with override_settings(EUL_INDEXER_ALLOWED_IPS='ANY',
-                               EUL_INDEXER_CONTENT_MODELS=[
+                   EUL_INDEXER_CONTENT_MODELS=[
                 ['content-model_1', 'content-model_2'], ['content-model_3']]):
             response = index_config(self.request)
             expected, got = 200, response.status_code

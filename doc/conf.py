@@ -1,5 +1,15 @@
 # eulcore documentation build configuration file
 
+import os
+import sys
+
+# add directory up one to path, so settings can be found
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# sphinx needs django settings for some django-related code
+# introspect those modules for autodocs
+os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
+
 import eulfedora
 
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx']

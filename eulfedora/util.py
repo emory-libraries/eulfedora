@@ -66,7 +66,8 @@ class RequestFailed(IOError):
     '''An exception representing an arbitrary error while trying to access a
     Fedora object or datastream.
     '''
-    error_regex = re.compile('<pre>.*\n(.*)\n', re.MULTILINE)
+    error_regex = re.compile('<pre>(.*\n.*)\n', re.MULTILINE)
+
     def __init__(self, response, content=None):
         # init params:
         #  response = HttpResponse with the error information
@@ -90,7 +91,6 @@ class RequestFailed(IOError):
                 match = self.error_regex.findall(content)
                 if len(match):
                     self.detail = match[0]
-
 
 
 class PermissionDenied(RequestFailed):
