@@ -13,29 +13,29 @@ eulfedora
     :alt: PyPI downloads
 
 **documentation**
-  .. image:: https://readthedocs.org/projects/eulfedora/badge/?version=develop
-    :target: http://eulfedora.readthedocs.org/en/develop/?badge=develop
+  .. image:: https://readthedocs.org/projects/eulfedora/badge/?version=master
+    :target: http://eulfedora.readthedocs.org/en/develop/?badge=master
     :alt: Documentation Status
 
 **code**
-  .. image:: https://travis-ci.org/emory-libraries/eulfedora.svg?branch=develop
+  .. image:: https://travis-ci.org/emory-libraries/eulfedora.svg?branch=master
     :target: https://travis-ci.org/emory-libraries/eulfedora
     :alt: travis-ci build
 
-  .. image:: https://coveralls.io/repos/github/emory-libraries/eulfedora/badge.svg?branch=develop
-    :target: https://coveralls.io/github/emory-libraries/eulfedora?branch=develop
+  .. image:: https://coveralls.io/repos/github/emory-libraries/eulfedora/badge.svg?branch=master
+    :target: https://coveralls.io/github/emory-libraries/eulfedora?branch=master
     :alt: Code Coverage
 
-  .. image:: https://landscape.io/github/emory-libraries/eulfedora/develop/landscape.svg?style=flat
-     :target: https://landscape.io/github/emory-libraries/eulfedora/develop
+  .. image:: https://landscape.io/github/emory-libraries/eulfedora/master/landscape.svg?style=flat
+     :target: https://landscape.io/github/emory-libraries/eulfedora/master
      :alt: Code Health
 
   .. image:: https://codeclimate.com/github/emory-libraries/eulfedora/badges/gpa.svg
     :target: https://codeclimate.com/github/emory-libraries/eulfedora
     :alt: Code Climate
 
-  .. image:: https://requires.io/github/emory-libraries/eulfedora/requirements.svg?branch=develop
-    :target: https://requires.io/github/emory-libraries/eulfedora/requirements/?branch=develop
+  .. image:: https://requires.io/github/emory-libraries/eulfedora/requirements.svg?branch=master
+    :target: https://requires.io/github/emory-libraries/eulfedora/requirements/?branch=master
     :alt: Requirements Status
 
 

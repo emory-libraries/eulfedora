@@ -10,3 +10,6 @@ coverage.xml
 nosetests.xml
 test.db
 .tox
+.eggs
+.cache
+doc/_build
