@@ -34,8 +34,8 @@ eulfedora
     :target: https://codeclimate.com/github/emory-libraries/eulfedora
     :alt: Code Climate
 
-  .. image:: https://requires.io/github/emory-libraries/eulfedora/requirements.svg?branch=master
-    :target: https://requires.io/github/emory-libraries/eulfedora/requirements/?branch=master
+  .. image:: https://requires.io/github/emory-libraries/eulfedora/requirements.svg?branch=develop
+    :target: https://requires.io/github/emory-libraries/eulfedora/requirements/?branch=develop
     :alt: Requirements Status
 
 
