@@ -6,6 +6,11 @@ The following is a summary of changes and improvements to
 
 .. New features in each version should be listed, with any necessary information about installation or upgrade notes.
 
+1.7.1
+-----
+
+* Fix unit test imports so tests can be run without Ddjango
+
 1.7
 ---
 
