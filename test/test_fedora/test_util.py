@@ -29,7 +29,6 @@ except ImportError:
     from unittest2 import skipIf
 
 import requests
-from eulfedora.util import SafeExceptionReporterFilter
 
 
 @skipIf(django is None, 'Requires Django')
