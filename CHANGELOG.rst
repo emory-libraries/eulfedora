@@ -9,7 +9,7 @@ The following is a summary of changes and improvements to
 1.7.1
 -----
 
-* Fix unit test imports so tests can be run without Ddjango
+* Fix unit test imports so tests can be run without Django
 
 1.7
 ---
