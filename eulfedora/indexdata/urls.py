@@ -23,9 +23,10 @@ In your projects urls.py, this is to be included in a form similar to:
         )
 '''
 
-from django.conf.urls import *
+from django.conf.urls import url
+from eulfedora.indexdata import views
 
-urlpatterns = patterns('eulfedora.indexdata.views',
-    url(r'^$', 'index_config', name='index_config'),
-    url(r'^(?P<id>[^/]+)/$', 'index_data', name='index_data'),
-)
+urlpatterns = [
+    url(r'^$', views.index_config, name='index_config'),
+    url(r'^(?P<id>[^/]+)/$', views.index_data, name='index_data'),
+]

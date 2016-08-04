@@ -172,9 +172,9 @@ def _raw_datastream(request, pid, dsid, repo=None, headers=None,
 
 @condition(etag_func=datastream_etag)
 @require_http_methods(['GET', 'HEAD'])
-def raw_datastream_old(request, pid, dsid, type=None, repo=None, headers={},
-                   accept_range_request=False, as_of_date=None,
-                   streaming=False):
+def raw_datastream_old(request, pid, dsid, type=None, repo=None,
+                       headers=None, accept_range_request=False,
+                       as_of_date=None, streaming=False):
     '''
     .. NOTE::
 
@@ -219,6 +219,8 @@ def raw_datastream_old(request, pid, dsid, type=None, repo=None, headers={},
 
     if repo is None:
         repo = Repository()
+    if headers is None:
+        headers = {}
 
     get_obj_opts = {}
     if type is not None:
@@ -244,7 +246,7 @@ def raw_datastream_old(request, pid, dsid, type=None, repo=None, headers={},
 
             elif accept_range_request and request.META.get('HTTP_RANGE', None) is not None:
                 rng = request.META['HTTP_RANGE']
-                logger.debug('HTTP Range request: %s' % rng)
+                logger.debug('HTTP Range request: %s', rng)
                 range_request = True
                 kind, numbers = rng.split('=')
                 if kind != 'bytes':
@@ -254,8 +256,8 @@ def raw_datastream_old(request, pid, dsid, type=None, repo=None, headers={},
                     start, end = numbers.split('-')
                     # NOTE: could potentially be complicated stuff like
                     # this: 0-999,1002-9999,1-9999
-                   # for now, only support the simple case of a single range
-                except:
+                    # for now, only support the simple case of a single range
+                except ValueError:
                     return HttpResponseRangeNotSatisfiable()
 
                 start = int(start)
@@ -329,8 +331,8 @@ def raw_datastream_old(request, pid, dsid, type=None, repo=None, headers={},
                     response['Content-Length'] = ds.info.size
                 cont_range = 'bytes %d-%d/%d' % (start, end, ds.info.size)
                 response['Content-Range'] = cont_range
-                logger.debug('Content-Length=%s Content-Range=%s' % \
-                             (partial_length, cont_range))
+                logger.debug('Content-Length=%s Content-Range=%s',
+                             partial_length, cont_range)
 
             # set any user-specified headers that were passed in
             for header, val in six.iteritems(headers):
@@ -419,7 +421,7 @@ def get_range_content(ds, start, end):
             length += len(content)
             yield content
 
-    logger.debug('total content length returned is %d' % length)
+    logger.debug('total content length returned is %d', length)
 
 
 @require_http_methods(['GET'])
@@ -534,9 +536,10 @@ class RawDatastreamViewOld(View):
         class configuration.'''
         pid = kwargs[cls.pid_url_kwarg]
         date = kwargs.get(cls.as_of_date_url_kwarg, None)
-        return datastream_etag(request, pid, cls.datastream_id,
+        return datastream_etag(
+            request, pid, cls.datastream_id,
             type=cls.object_type, repo=cls.repository_class(request=request),
-                    accept_range_request=cls.accept_range_request)
+            accept_range_request=cls.accept_range_request, as_of_date=date)
 
     @classmethod
     def last_modified(cls, request, *args, **kwargs):
@@ -545,13 +548,14 @@ class RawDatastreamViewOld(View):
         class configuration.'''
         pid = kwargs[cls.pid_url_kwarg]
         date = kwargs.get(cls.as_of_date_url_kwarg, None)
-        return datastream_lastmodified(request, pid, cls.datastream_id,
+        return datastream_lastmodified(
+            request, pid, cls.datastream_id,
             type=cls.object_type, repo=cls.repository_class(request=request),
-                    accept_range_request=cls.accept_range_request)
+            accept_range_request=cls.accept_range_request, as_of_date=date)
 
     @classmethod
     def as_view(cls, **initkwargs):
-        view = super(RawDatastreamView, cls).as_view(**initkwargs)
+        view = super(RawDatastreamViewOld, cls).as_view(**initkwargs)
         # wrap view with conditional decorator for etag/last-modified
         return condition(etag_func=cls.etag,
             last_modified_func=cls.last_modified)(view)

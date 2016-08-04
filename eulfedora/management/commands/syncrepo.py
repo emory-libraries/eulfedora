@@ -144,27 +144,29 @@ class Command(BaseCommand):
                     try:
                         pid = self.repo.ingest(fixture_data.read(), "loaded from fixture")
                         if self.verbosity > 1:
-                            print "Loaded fixture %s as %s" % (f, pid)
+                            self.stdout.write("Loaded fixture %s as %s" % (f, pid))
                         load_count += 1
                     except RequestFailed, rf:
                         if hasattr(rf, 'detail'):
                             if 'ObjectExistsException' in rf.detail or \
                               'already exists in the registry; the object can\'t be re-created' in rf.detail:
                                 if self.verbosity > 1:
-                                    print "Fixture %s has already been loaded" % f
+                                    self.stdout.write("Fixture %s has already been loaded" % f)
                             elif 'ObjectValidityException' in rf.detail:
                                 # could also look for: fedora.server.errors.ValidationException
                                 # (e.g., RELS-EXT about does not match pid)
-                                print "Error: fixture %s is not a valid Repository object" % f
+                                self.stdout.write("Error: fixture %s is not a valid Repository object" % f)
                             else:
                                 # if there is at least a detail message, display that
-                                print "Error ingesting %s: %s" % (f, rf.detail)
+                                self.stdout.write("Error ingesting %s: %s" %
+                                                  (f, rf.detail))
                         else:
                             raise rf
 
         # summarize what was actually done
         if self.verbosity > 0:
             if fixture_count == 0:
-                print "No fixtures found"
+                self.stdout.write("No fixtures found")
             else:
-                print "Loaded %d object(s) from %d fixture(s)" % (load_count, fixture_count)
+                self.stdout.write("Loaded %d object(s) from %d fixture(s)"
+                                  % (load_count, fixture_count))

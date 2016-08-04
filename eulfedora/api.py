@@ -121,8 +121,8 @@ class HTTP_API_Base(object):
         start = time.time()
         response = reqmeth(self.prep_url(url), *args, **rqst_options)
         total_time = time.time() - start
-        logger.debug('%s %s=>%d: %f sec' % (reqmeth.__name__.upper(), url,
-                     response.status_code, total_time))
+        logger.debug('%s %s=>%d: %f sec', reqmeth.__name__.upper(), url,
+                     response.status_code, total_time)
 
         # if django signals are available, send api called
         if api_called is not None:
@@ -217,7 +217,7 @@ class REST_API(HTTP_API_Base):
         return self.get('objects', params=http_args)
 
     def getDatastreamDissemination(self, pid, dsID, asOfDateTime=None, stream=False,
-                head=False, rqst_headers={}):
+                head=False, rqst_headers=None):
         """Get a single datastream on a Fedora object; optionally, get the version
         as of a particular date time.
 
@@ -235,6 +235,8 @@ class REST_API(HTTP_API_Base):
         """
         # /objects/{pid}/datastreams/{dsID}/content ? [asOfDateTime] [download]
         http_args = {}
+        if rqst_headers is None:
+            rqst_headers = {}
         if asOfDateTime:
             http_args['asOfDateTime'] = datetime_to_fedoratime(asOfDateTime)
         url = 'objects/%(pid)s/datastreams/%(dsid)s/content' %  \
@@ -246,7 +248,7 @@ class REST_API(HTTP_API_Base):
         return reqmethod(url, params=http_args, stream=stream, headers=rqst_headers)
 
     # NOTE:
-    def getDissemination(self, pid, sdefPid, method, method_params={}):
+    def getDissemination(self, pid, sdefPid, method, method_params=None):
         '''Get a service dissemination.
 
         .. NOTE:
@@ -260,6 +262,8 @@ class REST_API(HTTP_API_Base):
         :rtype: :class:`requests.models.Response`
         '''
         # /objects/{pid}/methods/{sdefPid}/{method} ? [method parameters]
+        if method_params is None:
+            method_params = {}
         uri = 'objects/%(pid)s/methods/%(sdefpid)s/%(method)s' % \
             {'pid': pid, 'sdefpid': sdefPid, 'method': method}
         return self.get(uri, params=method_params)
@@ -390,7 +394,8 @@ class REST_API(HTTP_API_Base):
         if content:
             if hasattr(content, 'read'):    # if content is a file-like object, warn if no checksum
                 if not checksum:
-                    logger.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s." % (pid, dsID))
+                    logger.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s.",
+                                  pid, dsID)
 
                 extra_args['files'] = {'file': content}
 
@@ -616,7 +621,9 @@ class REST_API(HTTP_API_Base):
         :param force: force the update (default: False)
         :rtype: :class:`requests.models.Response`
         '''
-        # /objects/{pid}/datastreams/{dsID} ? [dsLocation] [altIDs] [dsLabel] [versionable] [dsState] [formatURI] [checksumType] [checksum] [mimeType] [logMessage] [force] [ignoreContent]
+        # /objects/{pid}/datastreams/{dsID} ? [dsLocation] [altIDs] [dsLabel]
+        # [versionable] [dsState] [formatURI] [checksumType] [checksum]
+        # [mimeType] [logMessage] [force] [ignoreContent]
         # NOTE: not implementing ignoreContent (unneeded)
 
         # Unlike addDatastream, if checksum is sent without checksum
@@ -653,8 +660,8 @@ class REST_API(HTTP_API_Base):
             if hasattr(content, 'read'):    # allow content to be a file
                 # warn about missing checksums for files
                 if not checksum:
-                    logger.warning("Updating datastream %s/%s with a file, but no checksum passed" \
-                                    % (pid, dsID))
+                    logger.warning("Updating datastream %s/%s with a file, but no checksum passed",
+                                   pid, dsID)
 
             # either way (string or file-like object), set content as request data
             # (file-like objects supported in requests as of 0.13.1)
@@ -662,7 +669,6 @@ class REST_API(HTTP_API_Base):
 
         url = 'objects/%s/datastreams/%s' % (pid, dsID)
         return self.put(url, params=http_args, **content_args)
-
 
     def modifyObject(self, pid, label, ownerId, state, logMessage=None):
         '''Modify object properties.  Returned response should have
@@ -715,18 +721,18 @@ class REST_API(HTTP_API_Base):
         url = 'objects/%(pid)s/datastreams/%(dsid)s' % {'pid': pid, 'dsid': dsID}
         return self.delete(url, params=http_args)
 
-            # as of Fedora 3.4, returns 200 on success with a list of the
-            # timestamps for the versions deleted as response content
-            # NOTE: response content may be useful on error, e.g.
-            #       no path in db registry for [bogus:pid]
-            # is there any useful way to pass this info back?
-            # *NOTE*: bug when purging non-existent datastream on a valid pid
-            # - reported here: http://www.fedora-commons.org/jira/browse/FCREPO-690
-            # - as a possible work-around, could return false when status = 200
-            #   but response body is an empty list (i.e., no datastreams/versions purged)
+        # as of Fedora 3.4, returns 200 on success with a list of the
+        # timestamps for the versions deleted as response content
+        # NOTE: response content may be useful on error, e.g.
+        #       no path in db registry for [bogus:pid]
+        # is there any useful way to pass this info back?
+        # *NOTE*: bug when purging non-existent datastream on a valid pid
+        # - reported here: http://www.fedora-commons.org/jira/browse/FCREPO-690
+        # - as a possible work-around, could return false when status = 200
+        #   but response body is an empty list (i.e., no datastreams/versions purged)
 
-            # NOTE: previously returned this
-            # return r.status_code == 200, response.read()
+        # NOTE: previously returned this
+        # return r.status_code == 200, response.read()
 
     def purgeObject(self, pid, logMessage=None):
         """Purge an object from Fedora.
@@ -936,15 +942,15 @@ class ResourceIndex(HTTP_API_Base):
             'query': query,
         }
         if type == 'triples':
-            format = 'N-Triples'
+            result_format = 'N-Triples'
         elif type == 'tuples':
-            format = 'CSV'
+            result_format = 'CSV'
         if limit is not None:
             http_args['limit'] = limit
         # else - error/exception ?
-        http_args['format'] = format
+        http_args['format'] = result_format
 
-        return self._query(format, http_args, flush)
+        return self._query(result_format, http_args, flush)
 
     def count_statements(self, query, language='spo', type='triples',
                          flush=None):
@@ -957,14 +963,14 @@ class ResourceIndex(HTTP_API_Base):
         :param flush: flush results to get recent changes; defaults to False
         :rtype: integer
         """
-        format = 'count'
+        result_format = 'count'
         http_args = {
             'type': type,
             'lang': language,
             'query': query,
-            'format': format
+            'format': result_format
         }
-        return self._query(format, http_args, flush)
+        return self._query(result_format, http_args, flush)
 
     def _query(self, format, http_args, flush=None):
         # if flush parameter was not specified, use class setting
@@ -973,8 +979,8 @@ class ResourceIndex(HTTP_API_Base):
         http_args['flush'] = 'true' if flush else 'false'
 
         # log the actual query so it's easier to see what's happening
-        logger.debug('risearch query type=%(type)s language=%(lang)s format=%(format)s flush=%(flush)s\n%(query)s' % \
-            http_args)
+        logger.debug('risearch query type=%(type)s language=%(lang)s format=%(format)s flush=%(flush)s\n%(query)s',
+                     http_args)
 
         url = 'risearch'
         try:
@@ -1005,7 +1011,6 @@ class ResourceIndex(HTTP_API_Base):
             # could also see 'Unsupported output format'
             else:
                 raise err
-
 
     def spo_search(self, subject=None, predicate=None, object=None):
         """

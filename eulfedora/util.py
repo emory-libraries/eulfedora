@@ -119,17 +119,19 @@ class ChecksumMismatch(RequestFailed):
 
 def parse_rdf(data, url, format=None):
     fobj = BytesIO(data)
-    id = URIRef(url)
-    graph = Graph(identifier=id)
+    rdfid = URIRef(url)
+    graph = Graph(identifier=rdfid)
     if format is None:
         graph.parse(fobj)
     else:
         graph.parse(fobj, format=format)
     return graph
 
+
 def parse_xml_object(cls, data, url):
     doc = xmlmap.parseString(data, url)
     return cls(doc)
+
 
 def datetime_to_fedoratime(datetime):
     # format a date-time in a format fedora can handle
@@ -201,20 +203,20 @@ class ReadableIterator(object):
         self.next_chunk = self.next_chunk + force_bytes(six.next(self.iterable))
 
     def read(self, size):
-        if self.next_chunk == None:
-          return None
+        if self.next_chunk is None:
+            return None
         try:
-          while len(self.next_chunk) < size:
-            self.grow_chunk()
-          data = self.next_chunk[:size]
-          self.next_chunk = self.next_chunk[size:]
-          self.amount_read += len(data)
-          return data
+            while len(self.next_chunk) < size:
+                self.grow_chunk()
+            data = self.next_chunk[:size]
+            self.next_chunk = self.next_chunk[size:]
+            self.amount_read += len(data)
+            return data
         except StopIteration:
-          data = self.next_chunk
-          self.next_chunk = None
-          self.amount_read += len(data)
-          return data
+            data = self.next_chunk
+            self.next_chunk = None
+            self.amount_read += len(data)
+            return data
 
 try:
     from django.views import debug

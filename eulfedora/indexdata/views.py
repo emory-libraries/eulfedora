@@ -67,8 +67,7 @@ import base64
 import logging
 import json
 from django.conf import settings
-from django.http import HttpResponse, Http404, HttpResponseForbidden, \
-    HttpResponseBadRequest
+from django.http import HttpResponse, Http404, HttpResponseForbidden
 
 import six
 
@@ -78,6 +77,7 @@ from eulfedora.util import RequestFailed, force_bytes, force_text
 
 
 logger = logging.getLogger(__name__)
+
 
 def index_config(request):
     '''This view returns the index configuration of the current

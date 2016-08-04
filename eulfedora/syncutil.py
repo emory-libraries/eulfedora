@@ -326,11 +326,8 @@ class ArchiveExport(object):
                 # (needed to provide size to upload request)
                 dsinfo = self.get_datastream_info(previous_section)
                 if dsinfo:
-                    'Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)' %  \
-                        dsinfo
-
                     logger.info('Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)',
-                        dsinfo)
+                                dsinfo)
                 else:
                     # error if datastream info is not found, because either
                     # size or version date is required to handle content
@@ -384,7 +381,7 @@ class ArchiveExport(object):
 
                 # binary content within a file - ignore here
                 # (handled by encoded_datastream method)
-                next
+                continue
 
             else:
                 # not start or end of binary content, and not
@@ -429,7 +426,6 @@ class ArchiveExport(object):
                 self.within_file = False
 
             elif self.within_file:
-                content[:50]
                 # if there was leftover binary content from the last chunk,
                 # add it to the content now
                 if leftover is not None:
@@ -463,7 +459,7 @@ def binarycontent_sections(chunk):
     # use common text of start and end tags to split the text
     # (i.e. without < or </ tag beginning)
     binary_content_tag = BINARY_CONTENT_START[1:]
-    if not binary_content_tag in chunk:
+    if binary_content_tag not in chunk:
         # if no tags are present, don't do any extra work
         yield chunk
 

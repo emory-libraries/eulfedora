@@ -179,8 +179,9 @@ class Repository(object):
         if root is None:
             raise Exception('Could not determine Fedora root url from django settings or parameter')
 
-        logger.debug("Connecting to fedora at %s %s" % (root,
-                      'as %s' % username if username else '(no user credentials)'))
+        logger.debug("Connecting to fedora at %s %s", root,
+                     'as %s' % username if username
+                     else '(no user credentials)')
         self.api = ApiFacade(root, username, password)
         self.fedora_root = self.api.base_url
 
@@ -372,8 +373,8 @@ class Repository(object):
                 if is_root_subclass:
                     return obj_type
 
-            logger.warn('%s has %d potential classes with no root subclass for the list. using the first: %s' %
-                (obj, len(matches), repr(matches)))
+            logger.warn('%s has %d potential classes with no root subclass for the list. using the first: %s',
+                        obj, len(matches), repr(matches))
         return matches[0]
 
     def find_objects(self, terms=None, type=None, chunksize=None, **kwargs):
@@ -419,10 +420,10 @@ class Repository(object):
             conditions = []
             for field, value in six.iteritems(kwargs):
                 if '__' in field:
-                    field, filter = field.split('__')
-                    if filter not in search_operators:
-                        raise Exception("Unsupported search filter '%s'" % filter)
-                    op = search_operators[filter]
+                    field, filtr = field.split('__')
+                    if filtr not in search_operators:
+                        raise Exception("Unsupported search filter '%s'" % filtr)
+                    op = search_operators[filtr]
                 else:
                     op = search_operators['contains']   # default search mode
 
