@@ -41,28 +41,7 @@ logger = logging.getLogger(__name__)
 
 # low-level wrappers
 
-def _safe_str(s):
-    # helper for _safe_urlencode: utf-8 encode unicode strings, convert
-    # non-strings to strings, and leave plain strings untouched.
-    if isinstance(s, unicode):
-        return s.encode('utf-8')
-    else:
-        return str(s)
-
-def _get_items(query, doseq):
-    # helper for _safe_urlencode: emulate urllib.urlencode "doseq" logic
-    if hasattr(query, 'items'):
-        query = query.items()
-    for k, v in query:
-        if isinstance(v, basestring):
-            yield k, v
-        elif doseq and iter(v): # if it's iterable
-            for e in v:
-                yield k, e
-        else:
-            yield k, str(v)
-
-
+# bind a signal for tracking api calls; used by debug panel
 if Signal is not None:
     api_called = Signal(providing_args=[
         "time_taken", "method", "url", "args", "kwargs"])
@@ -683,9 +662,9 @@ class REST_API(HTTP_API_Base):
         :rtype: :class:`requests.models.Response`
         '''
         # /objects/{pid} ? [label] [ownerId] [state] [logMessage]
-        http_args = {'label' : label,
-                    'ownerId' : ownerId,
-                    'state' : state}
+        http_args = {'label': label,
+                     'ownerId': ownerId,
+                     'state': state}
         if logMessage is not None:
             http_args['logMessage'] = logMessage
         url = 'objects/%(pid)s' % {'pid': pid}
@@ -813,10 +792,10 @@ class REST_API(HTTP_API_Base):
         # returns response code 200 on success
         return response.status_code == requests.codes.ok
 
-    ### utility methods
+    ## utility methods
 
     def upload(self, data, callback=None, content_type=None,
-        size=None):
+               size=None):
         '''
         Upload a multi-part file for content to ingest.  Returns a
         temporary upload id that can be used as a datstream location.
@@ -839,13 +818,13 @@ class REST_API(HTTP_API_Base):
         # NOTE: checking for both python 2.x next method and
         # python 3.x __next__ to test if data is iteraable
         if not hasattr(data, 'read') and \
-            not (hasattr(data, '__next__') or hasattr(data, 'next')):
+          not (hasattr(data, '__next__') or hasattr(data, 'next')):
             data = six.BytesIO(force_bytes(data))
 
         # if data is an iterable, wrap in a readable iterator that
         # requests-toolbelt can read data from
         elif not hasattr(data, 'read') and \
-            (hasattr(data, '__next__') or hasattr(data, 'next')):
+          (hasattr(data, '__next__') or hasattr(data, 'next')):
             if size is None:
                 raise Exception('Cannot upload iterable with unknown size')
             data = ReadableIterator(data, size)
@@ -872,7 +851,6 @@ class REST_API(HTTP_API_Base):
             msg = 'upload content larger than system maxint (32-bit OS limitation)'
             logger.error('OverflowError: %s', msg)
             raise OverflowError(msg)
-
 
         if response.status_code == requests.codes.accepted:
             return response.text.strip()
@@ -912,6 +890,7 @@ class ApiFacade(REST_API, API_A_LITE):
 class UnrecognizedQueryLanguage(EnvironmentError):
     pass
 
+
 class ResourceIndex(HTTP_API_Base):
     "Python object for accessing Fedora's Resource Index."
 
@@ -924,7 +903,7 @@ class ResourceIndex(HTTP_API_Base):
     """
 
     def find_statements(self, query, language='spo', type='triples', flush=None,
-        limit=None):
+                        limit=None):
         """
         Run a query in a format supported by the Fedora Resource Index (e.g., SPO
         or Sparql) and return the results.
