@@ -18,6 +18,7 @@ from getpass import getpass
 import glob
 import logging
 import os
+import sys
 from optparse import make_option
 
 from django.core.management.base import BaseCommand
@@ -72,7 +73,9 @@ class Command(BaseCommand):
 
         # FIXME/TODO: add count/summary info for content models objects created ?
         if self.verbosity > 1:
-            print "Generating content models for %d classes" % len(DigitalObject.defined_types)
+            sys.stdout.write("Generating content models for %d classes"
+                             % len(DigitalObject.defined_types))
+
         for cls in DigitalObject.defined_types.itervalues():
             self.process_class(cls)
 
@@ -81,11 +84,11 @@ class Command(BaseCommand):
     def process_class(self, cls):
         try:
             ContentModel.for_class(cls, self.repo)
-        except ValueError, v:
+        except ValueError as v:
             # for_class raises a ValueError when a class has >1
             # CONTENT_MODELS.
             if self.verbosity > 1:
-                print v
+                sys.stderr.write(v)
         except RequestFailed, rf:
             if hasattr(rf, 'detail'):
                 if 'ObjectExistsException' in rf.detail:
@@ -99,7 +102,8 @@ class Command(BaseCommand):
                                 full_name)
                 else:
                     # if there is a detail message, display that
-                    print "Error ingesting ContentModel for %s: %s" % (cls, rf.detail)
+                    sys.stderr.write("Error ingesting ContentModel for %s: %s"
+                                     % (cls, rf.detail))
 
     def load_initial_objects(self):
         # look for any .xml files in apps under fixtures/initial_objects
