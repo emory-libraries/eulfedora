@@ -590,8 +590,13 @@ class REST_API(HTTP_API_Base):
         headers = {'Content-Type': 'text/xml'}
 
         url = 'objects/new'
-        return self.post(url, data=text, params=http_args, headers=headers)
 
+        # if text is unicode, it needs to be encoded so we can send the
+        # data as bytes; otherwise, we get ascii encode errors in httplib/ssl
+        if isinstance(text, six.text_type):
+            text = text.encode('utf-8')
+
+        return self.post(url, data=text, params=http_args, headers=headers)
 
     def modifyDatastream(self, pid, dsID, dsLabel=None, mimeType=None, logMessage=None, dsLocation=None,
         altIDs=None, versionable=None, dsState=None, formatURI=None, checksumType=None,

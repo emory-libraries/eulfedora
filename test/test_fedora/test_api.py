@@ -53,7 +53,7 @@ class TestREST_API(FedoraTestCase):
 
 Hey, nonny-nonny."""
 
-    unicode_test_str = six.u('«ταБЬℓσ» 🐍')
+    unicode_test_str = u'«ταБЬℓσ» 🐍'
 
     def _add_text_datastream(self):
         # add a text datastream to the current test object - used by multiple tests
@@ -278,9 +278,12 @@ Hey, nonny-nonny."""
 
     def test_addDatastream_utf8(self):
         # unicode in datastream label or log message should work
+
+        # FIXME: this is not actually failing because of the unicode,
+        # but for some other reason
         response = self.rest_api.addDatastream(
             self.pid, "TEXT2", self.unicode_test_str, mimeType="text/plain",
-            logMessage="creating TEXT2", content='some text content')
+            logMessage="creating TEXT2", content=six.b('some text content'))
         self.assertEqual(requests.codes.created, response.status_code)
 
         # TODO: once it's fixed, add tests to confirm label is set correctly
@@ -293,7 +296,7 @@ Hey, nonny-nonny."""
 
         # log message should be in audit trail
         response = self.rest_api.getObjectXML(self.pid)
-        self.assert_('<audit:justification>%s</audit:justification>' %  \
+        self.assert_(u'<audit:justification>%s</audit:justification>' %  \
                      self.unicode_test_str in response.content)
 
     # relationship predicates for testing
@@ -503,12 +506,12 @@ Hey, nonny-nonny."""
 
         response = self.rest_api.getObjectXML(pid)
         response.encoding = 'utf-8'  # ensure requests decodes as utf-8
-        self.assert_(six.u('<audit:justification>%s</audit:justification>') %
+        self.assert_(u'<audit:justification>%s</audit:justification>' %
                      self.unicode_test_str in response.text)
         self.rest_api.purgeObject(force_text(pid))
 
         # ingest with unicode object label
-        obj = six.u(obj).replace(six.u("A test object"), self.unicode_test_str)
+        obj = six.u(obj).replace(u"A test object", self.unicode_test_str)
         response = self.rest_api.ingest(obj)
         pid = response.content
         self.assertTrue(pid)
@@ -516,7 +519,7 @@ Hey, nonny-nonny."""
         # object label in profile should match the unicode sent
         response = self.rest_api.getObjectProfile(pid)
         response.encoding = 'utf-8'  # ensure requests decodes as utf-8
-        self.assert_(six.u('<objLabel>%s</objLabel>') % self.unicode_test_str
+        self.assert_(u'<objLabel>%s</objLabel>' % self.unicode_test_str
                      in response.text)
         self.rest_api.purgeObject(force_text(pid))
 
