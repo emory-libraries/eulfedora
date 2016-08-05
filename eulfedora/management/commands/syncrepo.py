@@ -89,7 +89,7 @@ class Command(BaseCommand):
             # CONTENT_MODELS.
             if self.verbosity > 1:
                 sys.stderr.write(v)
-        except RequestFailed, rf:
+        except RequestFailed as rf:
             if hasattr(rf, 'detail'):
                 if 'ObjectExistsException' in rf.detail:
                     # This shouldn't happen, since ContentModel.for_class
