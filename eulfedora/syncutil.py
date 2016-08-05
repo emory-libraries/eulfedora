@@ -120,6 +120,7 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
             export_data = (re.sub(checksum_re, '', chunk)
                            for chunk in export_data)
 
+
     dest_obj = dest_repo.get_object(src_obj.pid)
     if dest_obj.exists:
         if overwrite:
@@ -164,8 +165,6 @@ class ArchiveExport(object):
         (default: False)
     '''
 
-
-
     #: regular expression used to identify datastream version information
     #: that is needed for processing datastream content in an archival export
     dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*CREATED="(?P<created>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".*TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]*)"',
@@ -173,7 +172,7 @@ class ArchiveExport(object):
     # NOTE: regex allows for digest to be empty
 
     #: url credentials, if needed for datastream content urls
-    url_credentials = ''
+    url_credentials = None
 
     def __init__(self, obj, dest_repo, verify=False, progress_bar=None,
         requires_auth=False, xml_only=False):
