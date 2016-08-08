@@ -597,7 +597,7 @@ class REST_API(HTTP_API_Base):
         # if text is unicode, it needs to be encoded so we can send the
         # data as bytes; otherwise, we get ascii encode errors in httplib/ssl
         if isinstance(text, six.text_type):
-            text = text.encode('utf-8')
+            text = bytes(text.encode('utf-8'))
 
         return self.post(url, data=text, params=http_args, headers=headers)
 

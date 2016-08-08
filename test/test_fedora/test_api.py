@@ -515,7 +515,7 @@ Hey, nonny-nonny."""
         # ingest with unicode log message
         obj = self.loadFixtureData('basic-object.foxml')
         response = self.rest_api.ingest(obj, logMessage=self.unicode_test_str)
-        pid = response.content
+        pid = response.text
         self.assertTrue(pid)
 
         response = self.rest_api.getObjectXML(pid)
@@ -525,9 +525,11 @@ Hey, nonny-nonny."""
         self.rest_api.purgeObject(force_text(pid))
 
         # ingest with unicode object label
-        obj = six.u(obj).replace(u"A test object", self.unicode_test_str)
+        # convert to text to replace string, then convert back to bytes
+        obj = force_bytes(force_text(obj).replace(
+            u"A test object", self.unicode_test_str))
         response = self.rest_api.ingest(obj)
-        pid = response.content
+        pid = response.text
         self.assertTrue(pid)
 
         # object label in profile should match the unicode sent
