@@ -836,7 +836,8 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         content_md5 = md5sum(text_content)
         size = len(text_content)
 
-        upload_id = self.rest_api.upload(data_generator(), size=size, content_type='text/plain')
+        upload_id = self.rest_api.upload(data_generator(), size=size,
+                                         content_type='text/plain')
         pattern = re.compile('uploaded://[0-9]+')
         self.assertTrue(pattern.match(upload_id))
 

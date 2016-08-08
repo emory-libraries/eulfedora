@@ -84,11 +84,12 @@ class HTTP_API_Base(object):
         # NOTE: only headers that will be common for *all* requests
         # to this fedora should be set in the session
         # (i.e., do NOT include auth information here)
+
+        # NOTE: ssl verification is turned on by default
+
         self.session.headers = {
+            # use requests-toolbelt user agent
             'User-Agent': user_agent('eulfedora', eulfedora_version),
-            # 'user-agent': 'eulfedora/%s (python-requests/%s)' % \
-            # (eulfedora_version, requests.__version__),
-            'verify': True,  # verify SSL certs by default
         }
         # no retries is requests current default behavior, so only
         # customize if a value is set
@@ -865,7 +866,11 @@ class REST_API(HTTP_API_Base):
             menc = MultipartEncoderMonitor(menc, callback)
 
         headers = {'Content-Type': menc.content_type}
+
         if size:
+            # latest version of requests requires str or bytes, not int
+            if not isinstance(size, six.string_types):
+                size = str(size)
             headers['Content-Length'] = size
 
         try:
