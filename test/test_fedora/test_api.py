@@ -277,27 +277,41 @@ Hey, nonny-nonny."""
         FILE.close()
 
     def test_addDatastream_utf8(self):
-        # unicode in datastream label or log message should work
-
-        # FIXME: this is not actually failing because of the unicode,
-        # but for some other reason
+        # unicode in datastream label
         response = self.rest_api.addDatastream(
             self.pid, "TEXT2", self.unicode_test_str, mimeType="text/plain",
-            logMessage="creating TEXT2", content=six.b('some text content'))
+            logMessage="creating TEXT2", controlGroup='M', versionable=False,
+            dsState='A', content='some text content')
+
         self.assertEqual(requests.codes.created, response.status_code)
 
         # TODO: once it's fixed, add tests to confirm label is set correctly
         # response = self.rest_api.getDatastream(self.pid, "TEXT2")
 
+        # unicode in log message
         response = self.rest_api.addDatastream(
             self.pid, "TEXT3", 'some text', mimeType="text/plain",
-            logMessage=self.unicode_test_str, content='some text content')
+            logMessage=self.unicode_test_str, controlGroup='M',
+            content='some text content')
         self.assertEqual(requests.codes.created, response.status_code)
 
         # log message should be in audit trail
         response = self.rest_api.getObjectXML(self.pid)
+        response.encoding = 'utf-8'
         self.assert_(u'<audit:justification>%s</audit:justification>' %  \
-                     self.unicode_test_str in response.content)
+                     self.unicode_test_str in response.text)
+
+        # unicode in datastream content
+        response = self.rest_api.addDatastream(
+            self.pid, "TEXT4", 'some text', mimeType="text/plain",
+            logMessage='adding unicode content', controlGroup='M',
+            content=self.unicode_test_str)
+        self.assertEqual(requests.codes.created, response.status_code)
+
+        # content returned from fedora should be exactly what we started with
+        response = self.rest_api.getDatastreamDissemination(self.pid, 'TEXT4')
+        response.encoding = 'utf-8'
+        self.assertEqual(self.unicode_test_str, response.text)
 
     # relationship predicates for testing
     rel_isMemberOf = "info:fedora/fedora-system:def/relations-external#isMemberOf"

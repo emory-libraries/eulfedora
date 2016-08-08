@@ -395,14 +395,16 @@ class REST_API(HTTP_API_Base):
             if hasattr(content, 'read'):    # if content is a file-like object, warn if no checksum
                 if not checksum:
                     logger.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s.",
-                                  pid, dsID)
-
+                                   pid, dsID)
                 extra_args['files'] = {'file': content}
 
             else:
-                extra_args['data'] = content
+                # fedora wants a multipart file upload;
+                # this seems to work better for handling unicode than
+                # simply sending content via requests data parameter
+                extra_args['files'] = {'file': ('filename', content)}
 
-            # set content-type header ?
+        # set content-type header ?
         url = 'objects/%s/datastreams/%s' % (pid, dsID)
         return self.post(url, params=http_args, **extra_args)
         # expected response: 201 Created (on success)
