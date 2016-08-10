@@ -111,12 +111,11 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
 
     # wipe checksums from FOXML if flagged in options
     if omit_checksums:
-        checksum_re = r'<foxml:contentDigest.+?/>'
+        checksum_re = re.compile(b'<foxml:contentDigest.+?/>')
         try:
             # export data is either a string
-            export_data = re.sub(checksum_re, '', export_data)
+            export_data = checksum_re.sub(b'', export_data)
         except TypeError:
-            # or a generator
             export_data = (re.sub(checksum_re, '', chunk)
                            for chunk in export_data)
 
@@ -287,7 +286,6 @@ class ArchiveExport(object):
         if infomatch:
             return infomatch.groupdict()
 
-
     def update_progressbar(self):
         # update progressbar if we have one
         if self.progress_bar is not None:
@@ -297,7 +295,6 @@ class ArchiveExport(object):
             if self.progress_bar.max_value < self.processed_size:
                 self.progress_bar.max_value = self.processed_size
             self.progress_bar.update(self.processed_size)
-
 
     def object_data(self):
         '''Process the archival export and return a buffer with foxml
@@ -355,6 +352,7 @@ class ArchiveExport(object):
                     # versioned datastream dissemination url
                     content_location = '%sobjects/%s/datastreams/%s/content?asOfDateTime=%s' % \
                         (base_url, self.obj.pid, dsid, dsinfo['created'])
+
                 else:
                     upload_args = {}
                     if self.progress_bar:
