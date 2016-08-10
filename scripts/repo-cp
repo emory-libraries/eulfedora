@@ -54,30 +54,40 @@ def repo_copy():
         help='Destination repository for content to be copied')
 
     # list of pids
-    parser.add_argument('pids', metavar='PID', nargs='*',
+    parser.add_argument(
+        'pids', metavar='PID', nargs='*',
         help='list of pids to copy')
-    parser.add_argument('--file', '-f',
-        help='Input file with a list of pids, one pid per line',
-        required=False)
-    parser.add_argument('--progress', '-p',
+    parser.add_argument(
+        '--file', '-f', required=False,
+        help='Input file with a list of pids, one pid per line')
+    parser.add_argument(
+        '--progress', '-p',
         help='Show progress (only available for archive exports)',
         action='store_true', default=False)
-    parser.add_argument('--requires-auth',
+    parser.add_argument(
+        '--requires-auth',
         help='Datastream content urls require authentication',
         action='store_true', default=False)
-    parser.add_argument('--export-format', '-e',
+    parser.add_argument(
+        '--export-format', '-e',
         choices=['migrate', 'archive', 'archive-xml'], default='migrate',
-        help='Fedora export format to use.  Use archive if migrate exports ' \
-           + 'fail with checksum errors or if content URLs are not accessible '
-           + 'to the destination server. (default: %(default)s)')
-    parser.add_argument('--omit-checksums', default=False, action='store_true',
+        help='Fedora export format to use.  Use archive if migrate exports ' +
+             'fail with checksum errors or if content URLs are not accessible' +
+             ' to the destination server. (default: %(default)s)')
+    parser.add_argument(
+        '--omit-checksums', default=False, action='store_true',
         help='Omit checksums from datastreams (default: %(default)s)',)
-    parser.add_argument('--archive', '-a', action='store_const',
+    parser.add_argument(
+        '--archive', '-a', action='store_const',
         const='archive', dest='export_format',
         help='Use archive export format (equivalent to --export-format archive)')
-    parser.add_argument('--archive-xml', action='store_const',
+    parser.add_argument(
+        '--archive-xml', action='store_const',
         const='archive-xml', dest='export_format',
-        help='Use archive-xml export format (equivalent to --export-format archive-xml)')
+        help='Use archival export for xml datastreams only; use fedora ' +
+             'datastream dissemination urls for other content.  Can be used ' +
+             'with --requires-auth. ' +
+             '(Equivalent to --export-format archive-xml)')
     args = parser.parse_args()
 
     cfg = configparser.ConfigParser()
