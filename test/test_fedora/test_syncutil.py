@@ -67,6 +67,30 @@ class ArchiveExportTest(unittest.TestCase):
         self.assertEqual('MD5', dsinfo['type'])
         self.assertEqual('168fb675e5fcded1a3b8cc7251877744', dsinfo['digest'])
 
+        # getting audit record id instead of datastream id
+        audit_trail_dsinfo = '''<audit:record ID="AUDREC48">
+<audit:process type="Fedora API-M"/>
+<audit:action>modifyDatastreamByValue</audit:action>
+<audit:componentID>RELS-EXT</audit:componentID>
+<audit:responsibility>fedoraAdmin</audit:responsibility>
+<audit:date>2016-07-09T10:31:50.971Z</audit:date>
+<audit:justification>datastream fixity check</audit:justification>
+</audit:record>
+</audit:auditTrail>
+</foxml:xmlContent>
+</foxml:datastreamVersion>
+</foxml:datastream>
+<foxml:datastream ID="content" STATE="A" CONTROL_GROUP="M" VERSIONABLE="false">
+<foxml:datastreamVersion ID="content.0" LABEL="1199disk3" CREATED="2014-04-30T17:30:06.949Z" MIMETYPE="application/x-aff" SIZE="1277">
+<foxml:contentDigest TYPE="MD5" DIGEST="2271e4a2678f69ce3f4a97ab07c06cbe"/>
+<foxml:binaryContent>'''
+        dsinfo = self.archex.get_datastream_info(audit_trail_dsinfo)
+        self.assertEqual('content.0', dsinfo['id'])
+        self.assertEqual('application/x-aff', dsinfo['mimetype'])
+        self.assertEqual('1277', dsinfo['size'])
+        self.assertEqual('MD5', dsinfo['type'])
+        self.assertEqual('2271e4a2678f69ce3f4a97ab07c06cbe', dsinfo['digest'])
+
     def test_object_data(self):
         # mock api to read export data from a local fixture filie
         response = self.session.get('file://%s' % FIXTURES['sync1_export'])
