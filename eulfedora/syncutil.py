@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 
 def sync_object(src_obj, dest_repo, export_context='migrate',
                 overwrite=False, show_progress=False,
-                requires_auth=False, omit_checksums=False):
+                requires_auth=False, omit_checksums=False,
+                verify=False):
     '''Copy an object from one repository to another using the Fedora
     export functionality.
 
@@ -102,7 +103,8 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
     elif export_context in ['archive', 'archive-xml']:
         export = ArchiveExport(src_obj, dest_repo,
             progress_bar=pbar, requires_auth=requires_auth,
-            xml_only=(export_context == 'archive-xml'))
+            xml_only=(export_context == 'archive-xml'),
+            verify=verify)
         # NOTE: should be possible to pass BytesIO to be read, but that is failing
         export_data = export.object_data().getvalue()
 
@@ -166,8 +168,13 @@ class ArchiveExport(object):
 
     #: regular expression used to identify datastream version information
     #: that is needed for processing datastream content in an archival export
-    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)"[^>]*CREATED="(?P<created>[^"]+)"[^>]*MIMETYPE="(?P<mimetype>[^"]+)"[^>]*SIZE="(?P<size>\d+)".*TYPE="(?P<type>[^"]+)"[^>]*DIGEST="(?P<digest>[0-9a-f]*)"',
+    dsinfo_regex = re.compile(
+        r'ID="(?P<id>[^"]+)"[^>]*CREATED="(?P<created>[^"]+)"[^>]' + \
+        r'*MIMETYPE="(?P<mimetype>[^"]+)"[^>]*SIZE="(?P<size>\d+)">' + \
+        r'\s*<foxml:contentDigest\s+TYPE="(?P<type>[^"]+)"[^>]*' + \
+        r'DIGEST="(?P<digest>[0-9a-f]*)"/>\s*',
         flags=re.MULTILINE|re.DOTALL)
+
     # NOTE: regex allows for digest to be empty
 
     #: url credentials, if needed for datastream content urls
@@ -190,6 +197,7 @@ class ArchiveExport(object):
         self.within_file = False
 
     _export_response = None
+
     def get_export(self):
         if self._export_response is None:
             self._export_response = self.obj.api.export(self.obj.pid,
@@ -201,6 +209,7 @@ class ArchiveExport(object):
     _iter_content = None
 
     _current_chunk = None
+
     def current_chunk(self):
         return self._current_chunk
 
@@ -232,6 +241,7 @@ class ArchiveExport(object):
         return self._current_chunk
 
     _current_sections = None
+
     def get_next_section(self):
         if self._current_sections is None:
             if self._current_chunk is None:
@@ -282,8 +292,12 @@ class ArchiveExport(object):
             else:
                 raise err
 
-        infomatch = self.dsinfo_regex.search(text)
-        if infomatch:
+        # in case the text contains multiple datastream ids, find
+        # all matches and then use the last, since we want the last one
+        # in this section, just before the datastream content
+        matches = list(self.dsinfo_regex.finditer(text))
+        if matches:
+            infomatch = matches[-1]
             return infomatch.groupdict()
 
     def update_progressbar(self):
@@ -390,7 +404,6 @@ class ArchiveExport(object):
 
         return self.foxml_buffer
 
-
     # generator to iterate through sections and possibly next chunk
     # for upload to fedora
     def encoded_datastream(self):
@@ -441,11 +454,14 @@ class ArchiveExport(object):
                     # store the leftover to be decoded with the next chunk
                     leftover = lines[-1]
 
-                if self.verify:
-                    md5.update(decoded_content)
+                if decoded_content is not None:
+                    if self.verify:
+                        md5.update(decoded_content)
 
-                size += len(decoded_content)
-                yield decoded_content
+                    size += len(decoded_content)
+                    yield decoded_content
+
+
 
 
 def binarycontent_sections(chunk):
