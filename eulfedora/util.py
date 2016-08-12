@@ -98,6 +98,7 @@ class PermissionDenied(RequestFailed):
     Fedora object or datastream.
     '''
 
+
 class ChecksumMismatch(RequestFailed):
     '''Custom exception for a Checksum Mismatch error while trying to
     add or update a datastream on a Fedora object.
@@ -167,6 +168,7 @@ def file_md5sum(filename):
             md5.update(chunk)
     return md5.hexdigest()
 
+
 def md5sum(content):
     '''Calculate and returns an MD5 checksum for the specified content.
 
@@ -204,19 +206,31 @@ class ReadableIterator(object):
 
     def read(self, size):
         if self.next_chunk is None:
+            # NOTE: this case is here to support syncutil odditities
+            # In some cases, datastream sizes provided by fedora do *not*
+            # match actual content size.  Adjust the sizes to match
+            # actual data so that length will return zero (nothing more to
+            # read)
+            if self.amount_read != self.size:
+                self.size = self.amount_read
+                # return b''
+
             return None
         try:
             while len(self.next_chunk) < size:
                 self.grow_chunk()
             data = self.next_chunk[:size]
             self.next_chunk = self.next_chunk[size:]
-            self.amount_read += len(data)
-            return data
+            return self._read_data(data)
         except StopIteration:
             data = self.next_chunk
             self.next_chunk = None
-            self.amount_read += len(data)
-            return data
+            return self._read_data(data)
+
+    def _read_data(self, data):
+        self.amount_read += len(data)
+        self.size = max(self.amount_read, self.size)
+        return data
 
 try:
     from django.views import debug
