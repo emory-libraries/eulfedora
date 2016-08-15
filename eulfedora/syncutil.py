@@ -171,9 +171,9 @@ class ArchiveExport(object):
     #: regular expression used to identify datastream version information
     #: that is needed for processing datastream content in an archival export
     dsinfo_regex = re.compile(
-        r'ID="(?P<id>[^"]+)"[^>]*CREATED="(?P<created>[^"]+)"[^>]' + \
-        r'*MIMETYPE="(?P<mimetype>[^"]+)"[^>]*SIZE="(?P<size>\d+)">' + \
-        r'\s*<foxml:contentDigest\s+TYPE="(?P<type>[^"]+)"[^>]*' + \
+        r'ID="(?P<id>[^"<>]+)"[^>]*CREATED="(?P<created>[^"<>]+)"[^>]' + \
+        r'*MIMETYPE="(?P<mimetype>[^"<>]+)"[^>]*SIZE="(?P<size>\d+)">' + \
+        r'\s*<foxml:contentDigest\s+TYPE="(?P<type>[^<>"]+)"[^>]*' + \
         r'DIGEST="(?P<digest>[0-9a-f]*)"/>\s*',
         flags=re.MULTILINE|re.DOTALL)
 
@@ -346,7 +346,10 @@ class ArchiveExport(object):
                     raise Exception('Failed to find datastream information for %s from \n%s' \
                         % (self.obj.pid, previous_section))
 
-                if self.xml_only and not dsinfo['mimetype'] == 'text/xml':  # possibly others?
+                if self.xml_only and not \
+                   dsinfo['mimetype'] in ['text/xml', 'application/rdf+xml',
+                                          'application/xml']:
+                    # possibly other mimetypes also?
                     try:
                         dsid, dsversion = dsinfo['id'].split('.')
                     except ValueError:
@@ -368,7 +371,6 @@ class ArchiveExport(object):
                     # versioned datastream dissemination url
                     content_location = '%sobjects/%s/datastreams/%s/content?asOfDateTime=%s' % \
                         (base_url, self.obj.pid, dsid, dsinfo['created'])
-
                 else:
                     upload_args = {}
                     if self.progress_bar:
