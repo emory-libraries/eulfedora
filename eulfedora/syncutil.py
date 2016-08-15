@@ -129,7 +129,7 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
                            for chunk in export_data)
 
     if overwrite and dest_obj.exists:
-        print 'overwriting'
+        logger.debug('Overwriting %s in destination repository' % src_obj.pid)
         dest_repo.purge_object(src_obj.pid)
 
     result = dest_repo.ingest(export_data)
