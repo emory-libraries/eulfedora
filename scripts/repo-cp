@@ -138,7 +138,8 @@ def repo_copy():
             pids = args.pids
         elif args.file:
             with open(args.file) as pidlistfile:
-                pids = pidlistfile.read().splitlines()
+                # allow whitespace on front or end of pid, for convenience
+                pids = [p.strip() for p in pidlistfile.read().splitlines()]
         else:
             print('Specify either one or more pids or a file with a list of pids')
             parser.print_help()
@@ -147,6 +148,7 @@ def repo_copy():
     allow_overwrite = cfg.has_option(args.dest, 'allow_overwrite') and \
         cfg.getboolean(args.dest, 'allow_overwrite')
 
+    # configure logging based on verbosity level requested
     logging.config.dictConfig(get_logging_config(args.verbosity))
 
     for pid in pids:
@@ -156,7 +158,13 @@ def repo_copy():
             if isinstance(src_repo, Airlock):
                 with open(pid, 'rb') as export:
                     result = dest_repo.ingest(export)
-                    print('%s copied' % result)
+                    if result:
+                        print('%s copied' % result)
+                    else:
+                        # false means not copied but no error; currently means
+                        # skipped because object exists and overwrite not allowed
+                        print('%s skipped' % pid)
+
                 continue
 
             src_obj = src_repo.get_object(pid)
@@ -178,7 +186,12 @@ def repo_copy():
                     overwrite=allow_overwrite, show_progress=args.progress,
                     requires_auth=args.requires_auth, omit_checksums=args.omit_checksums,
                     verify=args.verify)
-                print('%s copied' % result)
+                if result:
+                    print('%s copied' % result)
+                else:
+                    # false means not copied but no error; currently means
+                    # skipped because object exists and overwrite not allowed
+                    print('%s skipped' % pid)
         except ChecksumMismatch:
             print('ChecksumMismatch on %s' % pid)
 
@@ -199,12 +212,12 @@ def get_logging_config(level):
         'disable_existing_loggers': True,
         'formatters': {
             'simple': {
-                'format': '%(levelname)s: %(message)s',
+                'format': '%(message)s',
             },
         },
         'handlers': {
             'console': {
-                'level': level,
+                'level': 'DEBUG',
                 'class': 'logging.StreamHandler',
                 'formatter': 'simple'
             },
@@ -217,6 +230,7 @@ def get_logging_config(level):
             },
         }
     }
+
 
 def is_airlock(cfg, name):
     # if a name is not in the config file and is a directory,

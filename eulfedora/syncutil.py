@@ -69,6 +69,13 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
     # NOTE: currently exceptions are expected to be handled by the
     # calling method; see repo-cp script for an example
 
+    # if overwrite is not requested, check first and bail out
+    dest_obj = dest_repo.get_object(src_obj.pid)
+    if not overwrite and dest_obj.exists:
+        logger.info('%s exists in destination repo and no overwrite; skipping',
+                    src_obj.pid)
+        return False
+
     if show_progress and progressbar:
         # calculate rough estimate of object size
         size_estimate = estimate_object_size(src_obj,
@@ -121,14 +128,9 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
             export_data = (re.sub(checksum_re, '', chunk)
                            for chunk in export_data)
 
-
-    dest_obj = dest_repo.get_object(src_obj.pid)
-    if dest_obj.exists:
-        if overwrite:
-            dest_repo.purge_object(src_obj.pid)
-        else:
-            # exception ?
-            return False
+    if overwrite and dest_obj.exists:
+        print 'overwriting'
+        dest_repo.purge_object(src_obj.pid)
 
     result = dest_repo.ingest(export_data)
     if pbar:
@@ -462,8 +464,6 @@ class ArchiveExport(object):
                     yield decoded_content
 
 
-
-
 def binarycontent_sections(chunk):
     '''Split a chunk of data into sections by start and end binary
     content tags.'''
@@ -515,6 +515,7 @@ def estimate_object_size(obj, archive=True):
 
     return size_estimate
 
+
 def base64_size(input_size):
     # from http://stackoverflow.com/questions/1533113/calculate-the-size-to-a-base-64-encoded-message
     adjustment = 3 - (input_size % 3) if (input_size % 3) else 0
@@ -532,6 +533,7 @@ def humanize_file_size(size):
     units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
     p = math.floor(math.log(size, 2)/10)
     return "%.2f%s" % (size/math.pow(1024, p), units[int(p)])
+
 
 def endswith_partial(text, partial_str):
     '''Check if the text ends with any partial version of the
