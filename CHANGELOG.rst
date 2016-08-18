@@ -6,12 +6,27 @@ The following is a summary of changes and improvements to
 
 .. New features in each version should be listed, with any necessary information about installation or upgrade notes.
 
-1.8 (prelim)
+1.7.2
 ------------
 
-* Fix UTF-8 issue introduced in 1.5 (see discussion on
+* Fix UTF-8 issue introduced in 1.5 (for details, see discussion on
   `PR #21 <https://github.com/emory-libraries/eulfedora/pull/22>`_)
 * Updated for compatibility with requests 2.11
+* Fix XmlDatastream options being overwritten when defaults are not specified
+  `#7 <https://github.com/emory-libraries/eulfedora/issues/7>`_
+* Code cleanup based on `landscape.io <https://landscape.io/github/emory-libraries/eulfedora>`_
+  reports
+* Several improvements and fixes for repo-cp and syncutil:
+  * Refined datastream regular expression: more accurately grab the
+    correct datastream id and checksum, avoiding spurious checksum errors;
+    always grab the last match found, in case a section includes multiple
+    datastream versions
+  * Expose verify option in the repo-cp script options (MD5 decoded content)
+  * Fix omit checksums regular expression to work under Python 3
+  * Improve the explanation for the archive xml sync option
+  * Update ReadableIterator to handle inaccurate sizes provided in the
+    Fedora export datastream info for some objects
+  * Add logging and expose it in repo-cp script via verbosity option
 
 1.7.1
 -----
