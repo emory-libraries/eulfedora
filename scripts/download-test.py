@@ -7,8 +7,6 @@
 
 import argparse
 import base64
-import os
-from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 import progressbar
 import pycurl
 import tempfile
@@ -16,7 +14,6 @@ import tempfile
 from eulfedora.server import Repository
 from eulfedora.util import force_bytes, force_text
 from test import testsettings
-
 
 
 def download_file(pid, dsid):
@@ -73,9 +70,9 @@ def curl_download_file(pid, dsid):
     c.setopt(pycurl.VERBOSE, 1)
     c.setopt(pycurl.HTTPHEADER, ["%s: %s" % t for t in headers.items()])
 
-            # /objects/{pid}/datastreams/{dsID}/content ? [asOfDateTime] [download]
+    # /objects/{pid}/datastreams/{dsID}/content ? [asOfDateTime] [download]
     c.setopt(c.URL, '%sobjects/%s/datastreams/%s/content' % \
-        (testsettings.FEDORA_ROOT_NONSSL, pid, dsid))
+             (testsettings.FEDORA_ROOT_NONSSL, pid, dsid))
     # c.setopt(c.WRITEDATA, buffer)
     c.setopt(c.WRITEFUNCTION, tmpfile.write)
     c.setopt(c.XFERINFOFUNCTION, progress)

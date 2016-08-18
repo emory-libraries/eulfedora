@@ -50,12 +50,18 @@ except ImportError:
     # this should be fine for docs; probably not good for testing, so warn
     print('localsettings are not available')
 
-
-TEMPLATES = []
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            # ... some options here ...
+        },
+    },
+]
 
 # run django setup if we are on a version of django that has it
 if django is not None and hasattr(django, 'setup'):
     os.environ['DJANGO_SETTINGS_MODULE'] = 'test.testsettings'
     django.setup()
-
-

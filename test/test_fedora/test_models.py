@@ -1,4 +1,5 @@
 # file test_fedora/test_models.py
+# -*- coding: utf-8 -*-
 #
 #   Copyright 2011 Emory University Libraries
 #
@@ -47,6 +48,8 @@ logger = logging.getLogger(__name__)
 
 ONE_SEC = timedelta(seconds=1)
 TWO_SECS = timedelta(seconds=2)
+
+UNICODE_TEST_STRING = u'«ταБЬℓσ» 🐍'
 
 
 class MyDigitalObject(models.DigitalObject):
@@ -411,10 +414,10 @@ class TestNewObject(FedoraTestCase):
         # confirm that fedora generates a checksum for us
         r = obj.api.getDatastream(obj.pid, obj.dc.id)
         dsinfo = r.text
-        self.assert_(re.search("<dsChecksum>[0-9a-f]+</dsChecksum>", dsinfo),
+        self.assert_(
+            re.search("<dsChecksum>[0-9a-f]+</dsChecksum>", dsinfo),
             'Fedora should automatically generated a datastream checksum on ingest ' +
             '(requires auto-checksum enabled and Fedora 3.7+)')
-
 
     def test_ingest_content_uri(self):
         obj = self.repo.get_object(type=MyDigitalObject)
@@ -429,6 +432,15 @@ class TestNewObject(FedoraTestCase):
 
         self.assertEqual(obj.text.ds_location, text_dsloc.get('REF'))
         self.assertEqual('URL', text_dsloc.get('TYPE'))
+
+    def test_ingest_utf8(self):
+        obj = self.repo.get_object(type=MyDigitalObject)
+        obj.label = UNICODE_TEST_STRING
+        obj.save()
+
+        # reinitialize for testing
+        newobj = self.repo.get_object(obj.pid, type=MyDigitalObject)
+        self.assertEqual(UNICODE_TEST_STRING, newobj.label)
 
     def test_modified_profile(self):
         obj = self.repo.get_object(type=MyDigitalObject)
@@ -604,6 +616,16 @@ class TestNewObject(FedoraTestCase):
         fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
         file = open(os.path.join(FIXTURE_ROOT, 'test.png'), mode='rb')
         self.assertEqual(fetched.image.content.read(), file.read())
+
+    def test_new_datastream_utf8(self):
+        obj = self.repo.get_object(type=MyDigitalObject)
+        obj.image.content = open(os.path.join(FIXTURE_ROOT, 'test.png'), mode='rb')
+        obj.image.label = UNICODE_TEST_STRING
+        obj.save()
+        self.append_pid(obj.pid)
+
+        fetched = self.repo.get_object(obj.pid, type=MyDigitalObject)
+        self.assertEqual(UNICODE_TEST_STRING, fetched.image.label)
 
     def test_new_getdatastream(self):
         # use getDatastreamObject to add a datastream not defined
@@ -809,6 +831,7 @@ class TestDigitalObject(FedoraTestCase):
         self.obj.info_modified = True
         try:
             self.obj.save()
+
         except models.DigitalObjectSaveFailure as f:
             profile_save_error = f
         self.assert_(isinstance(profile_save_error, models.DigitalObjectSaveFailure))
@@ -828,6 +851,15 @@ class TestDigitalObject(FedoraTestCase):
         self.assert_("<dc:description>This object has more data in it than a basic-object.</dc:description>" in r.text)
 
         # how to force an error that can't be backed out?
+
+    def test_save_utf8(self):
+        # save object with unicode label
+        self.obj.label = UNICODE_TEST_STRING
+        self.obj.save()
+
+        # re-initialize the object to check label
+        obj = MyDigitalObject(self.api, self.pid)
+        self.assertEqual(obj.label, UNICODE_TEST_STRING)
 
     def test_datastreams_list(self):
         self.assert_("DC" in self.obj.ds_list.keys())

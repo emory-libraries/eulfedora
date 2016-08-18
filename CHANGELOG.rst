@@ -6,10 +6,17 @@ The following is a summary of changes and improvements to
 
 .. New features in each version should be listed, with any necessary information about installation or upgrade notes.
 
+1.8 (prelim)
+------------
+
+* Fix UTF-8 issue introduced in 1.5 (see discussion on
+  `PR #21 <https://github.com/emory-libraries/eulfedora/pull/22>`_)
+* Updated for compatibility with requests 2.11
+
 1.7.1
 -----
 
-* Fix unit test imports so tests can be run without Ddjango
+* Fix unit test imports so tests can be run without Django
 
 1.7
 ---
@@ -74,6 +81,7 @@ The following is a summary of changes and improvements to
   and better handling for large objects.
 * Upload API method (:meth:`eulfedoa.api.REST_API.upload`) now supports
   iterable content with known size.
+* Updated to require requests 2.9 or greater.
 
 1.4
 ---

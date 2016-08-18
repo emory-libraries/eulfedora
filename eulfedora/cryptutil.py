@@ -36,15 +36,14 @@ logger = logging.getLogger(__name__)
 ENCRYPTION_KEY = None
 ENCRYPT_PAD_CHARACTER = b'\0'
 
+
 def _get_encryption_key():
     '''Method for accessing an encryption key based on the SECRET_KEY
     defined in django settings.'''
     # initialize ENCRYPTION_KEY the first time it is needed, so that
     # applications that use eulcore without using this specific
     # functionality do not get bogus warnings about SECRET_KEY size.
-
     global ENCRYPTION_KEY
-    global ENCRYPT_PAD_CHARACTER
     if ENCRYPTION_KEY is None:
         # NOTE: Blowfish key length is variable but must be 32-448 bits
         # (but PyCrypto does not actually make this information accessible)
@@ -60,15 +59,18 @@ def _get_encryption_key():
             logger.warn(message)
     return ENCRYPTION_KEY
 
+
 def encrypt(text):
     'Encrypt a string using an encryption key based on the django SECRET_KEY'
     crypt = EncryptionAlgorithm.new(_get_encryption_key())
     return crypt.encrypt(to_blocksize(text))
 
+
 def decrypt(text):
     'Decrypt a string using an encryption key based on the django SECRET_KEY'
     crypt = EncryptionAlgorithm.new(_get_encryption_key())
     return crypt.decrypt(text).rstrip(ENCRYPT_PAD_CHARACTER)
+
 
 def to_blocksize(password):
     # pad the text to create a string of acceptable block size for the encryption algorithm

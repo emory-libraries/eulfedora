@@ -18,6 +18,7 @@ from getpass import getpass
 import glob
 import logging
 import os
+import sys
 from optparse import make_option
 
 from django.core.management.base import BaseCommand
@@ -72,7 +73,9 @@ class Command(BaseCommand):
 
         # FIXME/TODO: add count/summary info for content models objects created ?
         if self.verbosity > 1:
-            print "Generating content models for %d classes" % len(DigitalObject.defined_types)
+            sys.stdout.write("Generating content models for %d classes"
+                             % len(DigitalObject.defined_types))
+
         for cls in DigitalObject.defined_types.itervalues():
             self.process_class(cls)
 
@@ -81,12 +84,12 @@ class Command(BaseCommand):
     def process_class(self, cls):
         try:
             ContentModel.for_class(cls, self.repo)
-        except ValueError, v:
+        except ValueError as v:
             # for_class raises a ValueError when a class has >1
             # CONTENT_MODELS.
             if self.verbosity > 1:
-                print v
-        except RequestFailed, rf:
+                sys.stderr.write(v)
+        except RequestFailed as rf:
             if hasattr(rf, 'detail'):
                 if 'ObjectExistsException' in rf.detail:
                     # This shouldn't happen, since ContentModel.for_class
@@ -99,7 +102,8 @@ class Command(BaseCommand):
                                 full_name)
                 else:
                     # if there is a detail message, display that
-                    print "Error ingesting ContentModel for %s: %s" % (cls, rf.detail)
+                    sys.stderr.write("Error ingesting ContentModel for %s: %s"
+                                     % (cls, rf.detail))
 
     def load_initial_objects(self):
         # look for any .xml files in apps under fixtures/initial_objects
@@ -144,27 +148,29 @@ class Command(BaseCommand):
                     try:
                         pid = self.repo.ingest(fixture_data.read(), "loaded from fixture")
                         if self.verbosity > 1:
-                            print "Loaded fixture %s as %s" % (f, pid)
+                            self.stdout.write("Loaded fixture %s as %s" % (f, pid))
                         load_count += 1
                     except RequestFailed, rf:
                         if hasattr(rf, 'detail'):
                             if 'ObjectExistsException' in rf.detail or \
                               'already exists in the registry; the object can\'t be re-created' in rf.detail:
                                 if self.verbosity > 1:
-                                    print "Fixture %s has already been loaded" % f
+                                    self.stdout.write("Fixture %s has already been loaded" % f)
                             elif 'ObjectValidityException' in rf.detail:
                                 # could also look for: fedora.server.errors.ValidationException
                                 # (e.g., RELS-EXT about does not match pid)
-                                print "Error: fixture %s is not a valid Repository object" % f
+                                self.stdout.write("Error: fixture %s is not a valid Repository object" % f)
                             else:
                                 # if there is at least a detail message, display that
-                                print "Error ingesting %s: %s" % (f, rf.detail)
+                                self.stdout.write("Error ingesting %s: %s" %
+                                                  (f, rf.detail))
                         else:
                             raise rf
 
         # summarize what was actually done
         if self.verbosity > 0:
             if fixture_count == 0:
-                print "No fixtures found"
+                self.stdout.write("No fixtures found")
             else:
-                print "Loaded %d object(s) from %d fixture(s)" % (load_count, fixture_count)
+                self.stdout.write("Loaded %d object(s) from %d fixture(s)"
+                                  % (load_count, fixture_count))

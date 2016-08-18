@@ -16,6 +16,7 @@
 
 from PyPDF2 import PdfFileReader
 
+
 def pdf_to_text(pdfstream):
     '''Extract the text from a PDF document, e.g. to add PDF text
     content to an index for searching.
@@ -28,7 +29,7 @@ def pdf_to_text(pdfstream):
         text = pdf_to_text(pdfobj.pdf.content)
 
     :param pdfstream: A file-like object that supports read and seek
-	    methods, as required by :class:`pyPdf.PdfFileReader`
+        methods, as required by :class:`pyPdf.PdfFileReader`
 
     '''
     pdfreader = PdfFileReader(pdfstream)
