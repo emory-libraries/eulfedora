@@ -63,11 +63,12 @@ class HTTP_API_Base(object):
         # NOTE: only headers that will be common for *all* requests
         # to this fedora should be set in the session
         # (i.e., do NOT include auth information here)
+
+        # NOTE: ssl verification is turned on by default
+
         self.session.headers = {
+            # use requests-toolbelt user agent
             'User-Agent': user_agent('eulfedora', eulfedora_version),
-            # 'user-agent': 'eulfedora/%s (python-requests/%s)' % \
-            # (eulfedora_version, requests.__version__),
-            'verify': True,  # verify SSL certs by default
         }
         # no retries is requests current default behavior, so only
         # customize if a value is set
@@ -374,14 +375,16 @@ class REST_API(HTTP_API_Base):
             if hasattr(content, 'read'):    # if content is a file-like object, warn if no checksum
                 if not checksum:
                     logger.warning("File was ingested into fedora without a passed checksum for validation, pid was: %s and dsID was: %s.",
-                                  pid, dsID)
-
+                                   pid, dsID)
                 extra_args['files'] = {'file': content}
 
             else:
-                extra_args['data'] = content
+                # fedora wants a multipart file upload;
+                # this seems to work better for handling unicode than
+                # simply sending content via requests data parameter
+                extra_args['files'] = {'file': ('filename', content)}
 
-            # set content-type header ?
+        # set content-type header ?
         url = 'objects/%s/datastreams/%s' % (pid, dsID)
         return self.post(url, params=http_args, **extra_args)
         # expected response: 201 Created (on success)
@@ -569,8 +572,13 @@ class REST_API(HTTP_API_Base):
         headers = {'Content-Type': 'text/xml'}
 
         url = 'objects/new'
-        return self.post(url, data=text, params=http_args, headers=headers)
 
+        # if text is unicode, it needs to be encoded so we can send the
+        # data as bytes; otherwise, we get ascii encode errors in httplib/ssl
+        if isinstance(text, six.text_type):
+            text = bytes(text.encode('utf-8'))
+
+        return self.post(url, data=text, params=http_args, headers=headers)
 
     def modifyDatastream(self, pid, dsID, dsLabel=None, mimeType=None, logMessage=None, dsLocation=None,
         altIDs=None, versionable=None, dsState=None, formatURI=None, checksumType=None,
@@ -837,7 +845,11 @@ class REST_API(HTTP_API_Base):
             menc = MultipartEncoderMonitor(menc, callback)
 
         headers = {'Content-Type': menc.content_type}
+
         if size:
+            # latest version of requests requires str or bytes, not int
+            if not isinstance(size, six.string_types):
+                size = str(size)
             headers['Content-Length'] = size
 
         try:

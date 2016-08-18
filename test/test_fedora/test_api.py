@@ -1,4 +1,5 @@
 # file test_fedora/test_api.py
+# -*- coding: utf-8 -*-
 #
 #   Copyright 2011 Emory University Libraries
 #
@@ -25,6 +26,7 @@ import requests
 from time import sleep
 import tempfile
 import warnings
+import six
 
 from test.test_fedora.base import FedoraTestCase, load_fixture_data
 from test.testsettings import FEDORA_ROOT_NONSSL,\
@@ -51,6 +53,8 @@ class TestREST_API(FedoraTestCase):
 
 Hey, nonny-nonny."""
 
+    unicode_test_str = u'«ταБЬℓσ» 🐍'
+
     def _add_text_datastream(self):
         # add a text datastream to the current test object - used by multiple tests
         FILE = tempfile.NamedTemporaryFile(mode="w", suffix=".txt")
@@ -59,8 +63,8 @@ Hey, nonny-nonny."""
 
         # info for calling addDatastream, and return
         ds = {'id': 'TEXT', 'label': 'text datastream', 'mimeType': 'text/plain',
-            'controlGroup': 'M', 'logMessage': "creating new datastream",
-            'checksumType': 'MD5'}
+              'controlGroup': 'M', 'logMessage': "creating new datastream",
+              'checksumType': 'MD5'}
 
         # return (r.status_code == requests.codes.created, r.content)
         with open(FILE.name) as data:
@@ -243,17 +247,18 @@ Hey, nonny-nonny."""
         self.assertEqual(self.TEXT_CONTENT, r.text)
 
         # invalid checksum
-        self.assertRaises(ChecksumMismatch, self.rest_api.addDatastream, self.pid,
-            "TEXT2", "text datastream",  mimeType="text/plain", logMessage="creating TEXT2",
-            content='<some> text content</some>', checksum='totally-bogus-not-even-an-MD5',
-            checksumType='MD5')
+        self.assertRaises(
+            ChecksumMismatch, self.rest_api.addDatastream, self.pid,
+            "TEXT2", "text datastream", mimeType="text/plain",
+            logMessage="creating TEXT2", content='<some> text content</some>',
+            checksum='totally-bogus-not-even-an-MD5', checksumType='MD5')
 
         # invalid checksum without a checksum type - warning, but no checksum mismatch
         with warnings.catch_warnings(record=True) as w:
-            self.rest_api.addDatastream(self.pid,
-                "TEXT2", "text datastream",  mimeType="text/plain", logMessage="creating TEXT2",
-                content='<some> text content</some>', checksum='totally-bogus-not-even-an-MD5',
-                checksumType=None)
+            self.rest_api.addDatastream(
+                self.pid, "TEXT2", "text datastream", mimeType="text/plain",
+                logMessage="creating TEXT2", content='<some> text content</some>',
+                checksum='totally-bogus-not-even-an-MD5', checksumType=None)
             self.assertEqual(1, len(w),
                 'calling addDatastream with checksum but no checksum type should generate a warning')
             self.assert_('Fedora will ignore the checksum' in str(w[0].message))
@@ -270,6 +275,43 @@ Hey, nonny-nonny."""
               controlGroup='M', content=textfile)
 
         FILE.close()
+
+    def test_addDatastream_utf8(self):
+        # unicode in datastream label
+        response = self.rest_api.addDatastream(
+            self.pid, "TEXT2", self.unicode_test_str, mimeType="text/plain",
+            logMessage="creating TEXT2", controlGroup='M', versionable=False,
+            dsState='A', content='some text content')
+
+        self.assertEqual(requests.codes.created, response.status_code)
+
+        # TODO: once it's fixed, add tests to confirm label is set correctly
+        # response = self.rest_api.getDatastream(self.pid, "TEXT2")
+
+        # unicode in log message
+        response = self.rest_api.addDatastream(
+            self.pid, "TEXT3", 'some text', mimeType="text/plain",
+            logMessage=self.unicode_test_str, controlGroup='M',
+            content='some text content')
+        self.assertEqual(requests.codes.created, response.status_code)
+
+        # log message should be in audit trail
+        response = self.rest_api.getObjectXML(self.pid)
+        response.encoding = 'utf-8'
+        self.assert_(u'<audit:justification>%s</audit:justification>' %  \
+                     self.unicode_test_str in response.text)
+
+        # unicode in datastream content
+        response = self.rest_api.addDatastream(
+            self.pid, "TEXT4", 'some text', mimeType="text/plain",
+            logMessage='adding unicode content', controlGroup='M',
+            content=self.unicode_test_str)
+        self.assertEqual(requests.codes.created, response.status_code)
+
+        # content returned from fedora should be exactly what we started with
+        response = self.rest_api.getDatastreamDissemination(self.pid, 'TEXT4')
+        response.encoding = 'utf-8'
+        self.assertEqual(self.unicode_test_str, response.text)
 
     # relationship predicates for testing
     rel_isMemberOf = "info:fedora/fedora-system:def/relations-external#isMemberOf"
@@ -460,13 +502,42 @@ Hey, nonny-nonny."""
         self.rest_api.purgeObject(force_text(pid))
 
         # test ingesting with log message
-        r = self.rest_api.ingest(obj, "this is my test ingest message")
-        pid = r.text
+
+        response = self.rest_api.ingest(obj, "this is my test ingest message")
+        pid = response.text
         # ingest message is stored in AUDIT datastream
         # - can currently only be accessed by retrieving entire object xml
         r = self.rest_api.getObjectXML(pid)
         self.assertTrue("this is my test ingest message" in r.text)
         self.rest_api.purgeObject(pid, "removing test ingest object")
+
+    def test_ingest_utf8(self):
+        # ingest with unicode log message
+        obj = self.loadFixtureData('basic-object.foxml')
+        response = self.rest_api.ingest(obj, logMessage=self.unicode_test_str)
+        pid = response.text
+        self.assertTrue(pid)
+
+        response = self.rest_api.getObjectXML(pid)
+        response.encoding = 'utf-8'  # ensure requests decodes as utf-8
+        self.assert_(u'<audit:justification>%s</audit:justification>' %
+                     self.unicode_test_str in response.text)
+        self.rest_api.purgeObject(force_text(pid))
+
+        # ingest with unicode object label
+        # convert to text to replace string, then convert back to bytes
+        obj = force_bytes(force_text(obj).replace(
+            u"A test object", self.unicode_test_str))
+        response = self.rest_api.ingest(obj)
+        pid = response.text
+        self.assertTrue(pid)
+
+        # object label in profile should match the unicode sent
+        response = self.rest_api.getObjectProfile(pid)
+        response.encoding = 'utf-8'  # ensure requests decodes as utf-8
+        self.assert_(u'<objLabel>%s</objLabel>' % self.unicode_test_str
+                     in response.text)
+        self.rest_api.purgeObject(force_text(pid))
 
     def test_modifyDatastream(self):
         # add a datastream to be modified
@@ -504,24 +575,27 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
           <dc:title>Test-Object</dc:title>
           <dc:description>modified!</dc:description>
         </oai_dc:dc>"""
-        r = self.rest_api.modifyDatastream(self.pid, "DC", "Dublin Core",
+        response = self.rest_api.modifyDatastream(self.pid, "DC", "Dublin Core",
             mimeType="text/xml", logMessage="updating DC", content=new_dc)
-        self.assertTrue(r.status_code == requests.codes.ok)
-        r = self.rest_api.getDatastreamDissemination(self.pid, "DC")
+        self.assertTrue(response.status_code == requests.codes.ok)
+        response = self.rest_api.getDatastreamDissemination(self.pid, "DC")
         # fedora changes whitespace in xml, so exact test fails
-        dc = r.text
+        dc = response.text
         self.assert_('<dc:title>Test-Object</dc:title>' in dc)
         self.assert_('<dc:description>modified!</dc:description>' in dc)
 
         # invalid checksum
-        self.assertRaises(ChecksumMismatch, self.rest_api.modifyDatastream, self.pid,
-            "DC", "Dublin Core",  mimeType="text/xml", logMessage="updating DC",
-            content=new_dc, checksum='totally-bogus-not-even-an-MD5', checksumType='MD5')
+        self.assertRaises(
+            ChecksumMismatch, self.rest_api.modifyDatastream, self.pid,
+            "DC", "Dublin Core", mimeType="text/xml", logMessage="updating DC",
+            content=new_dc, checksum='totally-bogus-not-even-an-MD5',
+            checksumType='MD5')
 
         # bogus datastream on valid pid
-        self.assertRaises(RequestFailed, self.rest_api.modifyDatastream, self.pid,
-            "BOGUS", "Text DS",  mimeType="text/plain", logMessage="modifiying non-existent DS",
-             content=open(FILE.name))
+        self.assertRaises(
+            RequestFailed, self.rest_api.modifyDatastream, self.pid,
+            "BOGUS", "Text DS", mimeType="text/plain",
+            logMessage="modifiying non-existent DS", content=open(FILE.name))
 
         # bogus pid
         self.assertRaises(RequestFailed, self.rest_api.modifyDatastream, "bogus:pid",
@@ -529,24 +603,80 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
               content=open(FILE.name))
         FILE.close()
 
+    def test_modifyDatastream_utf8(self):
+        # unicode in datastream label or log message should not cause errors
+        # - unicode doesn't seem to be a problem here, perhaps because it is
+        # a PUT rather than a POST
+        added, ds = self._add_text_datastream()
+        # modify managed datastream by file
+        response = self.rest_api.modifyDatastream(
+            self.pid, ds['id'], self.unicode_test_str, mimeType="text/plain",
+            logMessage="modifying TEXT datastream")
+        self.assertTrue(response.status_code == requests.codes.ok)
+
+        # confirm unicode label is listed correctly in datastream profile
+        response = self.rest_api.getDatastream(self.pid, ds['id'])
+        response.encoding = 'utf-8'  # ensure requests decodes as utf-8
+        self.assert_(six.u('<dsLabel>%s</dsLabel>') % self.unicode_test_str
+                     in response.text)
+
+        # unicode in log message
+        response = self.rest_api.modifyDatastream(
+            self.pid, ds['id'], 'text content', mimeType="text/plain",
+            logMessage=self.unicode_test_str)
+        self.assertTrue(response.status_code == requests.codes.ok)
+        # log message should be in audit trail
+        response = self.rest_api.getObjectXML(self.pid)
+        response.encoding = 'utf-8'
+        self.assert_(six.u('<audit:justification>%s</audit:justification>') %
+                     self.unicode_test_str in response.text)
+
     def test_modifyObject(self):
-        r = self.rest_api.modifyObject(self.pid, "modified test object", "testuser",
+        response = self.rest_api.modifyObject(
+            self.pid, "modified test object", "testuser",
             "I", "testing modify object")
-        modified = (r.status_code == requests.codes.ok)
+        modified = (response.status_code == requests.codes.ok)
         self.assertTrue(modified)
         # log message in audit trail
-        r = self.rest_api.getObjectXML(self.pid)
-        self.assert_('testing modify object' in r.text)
+        response = self.rest_api.getObjectXML(self.pid)
+        self.assert_('testing modify object' in response.text)
 
-        r = self.rest_api.getObjectProfile(self.pid)
-        profile = r.text
+        response = self.rest_api.getObjectProfile(self.pid)
+        profile = response.text
         self.assert_('<objLabel>modified test object</objLabel>' in profile)
         self.assert_('<objOwnerId>testuser</objOwnerId>' in profile)
         self.assert_('<objState>I</objState>' in profile)
 
         # bogus id
-        self.assertRaises(RequestFailed, self.rest_api.modifyObject, "bogus:pid",
-            "modified test object", "testuser",  "I", "testing modify object")
+        self.assertRaises(
+            RequestFailed, self.rest_api.modifyObject, "bogus:pid",
+            "modified test object", "testuser", "I", "testing modify object")
+
+    def test_modifyObject_utf8(self):
+        # unicode doesn't seem to be a problem here, perhaps because it is
+        # a PUT rather than a POST
+        response = self.rest_api.modifyObject(
+            self.pid, self.unicode_test_str, "testuser",
+            "I", "testing modify object with unicode label")
+        # saving unicode label shouldn't error
+        self.assertEqual(response.status_code, requests.codes.ok)
+
+        # object label in profile should match the unicode sent
+        response = self.rest_api.getObjectProfile(self.pid)
+        response.encoding = 'utf-8'
+        self.assert_(six.u('<objLabel>%s</objLabel>') % self.unicode_test_str
+                     in response.text)
+
+        # saving with unicode log message shouln't error
+        response = self.rest_api.modifyObject(
+            self.pid, "modified test object", "testuser",
+            "A", self.unicode_test_str)
+        self.assertEqual(response.status_code, requests.codes.ok)
+
+        response = self.rest_api.getObjectXML(self.pid)
+        response.encoding = 'utf-8'
+        self.assert_(six.u('<audit:justification>%s</audit:justification>') %
+                     self.unicode_test_str in response.text)
 
     def test_purgeDatastream(self):
         # add a datastream that can be purged
@@ -621,11 +751,6 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         self.rest_api.addRelationship(self.pid, 'info:fedora/%s' % self.pid,
                                       predicate=force_text(modelns.hasModel),
                                       object='info:fedora/pid:123')
-
-        print(self.pid)
-        print(force_text(self.pid))
-        print(type(self.pid))
-        print(self.fedora_fixtures_ingested)
 
         purged = self.rest_api.purgeRelationship(self.pid, 'info:fedora/%s' % self.pid,
                                                  force_text(modelns.hasModel),
@@ -713,7 +838,8 @@ So be you blythe and bonny, singing hey-nonny-nonny."""
         content_md5 = md5sum(text_content)
         size = len(text_content)
 
-        upload_id = self.rest_api.upload(data_generator(), size=size, content_type='text/plain')
+        upload_id = self.rest_api.upload(data_generator(), size=size,
+                                         content_type='text/plain')
         pattern = re.compile('uploaded://[0-9]+')
         self.assertTrue(pattern.match(upload_id))
 

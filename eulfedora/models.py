@@ -1601,11 +1601,15 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
 
     def _ingest(self, logMessage):
         foxml = self._build_foxml_for_ingest()
-        r = self.api.ingest(foxml.decode('utf-8'), logMessage)
-        if r.status_code != requests.codes.created or r.text != self.pid:
+        # NOTE: previously, this code was decoding the foxml from utf-8
+        # but that causes problems for ingesting content with unicode
+        # It *should* be ok to simply remove the decode, and trust users
+        # to encode their strings correctly...
+        resp = self.api.ingest(foxml, logMessage)
+        if resp.status_code != requests.codes.created or resp.text != self.pid:
             msg = ('fedora returned unexpected pid "%s" when trying to ' +
                    'ingest object with pid "%s" (status code: %s)') % \
-                   (r.content, self.pid, r.status_code)
+                   (resp.content, self.pid, resp.status_code)
             raise Exception(msg)
 
         # then clean up the local object so that self knows it's dealing
