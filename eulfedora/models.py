@@ -1048,7 +1048,7 @@ class DigitalObjectType(type):
         # create any ReverseRelations corresponding to Relations on
         # the current class
         # for now, assume all reverse relations are multiple
-        for rel_name, rel in six.iteritems(reverse_rels):
+        for rel in six.itervalues(reverse_rels):
             # don't reverse self-relations for now
             if isinstance(rel.object_type, six.string_types):
                 continue
@@ -1236,8 +1236,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         "Fedora pidspace of this object"
         if callable(self.pid):
             return None
-        ps, pid = self.pid.split(':', 1)
-        return ps
+        # split pid into pidspace and id, return just the pidspace
+        return self.pid.split(':', 1)[0]
 
     # This dummy pid stuff is ugly. I'd rather not need it. Every now and
     # then, though, something needs a PID or URI for a brand-new object
@@ -1873,7 +1873,7 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         else:
             if dsobj_type is None:
                 dsobj_type = DatastreamObject
-            logger.info('Adding new datastream %s to %r' % (dsid, self))
+            logger.info('Adding new datastream %s to %r', dsid, self)
             # NOTE: label is required to initialize a new datastream object;
             # using dsid as label since we don't have anything else.
             dsobj = dsobj_type(self, dsid, dsid)
@@ -2152,9 +2152,12 @@ class ContentModel(DigitalObject):
             })
 
     @staticmethod
-    def for_class(cls, repo):
-        full_name = '%s.%s' % (cls.__module__, cls.__name__)
-        cmodels = getattr(cls, 'CONTENT_MODELS', None)
+    def for_class(digobj, repo):
+        '''Generate a ContentModel object for the specified
+        :class:`DigitalObject` class.  Content model object is saved
+        in the specified repository if it doesn't already exist.'''
+        full_name = '%s.%s' % (digobj.__module__, digobj.__name__)
+        cmodels = getattr(digobj, 'CONTENT_MODELS', None)
         if not cmodels:
             logger.debug('%s has no content models', full_name)
             return None
@@ -2178,7 +2181,7 @@ class ContentModel(DigitalObject):
         cmodel_obj = repo.get_object(cmodel_uri, type=ContentModel,
                                      create=True)
         # XXX: should this use _defined_datastreams instead?
-        for ds in cls._local_datastreams.values():
+        for ds in digobj._local_datastreams.values():
             ds_composite_model = cmodel_obj.ds_composite_model.content
             type_model = ds_composite_model.get_type_model(ds.id, create=True)
             type_model.mimetype = ds.default_mimetype
