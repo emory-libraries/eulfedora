@@ -17,6 +17,7 @@ The following is a summary of changes and improvements to
 * Code cleanup based on `landscape.io <https://landscape.io/github/emory-libraries/eulfedora>`_
   reports
 * Several improvements and fixes for repo-cp and syncutil:
+
   * Refined datastream regular expression: more accurately grab the
     correct datastream id and checksum, avoiding spurious checksum errors;
     always grab the last match found, in case a section includes multiple
