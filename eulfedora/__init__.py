@@ -15,7 +15,7 @@
 #   limitations under the License.
 
 
-__version_info__ = (1, 8, 0, 'dev')
+__version_info__ = (1, 7, 2, None)
 
 
 # Dot-connect all but the last. Last is dash-connected if not None.

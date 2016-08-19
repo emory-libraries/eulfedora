@@ -129,7 +129,7 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
                            for chunk in export_data)
 
     if overwrite and dest_obj.exists:
-        logger.debug('Overwriting %s in destination repository' % src_obj.pid)
+        logger.debug('Overwriting %s in destination repository', src_obj.pid)
         dest_repo.purge_object(src_obj.pid)
 
     result = dest_repo.ingest(export_data)
@@ -351,7 +351,7 @@ class ArchiveExport(object):
                                           'application/xml']:
                     # possibly other mimetypes also?
                     try:
-                        dsid, dsversion = dsinfo['id'].split('.')
+                        dsid = dsinfo['id'].split('.')[0]
                     except ValueError:
                         # if dsid doesn't include a .# (for versioning),
                         # use the id as is.

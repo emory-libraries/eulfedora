@@ -150,7 +150,7 @@ class Command(BaseCommand):
                         if self.verbosity > 1:
                             self.stdout.write("Loaded fixture %s as %s" % (f, pid))
                         load_count += 1
-                    except RequestFailed, rf:
+                    except RequestFailed as rf:
                         if hasattr(rf, 'detail'):
                             if 'ObjectExistsException' in rf.detail or \
                               'already exists in the registry; the object can\'t be re-created' in rf.detail:
