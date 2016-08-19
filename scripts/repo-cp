@@ -22,6 +22,7 @@ import binascii
 from copy import copy
 from six.moves import configparser
 import hashlib
+import logging.config
 from lxml import etree
 import math
 import glob
@@ -54,30 +55,48 @@ def repo_copy():
         help='Destination repository for content to be copied')
 
     # list of pids
-    parser.add_argument('pids', metavar='PID', nargs='*',
+    parser.add_argument(
+        'pids', metavar='PID', nargs='*',
         help='list of pids to copy')
-    parser.add_argument('--file', '-f',
-        help='Input file with a list of pids, one pid per line',
-        required=False)
-    parser.add_argument('--progress', '-p',
+    parser.add_argument(
+        '--file', '-f', required=False,
+        help='Input file with a list of pids, one pid per line')
+    parser.add_argument(
+        '--progress', '-p',
         help='Show progress (only available for archive exports)',
         action='store_true', default=False)
-    parser.add_argument('--requires-auth',
+    parser.add_argument(
+        '--requires-auth',
         help='Datastream content urls require authentication',
         action='store_true', default=False)
-    parser.add_argument('--export-format', '-e',
+    parser.add_argument(
+        '--export-format', '-e',
         choices=['migrate', 'archive', 'archive-xml'], default='migrate',
-        help='Fedora export format to use.  Use archive if migrate exports ' \
-           + 'fail with checksum errors or if content URLs are not accessible '
-           + 'to the destination server. (default: %(default)s)')
-    parser.add_argument('--omit-checksums', default=False, action='store_true',
+        help='Fedora export format to use.  Use archive if migrate exports ' +
+             'fail with checksum errors or if content URLs are not accessible' +
+             ' to the destination server. (default: %(default)s)')
+    parser.add_argument(
+        '--omit-checksums', default=False, action='store_true',
         help='Omit checksums from datastreams (default: %(default)s)',)
-    parser.add_argument('--archive', '-a', action='store_const',
+    parser.add_argument(
+        '--archive', '-a', action='store_const',
         const='archive', dest='export_format',
         help='Use archive export format (equivalent to --export-format archive)')
-    parser.add_argument('--archive-xml', action='store_const',
+    parser.add_argument(
+        '--archive-xml', action='store_const',
         const='archive-xml', dest='export_format',
-        help='Use archive-xml export format (equivalent to --export-format archive-xml)')
+        help='Use archival export for xml datastreams only; use fedora ' +
+             'datastream dissemination urls for other content.  Can be used ' +
+             'with --requires-auth. ' +
+             '(Equivalent to --export-format archive-xml)')
+    parser.add_argument(
+        '--verify', action='store_true', default=False,
+        help='Verify checksums as datastreams are decoded (default: %(default)s)')
+    parser.add_argument(
+        '--verbosity', '-v', default='WARN',
+        choices=['ERROR', 'WARN', 'INFO', 'DEBUG'],
+        help='Output verbosity (default: %(default)s)')
+
     args = parser.parse_args()
 
     cfg = configparser.ConfigParser()
@@ -119,7 +138,8 @@ def repo_copy():
             pids = args.pids
         elif args.file:
             with open(args.file) as pidlistfile:
-                pids = pidlistfile.read().splitlines()
+                # allow whitespace on front or end of pid, for convenience
+                pids = [p.strip() for p in pidlistfile.read().splitlines()]
         else:
             print('Specify either one or more pids or a file with a list of pids')
             parser.print_help()
@@ -128,6 +148,9 @@ def repo_copy():
     allow_overwrite = cfg.has_option(args.dest, 'allow_overwrite') and \
         cfg.getboolean(args.dest, 'allow_overwrite')
 
+    # configure logging based on verbosity level requested
+    logging.config.dictConfig(get_logging_config(args.verbosity))
+
     for pid in pids:
         try:
 
@@ -135,7 +158,13 @@ def repo_copy():
             if isinstance(src_repo, Airlock):
                 with open(pid, 'rb') as export:
                     result = dest_repo.ingest(export)
-                    print('%s copied' % result)
+                    if result:
+                        print('%s copied' % result)
+                    else:
+                        # false means not copied but no error; currently means
+                        # skipped because object exists and overwrite not allowed
+                        print('%s skipped' % pid)
+
                 continue
 
             src_obj = src_repo.get_object(pid)
@@ -155,8 +184,14 @@ def repo_copy():
             else:
                 result = sync_object(src_obj, dest_repo, export_context=args.export_format,
                     overwrite=allow_overwrite, show_progress=args.progress,
-                    requires_auth=args.requires_auth, omit_checksums=args.omit_checksums)
-                print('%s copied' % result)
+                    requires_auth=args.requires_auth, omit_checksums=args.omit_checksums,
+                    verify=args.verify)
+                if result:
+                    print('%s copied' % result)
+                else:
+                    # false means not copied but no error; currently means
+                    # skipped because object exists and overwrite not allowed
+                    print('%s skipped' % pid)
         except ChecksumMismatch:
             print('ChecksumMismatch on %s' % pid)
 
@@ -164,8 +199,37 @@ def repo_copy():
             err_type = 'Error'
             if isinstance(err, PermissionDenied):
                 err_type = 'Permission denied'
-            print('%s importing %s to %s: %s' % \
-                (err_type, pid, args.dest, err))
+            print('%s importing %s to %s: %s' %
+                  (err_type, pid, args.dest, err))
+
+        except Exception as err:
+            print('Error copying %s: %s' % (pid, err))
+
+
+def get_logging_config(level):
+    return {
+        'version': 1,
+        'disable_existing_loggers': True,
+        'formatters': {
+            'simple': {
+                'format': '%(message)s',
+            },
+        },
+        'handlers': {
+            'console': {
+                'level': 'DEBUG',
+                'class': 'logging.StreamHandler',
+                'formatter': 'simple'
+            },
+        },
+        'loggers': {
+            'eulfedora.syncutil': {
+                'handlers': ['console'],
+                'level': level,
+                'propagate': False,
+            },
+        }
+    }
 
 
 def is_airlock(cfg, name):

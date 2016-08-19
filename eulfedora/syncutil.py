@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 
 def sync_object(src_obj, dest_repo, export_context='migrate',
                 overwrite=False, show_progress=False,
-                requires_auth=False, omit_checksums=False):
+                requires_auth=False, omit_checksums=False,
+                verify=False):
     '''Copy an object from one repository to another using the Fedora
     export functionality.
 
@@ -67,6 +68,13 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
 
     # NOTE: currently exceptions are expected to be handled by the
     # calling method; see repo-cp script for an example
+
+    # if overwrite is not requested, check first and bail out
+    dest_obj = dest_repo.get_object(src_obj.pid)
+    if not overwrite and dest_obj.exists:
+        logger.info('%s exists in destination repo and no overwrite; skipping',
+                    src_obj.pid)
+        return False
 
     if show_progress and progressbar:
         # calculate rough estimate of object size
@@ -102,7 +110,8 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
     elif export_context in ['archive', 'archive-xml']:
         export = ArchiveExport(src_obj, dest_repo,
             progress_bar=pbar, requires_auth=requires_auth,
-            xml_only=(export_context == 'archive-xml'))
+            xml_only=(export_context == 'archive-xml'),
+            verify=verify)
         # NOTE: should be possible to pass BytesIO to be read, but that is failing
         export_data = export.object_data().getvalue()
 
@@ -111,22 +120,17 @@ def sync_object(src_obj, dest_repo, export_context='migrate',
 
     # wipe checksums from FOXML if flagged in options
     if omit_checksums:
-        checksum_re = r'<foxml:contentDigest.+?/>'
+        checksum_re = re.compile(b'<foxml:contentDigest.+?/>')
         try:
             # export data is either a string
-            export_data = re.sub(checksum_re, '', export_data)
+            export_data = checksum_re.sub(b'', export_data)
         except TypeError:
-            # or a generator
             export_data = (re.sub(checksum_re, '', chunk)
                            for chunk in export_data)
 
-    dest_obj = dest_repo.get_object(src_obj.pid)
-    if dest_obj.exists:
-        if overwrite:
-            dest_repo.purge_object(src_obj.pid)
-        else:
-            # exception ?
-            return False
+    if overwrite and dest_obj.exists:
+        logger.debug('Overwriting %s in destination repository', src_obj.pid)
+        dest_repo.purge_object(src_obj.pid)
 
     result = dest_repo.ingest(export_data)
     if pbar:
@@ -164,16 +168,19 @@ class ArchiveExport(object):
         (default: False)
     '''
 
-
-
     #: regular expression used to identify datastream version information
     #: that is needed for processing datastream content in an archival export
-    dsinfo_regex = re.compile(r'ID="(?P<id>[^"]+)".*CREATED="(?P<created>[^"]+)".*MIMETYPE="(?P<mimetype>[^"]+)".*SIZE="(?P<size>\d+)".*TYPE="(?P<type>[^"]+)".*DIGEST="(?P<digest>[0-9a-f]*)"',
+    dsinfo_regex = re.compile(
+        r'ID="(?P<id>[^"<>]+)"[^>]*CREATED="(?P<created>[^"<>]+)"[^>]' + \
+        r'*MIMETYPE="(?P<mimetype>[^"<>]+)"[^>]*SIZE="(?P<size>\d+)">' + \
+        r'\s*<foxml:contentDigest\s+TYPE="(?P<type>[^<>"]+)"[^>]*' + \
+        r'DIGEST="(?P<digest>[0-9a-f]*)"/>\s*',
         flags=re.MULTILINE|re.DOTALL)
+
     # NOTE: regex allows for digest to be empty
 
     #: url credentials, if needed for datastream content urls
-    url_credentials = ''
+    url_credentials = None
 
     def __init__(self, obj, dest_repo, verify=False, progress_bar=None,
         requires_auth=False, xml_only=False):
@@ -192,6 +199,7 @@ class ArchiveExport(object):
         self.within_file = False
 
     _export_response = None
+
     def get_export(self):
         if self._export_response is None:
             self._export_response = self.obj.api.export(self.obj.pid,
@@ -203,6 +211,7 @@ class ArchiveExport(object):
     _iter_content = None
 
     _current_chunk = None
+
     def current_chunk(self):
         return self._current_chunk
 
@@ -234,6 +243,7 @@ class ArchiveExport(object):
         return self._current_chunk
 
     _current_sections = None
+
     def get_next_section(self):
         if self._current_sections is None:
             if self._current_chunk is None:
@@ -284,10 +294,13 @@ class ArchiveExport(object):
             else:
                 raise err
 
-        infomatch = self.dsinfo_regex.search(text)
-        if infomatch:
+        # in case the text contains multiple datastream ids, find
+        # all matches and then use the last, since we want the last one
+        # in this section, just before the datastream content
+        matches = list(self.dsinfo_regex.finditer(text))
+        if matches:
+            infomatch = matches[-1]
             return infomatch.groupdict()
-
 
     def update_progressbar(self):
         # update progressbar if we have one
@@ -298,7 +311,6 @@ class ArchiveExport(object):
             if self.progress_bar.max_value < self.processed_size:
                 self.progress_bar.max_value = self.processed_size
             self.progress_bar.update(self.processed_size)
-
 
     def object_data(self):
         '''Process the archival export and return a buffer with foxml
@@ -326,20 +338,20 @@ class ArchiveExport(object):
                 # (needed to provide size to upload request)
                 dsinfo = self.get_datastream_info(previous_section)
                 if dsinfo:
-                    'Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)' %  \
-                        dsinfo
-
                     logger.info('Found encoded datastream %(id)s (%(mimetype)s, size %(size)s, %(type)s %(digest)s)',
-                        dsinfo)
+                                dsinfo)
                 else:
                     # error if datastream info is not found, because either
                     # size or version date is required to handle content
                     raise Exception('Failed to find datastream information for %s from \n%s' \
                         % (self.obj.pid, previous_section))
 
-                if self.xml_only and not dsinfo['mimetype'] == 'text/xml':  # possibly others?
+                if self.xml_only and not \
+                   dsinfo['mimetype'] in ['text/xml', 'application/rdf+xml',
+                                          'application/xml']:
+                    # possibly other mimetypes also?
                     try:
-                        dsid, dsversion = dsinfo['id'].split('.')
+                        dsid = dsinfo['id'].split('.')[0]
                     except ValueError:
                         # if dsid doesn't include a .# (for versioning),
                         # use the id as is.
@@ -384,7 +396,7 @@ class ArchiveExport(object):
 
                 # binary content within a file - ignore here
                 # (handled by encoded_datastream method)
-                next
+                continue
 
             else:
                 # not start or end of binary content, and not
@@ -395,7 +407,6 @@ class ArchiveExport(object):
             previous_section = section
 
         return self.foxml_buffer
-
 
     # generator to iterate through sections and possibly next chunk
     # for upload to fedora
@@ -429,7 +440,6 @@ class ArchiveExport(object):
                 self.within_file = False
 
             elif self.within_file:
-                content[:50]
                 # if there was leftover binary content from the last chunk,
                 # add it to the content now
                 if leftover is not None:
@@ -448,11 +458,12 @@ class ArchiveExport(object):
                     # store the leftover to be decoded with the next chunk
                     leftover = lines[-1]
 
-                if self.verify:
-                    md5.update(decoded_content)
+                if decoded_content is not None:
+                    if self.verify:
+                        md5.update(decoded_content)
 
-                size += len(decoded_content)
-                yield decoded_content
+                    size += len(decoded_content)
+                    yield decoded_content
 
 
 def binarycontent_sections(chunk):
@@ -463,7 +474,7 @@ def binarycontent_sections(chunk):
     # use common text of start and end tags to split the text
     # (i.e. without < or </ tag beginning)
     binary_content_tag = BINARY_CONTENT_START[1:]
-    if not binary_content_tag in chunk:
+    if binary_content_tag not in chunk:
         # if no tags are present, don't do any extra work
         yield chunk
 
@@ -506,6 +517,7 @@ def estimate_object_size(obj, archive=True):
 
     return size_estimate
 
+
 def base64_size(input_size):
     # from http://stackoverflow.com/questions/1533113/calculate-the-size-to-a-base-64-encoded-message
     adjustment = 3 - (input_size % 3) if (input_size % 3) else 0
@@ -523,6 +535,7 @@ def humanize_file_size(size):
     units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
     p = math.floor(math.log(size, 2)/10)
     return "%.2f%s" % (size/math.pow(1024, p), units[int(p)])
+
 
 def endswith_partial(text, partial_str):
     '''Check if the text ends with any partial version of the

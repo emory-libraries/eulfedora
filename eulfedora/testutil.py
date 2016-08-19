@@ -98,16 +98,16 @@ class FedoraTestWrapper(object):
 
         if getattr(settings, "FEDORA_TEST_ROOT", None):
             settings.FEDORA_ROOT = settings.FEDORA_TEST_ROOT
-            print >> sys.stderr, "Switching to test Fedora: %s" % settings.FEDORA_ROOT
+            sys.stderr.write("Switching to test Fedora: %s" % settings.FEDORA_ROOT)
         else:
-            print >> sys.stderr, "FEDORA_TEST_ROOT is not configured in settings; tests will run against %s" % \
-                settings.FEDORA_ROOT
+            sys.stderr.write("FEDORA_TEST_ROOT is not configured in settings; tests will run against %s" % \
+                             settings.FEDORA_ROOT)
 
         if getattr(settings, "FEDORA_TEST_PIDSPACE", None):
             settings.FEDORA_PIDSPACE = settings.FEDORA_TEST_PIDSPACE
         elif getattr(settings, "FEDORA_PIDSPACE", None):
             settings.FEDORA_PIDSPACE = "%s-test" % settings.FEDORA_PIDSPACE
-        print >> sys.stderr, "Using Fedora pidspace: %s" % settings.FEDORA_PIDSPACE
+        sys.stderr.write("Using Fedora pidspace: %s" % settings.FEDORA_PIDSPACE)
 
         # remove any test objects left over from a previous test run
         self.remove_test_objects()
@@ -128,7 +128,7 @@ class FedoraTestWrapper(object):
             msgs.append("Restoring Fedora root: %s" % self.stored_default_fedora_root)
             settings.FEDORA_ROOT = self.stored_default_fedora_root
         if msgs:
-            print >> sys.stderr, '\n', '\n'.join(msgs)
+            sys.stderr.write('\n%s' % '\n'.join(msgs))
 
     def remove_test_objects(self):
         # remove any leftover test object before or after running tests
@@ -147,13 +147,13 @@ class FedoraTestWrapper(object):
             try:
                 repo.purge_object(obj.pid, "removing test object")
                 # NOTE: not displaying label because we may not have permission to access it
-                logger.info('Purged test object %s' % obj.pid)
+                logger.info('Purged test object %s', obj.pid)
                 count += 1
             except RequestFailed:
-                logger.warn('Error purging test object %s' % obj.pid)
+                logger.warn('Error purging test object %s', obj.pid)
         if count:
-            print >> sys.stderr, "Removed %s test object(s) with pidspace %s" \
-                % (count, settings.FEDORA_PIDSPACE)
+            sys.stderr.write("Removed %s test object(s) with pidspace %s" \
+                             % (count, settings.FEDORA_PIDSPACE))
 
     @classmethod
     def wrap_test(cls, test):

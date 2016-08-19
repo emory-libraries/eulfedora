@@ -8,7 +8,6 @@
 import argparse
 import base64
 import os
-from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 import progressbar
 import pycurl
 

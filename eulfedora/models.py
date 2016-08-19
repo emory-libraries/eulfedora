@@ -174,7 +174,7 @@ class DatastreamObject(object):
         content is only pulled from Fedora when first requested, and
         cached after first access; can be used to set or update
         datastream contents.
-        
+
         For an alternate method to set datastream content, see
         :attr:`ds_location`.''')
 
@@ -492,13 +492,10 @@ class Datastream(object):
 
     _datastreamClass = DatastreamObject
 
-    def __init__(self, id, label, defaults={}):
+    def __init__(self, id, label, defaults=None):
         self.id = id
         self.label = label
-        self.datastream_args = defaults
-
-        #self.label = label
-        #self.datastream_defaults = defaults
+        self.datastream_args = defaults or {}
 
     def __get__(self, obj, objtype):
         if obj is None:
@@ -582,8 +579,8 @@ class XmlDatastream(Datastream):
     """
     _datastreamClass = XmlDatastreamObject
 
-    def __init__(self, id, label, objtype=None, defaults={}):
-        super(XmlDatastream, self).__init__(id, label, defaults)
+    def __init__(self, id, label, objtype=None, defaults=None):
+        super(XmlDatastream, self).__init__(id, label, defaults or {})
         self.datastream_args['objtype'] = objtype
 
 
@@ -845,16 +842,15 @@ class Relation(object):
 
     '''
 
-    def __init__(self, relation, type=None, ns_prefix={}, rdf_type=None,
+    def __init__(self, relation, type=None, ns_prefix=None, rdf_type=None,
                  related_name=None, related_order=None):
         self.relation = relation
         self.object_type = type
-        self.ns_prefix = ns_prefix
+        self.ns_prefix = ns_prefix or {}
         self.rdf_type = rdf_type
         self.related_name = related_name
         self.related_order = related_order
         self.uri_val = None
-
 
     def __get__(self, obj, objtype):
         if obj is None:
@@ -1052,7 +1048,7 @@ class DigitalObjectType(type):
         # create any ReverseRelations corresponding to Relations on
         # the current class
         # for now, assume all reverse relations are multiple
-        for rel_name, rel in six.iteritems(reverse_rels):
+        for rel in six.itervalues(reverse_rels):
             # don't reverse self-relations for now
             if isinstance(rel.object_type, six.string_types):
                 continue
@@ -1136,8 +1132,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
                 # allow extending classes to make default_pidspace a custom property,
                 # but warn if there is case of conflict
                 if default_pidspace != getattr(self, 'default_pidspace', None):
-                    logger.warn("Failed to set requested default_pidspace %s (using %s instead)" \
-                                % (default_pidspace, self.default_pidspace))
+                    logger.warn("Failed to set requested default_pidspace %s (using %s instead)",
+                                default_pidspace, self.default_pidspace)
         # cache object profile, track if it is modified and needs to be saved
         self._info = None
         self.info_modified = False
@@ -1240,8 +1236,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         "Fedora pidspace of this object"
         if callable(self.pid):
             return None
-        ps, pid = self.pid.split(':', 1)
-        return ps
+        # split pid into pidspace and id, return just the pidspace
+        return self.pid.split(':', 1)[0]
 
     # This dummy pid stuff is ugly. I'd rather not need it. Every now and
     # then, though, something needs a PID or URI for a brand-new object
@@ -1296,8 +1292,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
     def _set_label(self, val):
         # Fedora object label property has a maximum of 255 characters
         if len(val) > self.label_max_size:
-            logger.warning('Attempting to set object label for %s to a value longer than %d character max (%d); truncating' \
-                % (self.pid, self.label_max_size, len(val)))
+            logger.warning('Attempting to set object label for %s to a value longer than %d character max (%d); truncating',\
+                           self.pid, self.label_max_size, len(val))
             val = val[0:self.label_max_size]
 
         # if the new value is different, track object information modification for next save
@@ -1315,8 +1311,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
 
     def _set_owner(self, val):
         if len(val) > self.owner_max_size:
-            logger.warning('Attempting to set object owner for %s to a value longer than %d character max (%d); truncating' \
-                % (self.pid, self.owner_max_size, len(val)))
+            logger.warning('Attempting to set object owner for %s to a value longer than %d character max (%d); truncating',
+                           self.pid, self.owner_max_size, len(val))
 
             # if owner is delimited, truncate to last full value
             if self.OWNER_ID_SEPARATOR in val:
@@ -1546,8 +1542,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
             # in later versions, it throws an exception
             try:
                 ds_saved = self.dscache[ds].save(logMessage)
-            except RequestFailed as e:
-                logger.error('Failed to save %s/%s' % (self.pid, ds))
+            except RequestFailed:
+                logger.error('Failed to save %s/%s', self.pid, ds)
                 ds_saved = False
 
             if ds_saved:
@@ -1566,8 +1562,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         if self.info_modified:
             try:
                 profile_saved = self._saveProfile(logMessage)
-            except RequestFailed as rf:
-                logger.error('Failed to save object profile for %s' % self.pid)
+            except RequestFailed:
+                logger.error('Failed to save object profile for %s', self.pid)
                 profile_saved = False
 
             if not profile_saved:
@@ -1598,18 +1594,22 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         if callable(self.pid):
             self.pid = self.pid()
 
-        for dsname, ds in self._defined_datastreams.items():
+        for dsname in six.iterkeys(self._defined_datastreams):
             dsobj = getattr(self, dsname)
             if hasattr(dsobj, '_prepare_ingest'):
                 dsobj._prepare_ingest()
 
     def _ingest(self, logMessage):
         foxml = self._build_foxml_for_ingest()
-        r = self.api.ingest(foxml.decode('utf-8'), logMessage)
-        if r.status_code != requests.codes.created or r.text != self.pid:
+        # NOTE: previously, this code was decoding the foxml from utf-8
+        # but that causes problems for ingesting content with unicode
+        # It *should* be ok to simply remove the decode, and trust users
+        # to encode their strings correctly...
+        resp = self.api.ingest(foxml, logMessage)
+        if resp.status_code != requests.codes.created or resp.text != self.pid:
             msg = ('fedora returned unexpected pid "%s" when trying to ' +
                    'ingest object with pid "%s" (status code: %s)') % \
-                   (r.content, self.pid, r.status_code)
+                   (resp.content, self.pid, resp.status_code)
             raise Exception(msg)
 
         # then clean up the local object so that self knows it's dealing
@@ -1723,7 +1723,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         elif hasattr(dsobj._raw_content(), 'read'):
             # Content exists, but no checksum, so log a warning.
             # FIXME: probably need a better way to check this.
-            logging.warning("Datastream ingested without a passed checksum or checksum type: %s/%s." % (self.pid, dsid))
+            logging.warning("Datastream ingested without a passed checksum or checksum type: %s/%s.",
+                            self.pid, dsid)
 
         ds_xml.append(ver_xml)
 
@@ -1810,8 +1811,9 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
                              for sdef in methods.service_definitions)
         return self._methods
 
-    def getDissemination(self, service_pid, method, params={}, return_http_response=False):
-        return self.api.getDissemination(self.pid, service_pid, method, method_params=params)
+    def getDissemination(self, service_pid, method, params=None):
+        return self.api.getDissemination(self.pid, service_pid, method,
+                                         method_params=params or {})
 
     def getDatastreamObject(self, dsid, dsobj_type=None, as_of_date=None):
         '''Get any datastream on this object as a :class:`DatastreamObject`
@@ -1837,7 +1839,7 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         # a DatastreamObject, which is unexpected
         # if the requested datastream is a defined datastream, return it
         # if dsid in self._defined_datastreams:
-            # return self._defined_datastreams[dsid]
+        #   return self._defined_datastreams[dsid]
 
         if dsid in self._adhoc_datastreams:
             return self._adhoc_datastreams[dsid]
@@ -1850,8 +1852,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
                 # if datastream mimetype matches one of our base datastream objects, use it
 
                 # special case: rels-ext should always be loaded as rdf
-                if ds_info.mimeType == RdfDatastreamObject.default_mimetype or \
-                    dsid == 'RELS-EXT':
+                if ds_info.mimeType == RdfDatastreamObject.default_mimetype \
+                  or dsid == 'RELS-EXT':
                     dsobj_type = RdfDatastreamObject
                 elif ds_info.mimeType == XmlDatastreamObject.default_mimetype:
                     dsobj_type = XmlDatastreamObject
@@ -1859,8 +1861,8 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
                     # default to base datastream object class
                     dsobj_type = DatastreamObject
 
-            dsobj = dsobj_type(self, dsid, label=ds_info.label, mimetype=ds_info.mimeType,
-                as_of_date=as_of_date)
+            dsobj = dsobj_type(self, dsid, label=ds_info.label,
+                               mimetype=ds_info.mimeType, as_of_date=as_of_date)
 
             # add to dscache so modifications will be saved on existing object
             self.dscache[dsid] = dsobj
@@ -1871,7 +1873,7 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         else:
             if dsobj_type is None:
                 dsobj_type = DatastreamObject
-            logger.info('Adding new datastream %s to %r' % (dsid, self))
+            logger.info('Adding new datastream %s to %r', dsid, self)
             # NOTE: label is required to initialize a new datastream object;
             # using dsid as label since we don't have anything else.
             dsobj = dsobj_type(self, dsid, dsid)
@@ -2011,12 +2013,15 @@ class DigitalObject(six.with_metaclass(DigitalObjectType, object)):
         self._ds_list = None
 
         # attempt purge
-        if self.api.purgeRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal) != True:
+        if self.api.purgeRelationship(self.pid, self.uri, rel_uri, old_object,
+                                      obj_old_is_literal) is not True:
             return False
         # attempt add
-        elif self.api.addRelationship(self.pid, self.uri, rel_uri, new_object, obj_new_is_literal) != True:
+        elif self.api.addRelationship(self.pid, self.uri, rel_uri, new_object,
+                                      obj_new_is_literal) is not True:
             # if addRelationship fails, rollback to old_object
-            self.api.addRelationship(self.pid, self.uri, rel_uri, old_object, obj_old_is_literal)
+            self.api.addRelationship(self.pid, self.uri, rel_uri, old_object,
+                                     obj_old_is_literal)
             return False
         else:
             return True
@@ -2147,33 +2152,36 @@ class ContentModel(DigitalObject):
             })
 
     @staticmethod
-    def for_class(cls, repo):
-        full_name = '%s.%s' % (cls.__module__, cls.__name__)
-        cmodels = getattr(cls, 'CONTENT_MODELS', None)
+    def for_class(digobj, repo):
+        '''Generate a ContentModel object for the specified
+        :class:`DigitalObject` class.  Content model object is saved
+        in the specified repository if it doesn't already exist.'''
+        full_name = '%s.%s' % (digobj.__module__, digobj.__name__)
+        cmodels = getattr(digobj, 'CONTENT_MODELS', None)
         if not cmodels:
-            logger.debug('%s has no content models' % (full_name,))
+            logger.debug('%s has no content models', full_name)
             return None
         if len(cmodels) > 1:
-            logger.debug('%s has %d content models' % (full_name, len(cmodels)))
+            logger.debug('%s has %d content models', full_name, len(cmodels))
             raise ValueError(('Cannot construct ContentModel object for ' +
                               '%s, which has %d CONTENT_MODELS (only 1 is ' +
                               'supported)') %
                              (full_name, len(cmodels)))
 
         cmodel_uri = cmodels[0]
-        logger.debug('cmodel for %s is %s' % (full_name, cmodel_uri))
+        logger.debug('cmodel for %s is %s', full_name, cmodel_uri)
         cmodel_obj = repo.get_object(cmodel_uri, type=ContentModel,
                                      create=False)
         if cmodel_obj.exists:
-            logger.debug('%s already exists' % (cmodel_uri,))
+            logger.debug('%s already exists', cmodel_uri)
             return cmodel_obj
 
         # otherwise the cmodel doesn't exist. let's create it.
-        logger.debug('creating %s from %s' % (cmodel_uri, full_name))
+        logger.debug('creating %s from %s', cmodel_uri, full_name)
         cmodel_obj = repo.get_object(cmodel_uri, type=ContentModel,
                                      create=True)
         # XXX: should this use _defined_datastreams instead?
-        for ds in cls._local_datastreams.values():
+        for ds in digobj._local_datastreams.values():
             ds_composite_model = cmodel_obj.ds_composite_model.content
             type_model = ds_composite_model.get_type_model(ds.id, create=True)
             type_model.mimetype = ds.default_mimetype
@@ -2205,8 +2213,10 @@ class DigitalObjectSaveFailure(Exception):
         self.to_be_saved = to_be_saved
         self.saved = saved
         self.cleaned = cleaned
-        # check for anything was saved before failure occurred that was *not* cleaned up
-        self.not_cleaned = [item for item in self.saved if not item in self.cleaned]
+        # check for anything was saved before failure occurred that
+        # was *not* cleaned up
+        self.not_cleaned = [item for item in self.saved
+                            if item not in self.cleaned]
         self.recovered = (len(self.not_cleaned) == 0)
 
     def __str__(self):

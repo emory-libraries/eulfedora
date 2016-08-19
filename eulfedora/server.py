@@ -179,8 +179,9 @@ class Repository(object):
         if root is None:
             raise Exception('Could not determine Fedora root url from django settings or parameter')
 
-        logger.debug("Connecting to fedora at %s %s" % (root,
-                      'as %s' % username if username else '(no user credentials)'))
+        logger.debug("Connecting to fedora at %s %s", root,
+                     'as %s' % username if username
+                     else '(no user credentials)')
         self.api = ApiFacade(root, username, password)
         self.fedora_root = self.api.base_url
 
@@ -229,7 +230,6 @@ class Repository(object):
         else:
             return nextpids.pids
 
-
     def ingest(self, text, log_message=None):
         """
         Ingest a new object into Fedora. Returns the pid of the new object on
@@ -239,11 +239,11 @@ class Repository(object):
         :param log_message: optional log message
         :rtype: string
         """
-        kwargs = { 'text': text }
+        kwargs = {'text': text}
         if log_message:
             kwargs['logMessage'] = log_message
-        r = self.api.ingest(**kwargs)
-        return r.content
+        response = self.api.ingest(**kwargs)
+        return response.content
 
     def purge_object(self, pid, log_message=None):
         """
@@ -253,11 +253,11 @@ class Repository(object):
         :param log_message: optional log message
         :rtype: boolean
         """
-        kwargs = { 'pid': pid }
+        kwargs = {'pid': pid}
         if log_message:
             kwargs['logMessage'] = log_message
-        r = self.api.purgeObject(**kwargs)
-        return r.status_code == requests.codes.ok
+        response = self.api.purgeObject(**kwargs)
+        return response.status_code == requests.codes.ok
 
     def get_objects_with_cmodel(self, cmodel_uri, type=None):
         """
@@ -268,7 +268,7 @@ class Repository(object):
         :rtype: list of objects
         """
         uris = self.risearch.get_subjects(modelns.hasModel, cmodel_uri)
-        return [ self.get_object(uri, type) for uri in uris ]
+        return [self.get_object(uri, type) for uri in uris]
 
     def get_object(self, pid=None, type=None, create=None):
         """
@@ -283,7 +283,7 @@ class Repository(object):
         :create: boolean: create a new object? (if not specified, defaults
                  to False when pid is specified, and True when it is not)
         """
-        type = type or self.default_object_type
+        objtype = type or self.default_object_type
 
         if pid is None:
             if create is None:
@@ -292,7 +292,8 @@ class Repository(object):
             if create is None:
                 create = False
 
-        return type(self.api, pid, create, default_pidspace=self.default_pidspace)
+        return objtype(self.api, pid, create,
+                       default_pidspace=self.default_pidspace)
 
     def infer_object_subtype(self, api, pid=None, create=False, default_pidspace=None):
         """Construct a DigitalObject or appropriate subclass, inferring the
@@ -372,8 +373,8 @@ class Repository(object):
                 if is_root_subclass:
                     return obj_type
 
-            logger.warn('%s has %d potential classes with no root subclass for the list. using the first: %s' %
-                (obj, len(matches), repr(matches)))
+            logger.warn('%s has %d potential classes with no root subclass for the list. using the first: %s',
+                        obj, len(matches), repr(matches))
         return matches[0]
 
     def find_objects(self, terms=None, type=None, chunksize=None, **kwargs):
@@ -419,10 +420,10 @@ class Repository(object):
             conditions = []
             for field, value in six.iteritems(kwargs):
                 if '__' in field:
-                    field, filter = field.split('__')
-                    if filter not in search_operators:
-                        raise Exception("Unsupported search filter '%s'" % filter)
-                    op = search_operators[filter]
+                    field, filtr = field.split('__')
+                    if filtr not in search_operators:
+                        raise Exception("Unsupported search filter '%s'" % filtr)
+                    op = search_operators[filtr]
                 else:
                     op = search_operators['contains']   # default search mode
 

@@ -277,13 +277,13 @@ class DsCompositeModel(xmlmap.XmlObject):
     # TODO: this feels like it could be generalized into a dict-like field
     # class.
     TYPE_MODEL_XPATH = 'ds:dsTypeModel[@ID=$dsid]'
+
     def get_type_model(self, dsid, create=False):
-            field = Field(self.TYPE_MODEL_XPATH,
-                        manager=SingleNodeManager(instantiate_on_get=create),
-                        mapper=NodeMapper(DsTypeModel))
-            context = { 'namespaces': DS_NAMESPACES,
-                        'dsid': dsid }
-            return field.get_for_node(self.node, context)
+        field = Field(self.TYPE_MODEL_XPATH,
+                      manager=SingleNodeManager(instantiate_on_get=create),
+                      mapper=NodeMapper(DsTypeModel))
+        context = {'namespaces': DS_NAMESPACES, 'dsid': dsid}
+        return field.get_for_node(self.node, context)
 
 
 class AuditTrailRecord(_FedoraBase):
