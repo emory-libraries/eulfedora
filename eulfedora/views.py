@@ -33,7 +33,7 @@ Using these views (in the simpler cases) should be as easy as::
 from __future__ import unicode_literals
 import logging
 
-from django.contrib.auth import views as authviews
+from django.contrib.auth import views as auth_views
 from django.http import HttpResponse, Http404, HttpResponseBadRequest, \
     StreamingHttpResponse
 from django.views.decorators.http import require_http_methods, condition
