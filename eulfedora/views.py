@@ -499,7 +499,7 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
 
     '''
     response = authviews.login(request, *args, **kwargs)
-    if request.method == "POST" and request.user.is_authenticated():
+    if request.method == "POST" and request.user.is_authenticated:
         # on successful login, encrypt and store user's password to use for fedora access
         request.session[FEDORA_PASSWORD_SESSION_KEY] = encrypt(request.POST.get('password'))
     return response
