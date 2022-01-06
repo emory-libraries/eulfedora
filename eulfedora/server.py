@@ -151,7 +151,7 @@ class Repository(object):
                 # if username and password are not set, attempt to pull from django conf
                 if username is None and password is None:
 
-                    if request is not None and request.user.is_authenticated() and \
+                    if request is not None and request.user.is_authenticated and \
                        FEDORA_PASSWORD_SESSION_KEY in request.session:
                         username = request.user.username
                         password = cryptutil.decrypt(request.session[FEDORA_PASSWORD_SESSION_KEY])
