@@ -498,7 +498,7 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
     you need the functionality.**
 
     '''
-    response = auth_views.LoginView.as_view(request, *args, **kwargs)
+    response = auth_views.LoginView.as_view(request, **kwargs)
     if request.method == "POST" and request.user.is_authenticated:
         # on successful login, encrypt and store user's password to use for fedora access
         request.session[FEDORA_PASSWORD_SESSION_KEY] = encrypt(request.POST.get('password'))
