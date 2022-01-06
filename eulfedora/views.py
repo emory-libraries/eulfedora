@@ -33,7 +33,7 @@ Using these views (in the simpler cases) should be as easy as::
 from __future__ import unicode_literals
 import logging
 
-from django.contrib.auth import views as authviews
+from django.contrib.auth import login
 from django.http import HttpResponse, Http404, HttpResponseBadRequest, \
     StreamingHttpResponse
 from django.views.decorators.http import require_http_methods, condition
@@ -498,7 +498,7 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
     you need the functionality.**
 
     '''
-    response = authviews.login(request, *args, **kwargs)
+    response = login(request, *args, **kwargs)
     if request.method == "POST" and request.user.is_authenticated:
         # on successful login, encrypt and store user's password to use for fedora access
         request.session[FEDORA_PASSWORD_SESSION_KEY] = encrypt(request.POST.get('password'))
