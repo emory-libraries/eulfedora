@@ -33,9 +33,9 @@ Using these views (in the simpler cases) should be as easy as::
 from __future__ import unicode_literals
 import logging
 
-from django.contrib.auth import views as auth_views
+from django.contrib.auth import authenticate, login, REDIRECT_FIELD_NAME
 from django.http import HttpResponse, Http404, HttpResponseBadRequest, \
-    StreamingHttpResponse
+    StreamingHttpResponse, HttpResponseRedirect
 from django.views.decorators.http import require_http_methods, condition
 from django.views.generic import View
 import six
@@ -498,7 +498,17 @@ def login_and_store_credentials_in_session(request, *args, **kwargs):
     you need the functionality.**
 
     '''
-    response = auth_views.LoginView.as_view(request, **kwargs)
+    redirect_to = request.POST.get(REDIRECT_FIELD_NAME, request.GET.get(REDIRECT_FIELD_NAME, ''))
+    if request.method == "POST":
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            response = HttpResponseRedirect(redirect_to)
+        else:
+            response = HttpResponse('401 Unauthorized', status=401)
+
     if request.method == "POST" and request.user.is_authenticated:
         # on successful login, encrypt and store user's password to use for fedora access
         request.session[FEDORA_PASSWORD_SESSION_KEY] = encrypt(request.POST.get('password'))
