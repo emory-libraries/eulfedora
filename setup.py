@@ -35,7 +35,7 @@ requirements = [
     'python-dateutil',
     'requests==2.20',
     'requests-toolbelt>=0.6.0',
-    'pycrypto',
+    'pycryptodome',
     'pypdf2',
     'six',
 ]
