@@ -16,6 +16,8 @@
 
 from __future__ import unicode_literals
 from Crypto.Cipher import Blowfish as EncryptionAlgorithm
+from Crypto import Random
+from struct import pack
 import hashlib
 import logging
 
@@ -62,8 +64,13 @@ def _get_encryption_key():
 
 def encrypt(text):
     'Encrypt a string using an encryption key based on the django SECRET_KEY'
-    crypt = EncryptionAlgorithm.new(_get_encryption_key().encode(), EncryptionAlgorithm.MODE_CBC)
-    return crypt.encrypt(to_blocksize(text.encode()))
+    bs = EncryptionAlgorithm.block_size
+    iv = Random.new().read(bs)
+    crypt = EncryptionAlgorithm.new(_get_encryption_key().encode(), EncryptionAlgorithm.MODE_CBC, iv)
+    plen = bs - divmod(len(text.encode()),bs)[1]
+    padding = [plen]*plen
+    padding = pack('b'*plen, *padding)
+    return iv + crypt.encrypt(text.encode() + padding)
 
 
 def decrypt(text):
