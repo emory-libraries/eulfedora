@@ -63,7 +63,7 @@ def _get_encryption_key():
 def encrypt(text):
     'Encrypt a string using an encryption key based on the django SECRET_KEY'
     crypt = EncryptionAlgorithm.new(_get_encryption_key(), EncryptionAlgorithm.MODE_CBC)
-    return crypt.encrypt(to_blocksize(text))
+    return crypt.encrypt(to_blocksize(text.encode()))
 
 
 def decrypt(text):
