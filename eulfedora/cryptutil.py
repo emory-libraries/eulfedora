@@ -75,8 +75,14 @@ def encrypt(text):
 
 def decrypt(text):
     'Decrypt a string using an encryption key based on the django SECRET_KEY'
-    crypt = EncryptionAlgorithm.new(_get_encryption_key())
-    return crypt.decrypt(text).rstrip(ENCRYPT_PAD_CHARACTER)
+    bs = EncryptionAlgorithm.block_size
+    iv = text[:bs]
+    text = text[bs:]
+    crypt = EncryptionAlgorithm.new(_get_encryption_key().encode(), EncryptionAlgorithm.MODE_CBC, iv)
+    msg = crypt.decrypt(text)
+    last_byte = msg[-1]
+    msg = msg[:- (last_byte if type(last_byte) is int else ord(last_byte))]
+    return repr(msg)
 
 
 def to_blocksize(password):
