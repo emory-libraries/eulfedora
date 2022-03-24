@@ -120,7 +120,7 @@ class ChecksumMismatch(RequestFailed):
 
 
 def parse_rdf(data, url, format=None):
-    fobj = BytesIO(data)
+    fobj = StringIO(data)
     rdfid = URIRef(url)
     graph = Graph(identifier=rdfid)
     if format is None:
