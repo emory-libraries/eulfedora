@@ -26,8 +26,8 @@ from six.moves.builtins import bytes
 
 import requests
 from rdflib import URIRef, Graph
-from six import BytesIO
-from io import StringIO
+from six import BytesIO, StringIO
+#from io import StringIO
 
 from eulxml import xmlmap
 
