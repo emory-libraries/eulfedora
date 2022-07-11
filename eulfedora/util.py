@@ -119,7 +119,7 @@ class ChecksumMismatch(RequestFailed):
         return self.detail
 
 
-def parse_rdf(data, url, format="application/rdf+xml"):
+def parse_rdf(data, url, format=None):
     fobj = BytesIO(data)
     rdfid = URIRef(url)
     graph = Graph(identifier=rdfid)
